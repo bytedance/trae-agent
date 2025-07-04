@@ -58,6 +58,28 @@ class _BashSession:
             return
         self._process.terminate()
 
+    def __del__(self):
+        """Cleanup method to ensure process is terminated."""
+        try:
+            if hasattr(self, '_process') and self._process is not None:
+                if self._process.returncode is None:
+                    # Try graceful termination first
+                    self._process.terminate()
+                    # Force kill if needed
+                    import time
+                    import os
+                    import signal
+                    time.sleep(0.01)  # Give it a moment
+                    if self._process.returncode is None:
+                        try:
+                            # More aggressive cleanup
+                            os.kill(self._process.pid, signal.SIGKILL)
+                        except (ProcessLookupError, OSError):
+                            pass  # Process already dead
+        except Exception:
+            # Completely ignore all errors during cleanup to prevent any output
+            pass
+
     async def run(self, command: str) -> ToolExecResult:
         """Execute a command in the bash shell."""
         if not self._started or self._process is None:

@@ -250,3 +250,23 @@ If you are sure the issue has been solved, you should call the `task_done` to fi
     def task_incomplete_message(self) -> str:
         """Return a message indicating that the task is incomplete."""
         return "ERROR! Your Patch is empty. Please provide a patch that fixes the problem."
+
+    def cleanup(self):
+        """Clean up resources used by the agent."""
+        try:
+            # Clean up tools that might have subprocess resources
+            for tool in self.tools:
+                if hasattr(tool, 'stop'):
+                    try:
+                        tool.stop()
+                    except Exception:
+                        pass
+                if hasattr(tool, '_process') and tool._process is not None:
+                    try:
+                        if tool._process.returncode is None:
+                            tool._process.terminate()
+                    except Exception:
+                        pass
+        except Exception:
+            # Ignore cleanup errors
+            pass

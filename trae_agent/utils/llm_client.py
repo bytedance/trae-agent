@@ -16,6 +16,14 @@ class LLMProvider(Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     AZURE = "azure"
+    OPENAI_COMPATIBLE = "openai_compatible"
+    OPENROUTER = "openrouter"
+    TOGETHER = "together"
+    GROQ = "groq"
+    DEEPSEEK = "deepseek"
+    ALIBABA = "alibaba"
+    NOVITA = "novita"
+    OLLAMA = "ollama"
 
 
 class LLMClient:
@@ -36,6 +44,16 @@ class LLMClient:
         elif provider == LLMProvider.AZURE:
             from .azure_client import AzureClient
             self.client = AzureClient(model_parameters)
+        elif provider in [LLMProvider.OPENAI_COMPATIBLE, LLMProvider.OPENROUTER, 
+                         LLMProvider.TOGETHER, LLMProvider.GROQ, LLMProvider.DEEPSEEK,
+                         LLMProvider.ALIBABA, LLMProvider.NOVITA]:
+            from .openai_compatible_client import OpenAICompatibleClient
+            self.client = OpenAICompatibleClient(model_parameters)
+        elif provider == LLMProvider.OLLAMA:
+            from .ollama_client import OllamaClient
+            self.client = OllamaClient(model_parameters)
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
 
     def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for the underlying client."""
