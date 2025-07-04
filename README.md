@@ -14,7 +14,8 @@
 ## ✨ Features
 
 - 🌊 **Lakeview**: Provides short and concise summarisation for agent steps
-- 🤖 **Multi-LLM Support**: Works with OpenAI and Anthropic official APIs
+- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, and OpenAI-compatible services
+- 🔗 **OpenAI-Compatible Services**: Support for OpenRouter, Together AI, Groq, DeepSeek, Alibaba Cloud, Novita AI, and Ollama
 - 🛠️ **Rich Tool Ecosystem**: File editing, bash execution, sequential thinking, and more
 - 🎯 **Interactive Mode**: Conversational interface for iterative development
 - 📊 **Trajectory Recording**: Detailed logging of all agent actions for debugging and analysis
@@ -35,9 +36,9 @@ uv sync
 
 ### Setup API Keys
 
-We recommand to configure Trae Agent using the config file.
+Configure Trae Agent using the config file or environment variables.
 
-You can also set your API keys as environment variables:
+**For OpenAI-compatible services**, you can set API keys as environment variables:
 
 ```bash
 # For OpenAI
@@ -45,6 +46,14 @@ export OPENAI_API_KEY="your-openai-api-key"
 
 # For Anthropic
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
+
+# For OpenAI-compatible services
+export OPENROUTER_API_KEY="sk-or-v1-your-openrouter-key"
+export TOGETHER_API_KEY="your-together-api-key"
+export GROQ_API_KEY="gsk_your-groq-key"
+export DEEPSEEK_API_KEY="sk-your-deepseek-key"
+export ALIBABA_API_KEY="your-alibaba-api-key"
+export NOVITA_API_KEY="your-novita-api-key"
 ```
 
 ### Basic Usage
@@ -68,6 +77,18 @@ trae-cli run "Create a Python script that calculates fibonacci numbers"
 
 # With specific provider and model
 trae-cli run "Fix the bug in main.py" --provider anthropic --model claude-sonnet-4-20250514
+
+# Using OpenRouter with Claude
+trae-cli run "Create unit tests" --provider openrouter --model "anthropic/claude-3.5-sonnet"
+
+# Using Groq for fast inference
+trae-cli run "Debug this function" --provider groq --model "llama-3.1-70b-versatile"
+
+# Using Alibaba Cloud with free 1M tokens
+trae-cli run "Create unit tests" --provider alibaba --model "qwen-turbo"
+
+# Using local Ollama
+trae-cli run "Explain this code" --provider ollama --model "llama3.2:latest"
 
 # With custom working directory
 trae-cli run "Add unit tests for the utils module" --working-dir /path/to/project
@@ -107,11 +128,18 @@ trae-cli show-config --config-file my_config.json
 
 ### Configuration
 
-Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
+Trae Agent uses a JSON configuration file (`trae_config.json`) for settings. You can copy the example configuration:
+
+```bash
+cp trae_config.example.json trae_config.json
+# Edit trae_config.json with your API keys
+```
+
+Example configuration:
 
 ```json
 {
-  "default_provider": "anthropic",
+  "default_provider": "openrouter",
   "max_steps": 20,
   "model_providers": {
     "openai": {
@@ -128,6 +156,24 @@ Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
       "temperature": 0.5,
       "top_p": 1,
       "top_k": 0
+    },
+    "openrouter": {
+      "api_key": "sk-or-v1-your-openrouter-key",
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "anthropic/claude-3.5-sonnet",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "parallel_tool_calls": true
+    },
+    "groq": {
+      "api_key": "gsk_your-groq-key",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "llama-3.1-70b-versatile",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "parallel_tool_calls": true
     }
   }
 }
@@ -138,6 +184,8 @@ Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
 2. Configuration file values
 3. Environment variables
 4. Default values (lowest)
+
+For detailed configuration of OpenAI-compatible services, see [OPENAI_COMPATIBLE_SERVICES.md](OPENAI_COMPATIBLE_SERVICES.md).
 
 ### Environment Variables
 
