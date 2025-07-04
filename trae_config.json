@@ -12,7 +12,7 @@
       "max_retries": 10
     },
     "anthropic": {
-      "api_key": "your_anthropic_api_key", 
+      "api_key": "your_anthropic_api_key",
       "model": "claude-sonnet-4-20250514",
       "max_tokens": 4096,
       "temperature": 0.5,
@@ -25,6 +25,15 @@
       "base_url": "your_azure_base_url",
       "api_version": "2024-03-01-preview",
       "model": "model_name",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "openrouter": {
+      "api_key": "your_openrouter_api_key",
+      "model": "openai/gpt-4o",
       "max_tokens": 4096,
       "temperature": 0.5,
       "top_p": 1,
