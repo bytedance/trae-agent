@@ -29,6 +29,18 @@ console = Console()
 
 def load_config(provider: str | None = None, model: str | None = None, api_key: str | None = None,
                  config_file: str = "trae_config.json", max_steps: int | None = 20) -> Config:
+    """
+        load_config loads provider , model , api key , config file and maximum steps. By default, the provider is set to be OpenAI. 
+        Args:
+            provider: default provider is openai, currently only support openai and claude 
+            model: the model that you want to use
+            api_key: your api key
+            config_file: the relative path of your config file, default setting would be trae_config.json 
+            maximum_step: maxium number of step of the agent. Default setting is 20
+        
+        Return:
+            Config Object
+    """
     config: Config = Config(config_file)
     # Resolve model provider
     resolved_provider = resolve_config_value(provider, config.default_provider) or "openai"
@@ -45,9 +57,11 @@ def load_config(provider: str | None = None, model: str | None = None, api_key: 
     resolved_api_key = resolve_config_value(
         api_key,
         config.model_providers[str(resolved_provider)].api_key,
+        # TODO: Shall we use a more robust method ? This would be much more convience to support more providers
         "OPENAI_API_KEY" if resolved_provider == "openai" else "ANTHROPIC_API_KEY"
     )
     if resolved_api_key is not None:
+        # If None shall we stop the program ? 
         model_parameters.api_key = str(resolved_api_key)
 
     resolved_max_steps = resolve_config_value(max_steps, config.max_steps)
@@ -58,7 +72,13 @@ def load_config(provider: str | None = None, model: str | None = None, api_key: 
 
 
 def create_agent(config: Config) -> TraeAgent:
-    """Create a Trae Agent with the specified configuration."""
+    """
+        create_agent creates a Trae Agent with the specified configuration.
+        Args:
+            config: Agent configuration. It is expceted that the config comes from load_config.
+        Return:
+            TraeAgent object
+    """
     try:
         # Create agent
         agent = TraeAgent(config)
@@ -94,7 +114,15 @@ def cli():
 def run(task: str, provider: str | None = None, model: str | None = None, api_key: str | None = None,
         max_steps: int | None = None,         working_dir: str | None = None, must_patch: bool = False,
         config_file: str = "trae_config.json", trajectory_file: str | None = None, patch_path: str | None = None):
-    """Run a task using Trae Agent.
+    """
+        Run is the main function of tace. It runs a task using Trae Agent.
+        Args:
+            tasks: the task that you want your agent to solve. This is required to be in the input
+            model: the model expected to be use 
+            working_dir: the working directory of the agent. This should be set either in cli or inf the config file (trae_config.json)
+
+        Return: 
+            None (it is expected to be ended after calling the run function)
 
     TASK: Description of the task to execute
     """
@@ -166,7 +194,11 @@ def run(task: str, provider: str | None = None, model: str | None = None, api_ke
 def interactive(provider: str | None = None, model: str | None = None, api_key: str | None = None,
                 config_file: str = "trae_config.json", max_steps: int | None = None,
                 trajectory_file: str | None = None):
-    """Start an interactive session with Trae Agent."""
+    """
+        interactive function starts an interactive session with Trae Agent.
+        Args:
+            tasks: the task that you want your agent to solve. This is required to be in the input
+    """
     config = load_config(provider, model, api_key, config_file=config_file, max_steps=max_steps)
 
     console.print(Panel(
