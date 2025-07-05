@@ -27,15 +27,16 @@ class LLMClient:
 
         self.provider: LLMProvider = provider
 
-        if provider == LLMProvider.OPENAI:
-            from .openai_client import OpenAIClient
-            self.client: BaseLLMClient = OpenAIClient(model_parameters)
-        elif provider == LLMProvider.ANTHROPIC:
-            from .anthropic_client import AnthropicClient
-            self.client = AnthropicClient(model_parameters)
-        elif provider == LLMProvider.AZURE:
-            from .azure_client import AzureClient
-            self.client = AzureClient(model_parameters)
+        match provider:
+            case LLMProvider.OPENAI:
+                from .openai_client import OpenAIClient
+                self.client: BaseLLMClient = OpenAIClient(model_parameters)
+            case LLMProvider.ANTHROPIC:
+                from .anthropic_client import AnthropicClient
+                self.client = AnthropicClient(model_parameters)
+            case LLMProvider.AZURE:
+                from .azure_client import AzureClient
+                self.client = AzureClient(model_parameters) 
 
     def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for the underlying client."""
