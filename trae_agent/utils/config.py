@@ -123,3 +123,17 @@ def resolve_config_value(cli_value: int | str | float | None, config_value: int 
         return config_value
 
     return None
+
+def provider_to_providerAPI(provider: str) -> str:
+    """
+        provider_to_providerAPI provides a clean way to convert provider to provider_API_Key string. 
+        Args:
+            provider: a string representing the provider
+        Return:
+            A string representing maping the API KEY in the config file for specific provider.
+    """
+    match provider:
+        case "openai":
+            return "OPENAI_API_KEY" 
+        case _:
+            return "ANTHROPIC_API_KEY"
