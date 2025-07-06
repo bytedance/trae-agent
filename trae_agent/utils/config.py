@@ -76,6 +76,16 @@ class Config:
                     parallel_tool_calls=False,
                     max_retries=10,
                 ),
+                "gemini": ModelParameters(
+                    model="gemini-1.0-pro",
+                    api_key="",
+                    max_tokens=2048,
+                    temperature=0.7,
+                    top_p=1,
+                    top_k=40,
+                    parallel_tool_calls=True,
+                    max_retries=3,
+                ),
             }
         else:
             for provider in self._config.get("model_providers", {}).keys():

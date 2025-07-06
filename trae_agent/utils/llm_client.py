@@ -16,6 +16,7 @@ class LLMProvider(Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     AZURE = "azure"
+    GEMINI = "gemini"
 
 
 class LLMClient:
@@ -36,6 +37,9 @@ class LLMClient:
         elif provider == LLMProvider.AZURE:
             from .azure_client import AzureClient
             self.client = AzureClient(model_parameters)
+        elif provider == LLMProvider.GEMINI:
+            from .gemini_client import GeminiClient
+            self.client = GeminiClient(model_parameters)
 
     def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for the underlying client."""
