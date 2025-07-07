@@ -190,7 +190,9 @@ If you are sure the issue has been solved, you should call the `task_done` to fi
             if not self.base_commit:
                 stdout = subprocess.check_output(["git", "--no-pager", "diff"]).decode()
             else:
-                stdout = subprocess.check_output(['git', '--no-pager', 'diff', self.base_commit, 'HEAD']).decode()
+                stdout = subprocess.check_output(
+                    ["git", "--no-pager", "diff", self.base_commit, "HEAD"]
+                ).decode()
         except (subprocess.CalledProcessError, FileNotFoundError):
             stdout = ""
         finally:

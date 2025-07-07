@@ -58,10 +58,12 @@ class Config:
             config_path = Path(config_or_config_file)
             if config_path.exists():
                 try:
-                    with open(config_path, 'r') as f:
+                    with open(config_path, "r") as f:
                         self._config = json.load(f)
                 except Exception as e:
-                    print(f"Warning: Could not load config file {config_or_config_file}: {e}")
+                    print(
+                        f"Warning: Could not load config file {config_or_config_file}: {e}"
+                    )
                     self._config = {}
             else:
                 self._config = {}

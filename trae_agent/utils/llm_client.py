@@ -22,6 +22,7 @@ class LLMProvider(Enum):
     OPENROUTER = "openrouter"
     DOUBAO = "doubao"
 
+
 class LLMClient:
     """Main LLM client that supports multiple providers."""
 
@@ -34,23 +35,28 @@ class LLMClient:
         match provider:
             case LLMProvider.OPENAI:
                 from .openai_client import OpenAIClient
+
                 self.client: BaseLLMClient = OpenAIClient(model_parameters)
             case LLMProvider.ANTHROPIC:
                 from .anthropic_client import AnthropicClient
+
                 self.client = AnthropicClient(model_parameters)
             case LLMProvider.AZURE:
                 from .azure_client import AzureClient
+
                 self.client = AzureClient(model_parameters)
             case LLMProvider.OPENROUTER:
                 from .openrouter_client import OpenRouterClient
+
                 self.client = OpenRouterClient(model_parameters)
             case LLMProvider.DOUBAO:
                 from .doubao_client import DoubaoClient
+
                 self.client = DoubaoClient(model_parameters)
             case LLMProvider.OLLAMA:
                 from .ollama_client import OllamaClient
-                self.client = OllamaClient(model_parameters)
 
+                self.client = OllamaClient(model_parameters)
 
     def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for the underlying client."""

@@ -172,3 +172,5 @@ cython_debug/
 
 trajectory_*.json
 trae-config-local.json
+
+.ruff_cache/
