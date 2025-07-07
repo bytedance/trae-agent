@@ -4,15 +4,32 @@
 """Command Line Interface for Trae Agent."""
 
 import asyncio
+import warnings
+import sys
+import contextlib
 from pathlib import Path
 
 import os
-import sys
 import traceback
 import time
 
 import click
 from rich.console import Console
+
+# Comprehensive suppression of asyncio warnings
+warnings.filterwarnings("ignore", message=".*Event loop is closed.*", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*coroutine.*was never awaited.*", category=RuntimeWarning)
+
+@contextlib.contextmanager
+def suppress_stderr():
+    """Context manager to completely suppress stderr output."""
+    with open(os.devnull, "w") as devnull:
+        old_stderr = sys.stderr
+        sys.stderr = devnull
+        try:
+            yield
+        finally:
+            sys.stderr = old_stderr
 from rich.panel import Panel
 from rich.table import Table
 from dotenv import load_dotenv
@@ -42,10 +59,27 @@ def load_config(provider: str | None = None, model: str | None = None, api_key: 
     if resolved_model is not None:
         model_parameters.model = str(resolved_model)
 
+    # Determine appropriate environment variable for API key based on provider
+    env_var_map = {
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "azure": "AZURE_API_KEY",
+        "openai_compatible": "OPENAI_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+        "together": "TOGETHER_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "alibaba": "ALIBABA_API_KEY",
+        "novita": "NOVITA_API_KEY",
+        "ollama": None  # Ollama doesn't use API keys
+    }
+    
+    env_var = env_var_map.get(resolved_provider, "OPENAI_API_KEY")
+    
     resolved_api_key = resolve_config_value(
         api_key,
         config.model_providers[str(resolved_provider)].api_key,
-        "OPENAI_API_KEY" if resolved_provider == "openai" else "ANTHROPIC_API_KEY"
+        env_var
     )
     if resolved_api_key is not None:
         model_parameters.api_key = str(resolved_api_key)
@@ -139,7 +173,22 @@ def run(task: str, provider: str | None = None, model: str | None = None, api_ke
             "patch_path": patch_path
         }
         agent.new_task(task, task_args)
-        _ = asyncio.run(agent.execute_task())
+        
+        # Execute task with complete stderr suppression
+        try:
+            _ = asyncio.run(agent.execute_task())
+        finally:
+            # Clean up agent resources
+            agent.cleanup()
+            # Give time for cleanup with stderr suppressed
+            with suppress_stderr():
+                time.sleep(0.3)
+            
+            # Suppress stderr globally for final cleanup
+            import atexit
+            def suppress_final_errors():
+                sys.stderr = open(os.devnull, 'w')
+            atexit.register(suppress_final_errors)
 
         console.print(f"\n[green]Trajectory saved to: {trajectory_path}[/green]")
 
@@ -184,8 +233,11 @@ def interactive(provider: str | None = None, model: str | None = None, api_key: 
 
     while True:
         try:
-            console.print("\n[bold blue]Task:[/bold blue] ", end="")
-            task = input()
+            console.print("\n[bold blue]Enter task (or 'help', 'status', 'clear', 'exit'):[/bold blue] ", end="")
+            task = input().strip()
+
+            if not task:
+                continue
 
             if task.lower() in ['exit', 'quit']:
                 console.print("[green]Goodbye![/green]")
@@ -204,12 +256,9 @@ def interactive(provider: str | None = None, model: str | None = None, api_key: 
                 ))
                 continue
 
-            console.print("\n[bold blue]Working Directory:[/bold blue] ", end="")
-            working_dir = input()
-
             if task.lower() == 'status':
                 console.print(Panel(
-                    f"""[bold]Provider:[/bold] {agent.llm_client.provider.value}
+                    f"""[bold]Provider:[/bold] {config.default_provider}
     [bold]Model:[/bold] {config.model_providers[config.default_provider].model}
     [bold]Available Tools:[/bold] {len(agent.tools)}
     [bold]Config File:[/bold] {config_file}
@@ -223,10 +272,13 @@ def interactive(provider: str | None = None, model: str | None = None, api_key: 
                 console.clear()
                 continue
 
+            # Use current directory as working directory
+            working_dir = os.getcwd()
+
             # Set up trajectory recording for this task
             trajectory_path = agent.setup_trajectory_recording(trajectory_file)
 
-            console.print(f"[blue]Trajectory will be saved to: {trajectory_path}[/blue]")
+            console.print(f"[dim]Trajectory will be saved to: {trajectory_path}[/dim]")
 
             task_args = {
                 "project_path": working_dir,
@@ -234,14 +286,45 @@ def interactive(provider: str | None = None, model: str | None = None, api_key: 
                 "must_patch": "false"
             }
 
-            # Execute the task
-            console.print(f"\n[blue]Executing task: {task}[/blue]")
+            # Execute the task with timeout and progress
+            console.print(f"\n[blue]🚀 Executing task: {task}[/blue]")
+            console.print("[dim]⏱️ Press Ctrl+C to interrupt if needed[/dim]")
+            
             agent.new_task(task, task_args)
 
-            # Configure agent for progress display
-            _ = asyncio.run(agent.execute_task())
+            # Execute task with better error handling
+            start_time = time.time()
+            try:
+                execution_result = asyncio.run(agent.execute_task())
+                
+                # Show results
+                elapsed = time.time() - start_time
+                if execution_result.success:
+                    console.print(f"[green]✅ Task completed successfully in {elapsed:.1f}s![/green]")
+                    if execution_result.final_result:
+                        result_preview = execution_result.final_result[:300]
+                        if len(execution_result.final_result) > 300:
+                            result_preview += "..."
+                        console.print(f"[green]📋 Result:[/green] {result_preview}")
+                else:
+                    console.print(f"[yellow]⚠️ Task completed with issues in {elapsed:.1f}s[/yellow]")
+                    
+                # Show stats if available
+                if hasattr(execution_result, 'steps') and execution_result.steps:
+                    console.print(f"[dim]📊 Steps: {len(execution_result.steps)}[/dim]")
+                    
+            except KeyboardInterrupt:
+                console.print("[yellow]⚠️ Task interrupted by user[/yellow]")
+            except Exception as e:
+                console.print(f"[red]❌ Task failed: {str(e)[:150]}[/red]")
+            finally:
+                # Clean up agent resources
+                agent.cleanup()
+                # Give time for cleanup with stderr suppressed
+                with suppress_stderr():
+                    time.sleep(0.1)
 
-            console.print(f"\n[green]Trajectory saved to: {trajectory_path}[/green]")
+            console.print(f"[dim]💾 Trajectory saved to: {trajectory_path}[/dim]")
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Use 'exit' or 'quit' to end the session[/yellow]")
@@ -250,6 +333,109 @@ def interactive(provider: str | None = None, model: str | None = None, api_key: 
             break
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
+
+
+@cli.command()
+@click.option('--provider', help='LLM provider to use')
+@click.option('--model', help='Model to use')
+@click.option('--api-key', help='API key for the provider')
+@click.option('--config-file', help='Path to configuration file', default='trae_config.json')
+def chat(provider: str | None = None, model: str | None = None, api_key: str | None = None,
+         config_file: str = "trae_config.json"):
+    """Start a simple chat session (no tools, just conversation)."""
+    from .utils.llm_client import LLMClient
+    from .utils.llm_basics import LLMMessage
+    
+    config = load_config(provider, model, api_key, config_file=config_file)
+
+    console.print(Panel(
+        f"""[bold]Trae Agent - Simple Chat Mode[/bold]
+    [bold]Provider:[/bold] {config.default_provider}
+    [bold]Model:[/bold] {config.model_providers[config.default_provider].model}
+    [bold]Perfect for:[/bold] Questions, explanations, simple conversations
+    [bold]Type 'exit' to quit[/bold]""",
+        title="Simple Chat",
+        border_style="green"
+    ))
+    
+    # Create LLM client
+    client = LLMClient(config.default_provider, config.model_providers[config.default_provider])
+    
+    conversation_history = []
+    
+    while True:
+        try:
+            # Get user input
+            console.print("\n[bold blue]You:[/bold blue] ", end="")
+            user_input = input().strip()
+            
+            if not user_input:
+                continue
+                
+            if user_input.lower() in ['exit', 'quit', 'bye', 'salir']:
+                console.print("[green]¡Adiós! / Goodbye![/green]")
+                break
+                
+            if user_input.lower() == 'clear':
+                conversation_history = []
+                console.clear()
+                console.print("[yellow]Conversation history cleared[/yellow]")
+                continue
+                
+            if user_input.lower() == 'help':
+                console.print(Panel(
+                    """[bold]Available Commands:[/bold]
+• Type any question or request
+• 'clear' - Clear conversation history
+• 'exit', 'quit', 'bye' - End chat
+                    
+[bold]Perfect for:[/bold]
+• "Hola, ¿cómo estás?"
+• "Explain what Python is"
+• "What's 2+2?"
+• "Tell me a joke"
+• General conversation
+""",
+                    title="Help",
+                    border_style="yellow"
+                ))
+                continue
+            
+            # Add user message to history
+            conversation_history.append(LLMMessage(role='user', content=user_input))
+            
+            # Keep only last 10 messages to avoid token limits
+            if len(conversation_history) > 10:
+                conversation_history = conversation_history[-10:]
+            
+            try:
+                console.print("[dim]Thinking...[/dim]")
+                
+                # Get response from LLM
+                response = client.chat(conversation_history, config.model_providers[config.default_provider])
+                
+                # Add assistant response to history
+                conversation_history.append(LLMMessage(role='assistant', content=response.content))
+                
+                # Display response
+                console.print(f"[bold green]AI:[/bold green] {response.content}")
+                
+                # Show token usage
+                if response.usage:
+                    tokens = response.usage.input_tokens + response.usage.output_tokens
+                    console.print(f"[dim]Tokens: {tokens}[/dim]")
+                
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+                # Remove the failed user message
+                if conversation_history and conversation_history[-1].role == 'user':
+                    conversation_history.pop()
+                    
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Use 'exit' to quit[/yellow]")
+        except EOFError:
+            console.print("\n[green]¡Adiós! / Goodbye![/green]")
+            break
 
 
 @cli.command()

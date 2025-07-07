@@ -176,22 +176,40 @@ You should:
         if arguments["total_thoughts"] < 1:
             raise ValueError("total_thoughts must be at least 1")
 
-        # Validate optional revision fields
-        if "revises_thought" in arguments and arguments["revises_thought"] is not None:
-            if not isinstance(arguments["revises_thought"], int) or arguments["revises_thought"] < 1:
-                raise ValueError("revises_thought must be a positive integer")
-            else:
-                revises_thought = int(arguments["revises_thought"])
-        else:
-            revises_thought = None
+        # Validate optional revision fields with robust type handling
+        revises_thought = None
+        if "revises_thought" in arguments:
+            value = arguments["revises_thought"]
+            if value is not None and str(value).strip() != "" and str(value).lower() != "null":
+                try:
+                    revises_thought_int = int(value)
+                    # Treat 0 as "not revising" (None), positive integers as valid revision targets
+                    if revises_thought_int > 0:
+                        revises_thought = revises_thought_int
+                    elif revises_thought_int == 0:
+                        revises_thought = None  # 0 means "not revising"
+                    else:
+                        raise ValueError("revises_thought must be a positive integer or 0")
+                except (ValueError, TypeError):
+                    # Instead of failing, just ignore invalid values
+                    revises_thought = None
 
-        if "branch_from_thought" in arguments and arguments["branch_from_thought"] is not None:
-            if not isinstance(arguments["branch_from_thought"], int) or arguments["branch_from_thought"] < 1:
-                raise ValueError("branch_from_thought must be a positive integer")
-            else:
-                branch_from_thought = int(arguments["branch_from_thought"])
-        else:
-            branch_from_thought = None
+        branch_from_thought = None
+        if "branch_from_thought" in arguments:
+            value = arguments["branch_from_thought"]
+            if value is not None and str(value).strip() != "" and str(value).lower() != "null":
+                try:
+                    branch_from_thought_int = int(value)
+                    # Treat 0 as "not branching" (None), positive integers as valid branch points
+                    if branch_from_thought_int > 0:
+                        branch_from_thought = branch_from_thought_int
+                    elif branch_from_thought_int == 0:
+                        branch_from_thought = None  # 0 means "not branching"
+                    else:
+                        raise ValueError("branch_from_thought must be a positive integer or 0")
+                except (ValueError, TypeError):
+                    # Instead of failing, just ignore invalid values
+                    branch_from_thought = None
 
         # Extract and cast the validated values
         thought = str(arguments["thought"])
