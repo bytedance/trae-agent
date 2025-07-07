@@ -28,30 +28,35 @@ There are many ways you can contribute to Trae Agent:
    ```
 
 ## Development Process
+1. Do a development install:
+   ```bash
+   uv sync --all-extras
+   pre-commit install
+   ```
 
-1. Create a new branch:
+2. Create a new branch:
    ```bash
    git checkout -b feature/amazing-feature
    ```
 
-2. Make your changes following our coding standards:
+3. Make your changes following our coding standards:
    - Write clear, documented code
    - Follow PEP 8 style guidelines
    - Add tests for new features
    - Update documentation as needed
    - Maintain type hints and add type checking when possible
 
-3. Commit your changes:
+4. Commit your changes:
    ```bash
    git commit -m 'Add some amazing feature'
    ```
 
-4. Push to your fork:
+5. Push to your fork:
    ```bash
    git push origin feature/amazing-feature
    ```
 
-5. Open a Pull Request
+6. Open a Pull Request
 
 ## Pull Request Guidelines
 

@@ -12,7 +12,7 @@
 from pathlib import Path
 from typing import override
 
-from .base import Tool, ToolError, ToolExecResult, ToolParameter, ToolCallArguments
+from .base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
 from .run import maybe_truncate, run
 
 EditToolSubCommands = [
@@ -110,43 +110,61 @@ Notes for using the `str_replace` command:
 
             if command == "view":
                 view_range = arguments.get("view_range", None)
-                return await self.view(_path, view_range)  # pyright: ignore[reportArgumentType]
-            elif command == "create":
-                file_text = arguments.get("file_text", None)
-                if file_text is None:
+                if view_range is None:
+                    return await self.view(_path, None)
+                if not (
+                    isinstance(view_range, list)
+                    and all(isinstance(i, int) for i in view_range)
+                ):
                     return ToolExecResult(
-                        error="Parameter `file_text` is required for command: create",
+                        error="Parameter `view_range` should be a list of integers.",
                         error_code=-1,
                     )
-                self.write_file(_path, file_text)  # pyright: ignore[reportArgumentType]
+                view_range_int: list[int] = [
+                    i for i in view_range if isinstance(i, int)
+                ]
+                return await self.view(_path, view_range_int)
+            elif command == "create":
+                file_text = arguments.get("file_text", None)
+                if not isinstance(file_text, str):
+                    return ToolExecResult(
+                        error="Parameter `file_text` is required and must be a string for command: create",
+                        error_code=-1,
+                    )
+                self.write_file(_path, file_text)
                 return ToolExecResult(output=f"File created successfully at: {_path}")
             elif command == "str_replace":
                 old_str = arguments.get("old_str") if "old_str" in arguments else None
-                if old_str is None:
+                if not isinstance(old_str, str):
                     return ToolExecResult(
-                        error="Parameter `old_str` is required for command: str_replace",
+                        error="Parameter `old_str` is required and should be a string for command: str_replace",
                         error_code=-1,
                     )
                 new_str = arguments.get("new_str") if "new_str" in arguments else None
-                return self.str_replace(_path, old_str, new_str)  # pyright: ignore[reportArgumentType]
+                if not (new_str is None or isinstance(new_str, str)):
+                    return ToolExecResult(
+                        error="Parameter `new_str` should be a string or null for command: str_replace",
+                        error_code=-1,
+                    )
+                return self.str_replace(_path, old_str, new_str)
             elif command == "insert":
                 insert_line = (
                     arguments.get("insert_line") if "insert_line" in arguments else None
                 )
-                if insert_line is None:
+                if not isinstance(insert_line, int):
                     return ToolExecResult(
-                        error="Parameter `insert_line` is required for command: insert",
+                        error="Parameter `insert_line` is required and should be integer for command: insert",
                         error_code=-1,
                     )
                 new_str_to_insert = (
                     arguments.get("new_str") if "new_str" in arguments else None
                 )
-                if new_str_to_insert is None:
+                if not isinstance(new_str_to_insert, str):
                     return ToolExecResult(
                         error="Parameter `new_str` is required for command: insert",
                         error_code=-1,
                     )
-                return self.insert(_path, insert_line, new_str_to_insert)  # pyright: ignore[reportArgumentType]
+                return self.insert(_path, insert_line, new_str_to_insert)
             else:
                 return ToolExecResult(
                     error=f"Unrecognized command {command}. The allowed commands for the {self.name} tool are: {', '.join(EditToolSubCommands)}",

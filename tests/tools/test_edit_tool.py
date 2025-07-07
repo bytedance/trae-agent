@@ -1,14 +1,14 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 import unittest
-from unittest.mock import patch, mock_open
-from trae_agent.tools.edit_tool import TextEditorTool
-from trae_agent.tools.base import ToolCallArguments, ToolExecResult
 from pathlib import Path
-import asyncio
+from unittest.mock import patch
+
+from trae_agent.tools.base import ToolCallArguments, ToolError
+from trae_agent.tools.edit_tool import TextEditorTool
 
 from trae_agent.tools.base import ToolError
 

@@ -3,18 +3,20 @@
 
 """OpenRouter API client wrapper with tool integration."""
 
-import os
 import json
+import os
 import random
 import time
+from typing import override
+
 import openai
 from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
     ChatCompletionFunctionMessageParam,
     ChatCompletionMessageParam,
-    ChatCompletionToolParam,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionAssistantMessageParam,
     ChatCompletionMessageToolCallParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionToolParam,
     ChatCompletionUserMessageParam,
 )
 from openai.types.chat.chat_completion_message_tool_call_param import Function
@@ -22,7 +24,6 @@ from openai.types.chat.chat_completion_tool_message_param import (
     ChatCompletionToolMessageParam,
 )
 from openai.types.shared_params.function_definition import FunctionDefinition
-from typing import override
 
 from ..tools.base import Tool, ToolCall
 from ..utils.config import ModelParameters
@@ -120,9 +121,9 @@ class OpenRouterClient(BaseLLMClient):
 
         choice = response.choices[0]
 
-        tool_calls = None
+        tool_calls: list[ToolCall] | None = None
         if choice.message.tool_calls:
-            tool_calls: list[ToolCall] | None = []
+            tool_calls = []
             for tool_call in choice.message.tool_calls:
                 tool_calls.append(
                     ToolCall(

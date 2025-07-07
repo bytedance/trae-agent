@@ -9,9 +9,9 @@
 # pyright: reportUnknownVariableType=false
 
 import json
-from pathlib import Path
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import override
 
 

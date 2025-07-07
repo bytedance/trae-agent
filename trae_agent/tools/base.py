@@ -6,6 +6,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import override
 
 
@@ -71,10 +72,17 @@ class ToolParameter:
 class Tool(ABC):
     """Base class for all tools."""
 
-    def __init__(self):
-        self.name: str = self.get_name()
-        self.description: str = self.get_description()
-        self.parameters: list[ToolParameter] = self.get_parameters()
+    @cached_property
+    def name(self) -> str:
+        return self.get_name()
+
+    @cached_property
+    def description(self) -> str:
+        return self.get_description()
+
+    @cached_property
+    def parameters(self) -> list[ToolParameter]:
+        return self.get_parameters()
 
     @abstractmethod
     def get_name(self) -> str:
@@ -98,8 +106,8 @@ class Tool(ABC):
 
     def json_definition(self) -> dict[str, object]:
         return {
-            "name": self.get_name(),
-            "description": self.get_description(),
+            "name": self.name,
+            "description": self.description,
             "parameters": self.get_input_schema(),
         }
 
@@ -137,7 +145,14 @@ class ToolExecutor:
     """Tool executor that manages tool execution."""
 
     def __init__(self, tools: list[Tool]):
-        self.tools: dict[str, Tool] = {tool.name: tool for tool in tools}
+        self._tools = tools
+        self._tool_map: dict[str, Tool] | None = None
+
+    @property
+    def tools(self) -> dict[str, Tool]:
+        if self._tool_map is None:
+            self._tool_map = {tool.name: tool for tool in self._tools}
+        return self._tool_map
 
     async def execute_tool_call(self, tool_call: ToolCall) -> ToolResult:
         """Execute a tool call."""

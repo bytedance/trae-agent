@@ -3,10 +3,12 @@
 
 """OpenAI API client wrapper with tool integration."""
 
-import os
 import json
+import os
 import random
 import time
+from typing import override
+
 import openai
 from openai.types.responses import (
     EasyInputMessageParam,
@@ -15,7 +17,6 @@ from openai.types.responses import (
     ResponseInputParam,
 )
 from openai.types.responses.response_input_param import FunctionCallOutput
-from typing import override
 
 from ..tools.base import Tool, ToolCall, ToolResult
 from ..utils.config import ModelParameters

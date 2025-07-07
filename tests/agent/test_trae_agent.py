@@ -1,14 +1,16 @@
-import unittest
-from unittest.mock import patch, MagicMock
-import sys
 import os
+import sys
+import unittest
+from unittest.mock import MagicMock, patch
+
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
+
+from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
 from trae_agent.utils.config import Config
-from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
-import subprocess
+
 
 
 class TestTraeAgentExtended(unittest.TestCase):
@@ -20,12 +22,12 @@ class TestTraeAgentExtended(unittest.TestCase):
 
     @patch("trae_agent.utils.trajectory_recorder.TrajectoryRecorder")
     def test_trajectory_setup(self, mock_recorder):
-        trajectory_path = self.agent.setup_trajectory_recording()
+        _ = self.agent.setup_trajectory_recording()
         self.assertIsNotNone(self.agent.trajectory_recorder)
         mock_recorder.return_value.start_recording.assert_called_once()
 
     def test_new_task_initialization(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(AgentError):
             self.agent.new_task("test", {})  # Missing required params
 
         valid_args = {
@@ -66,7 +68,7 @@ class TestTraeAgentExtended(unittest.TestCase):
     @patch("trae_agent.utils.cli_console.CliConsole")
     def test_task_execution_flow(self, mock_console, mock_task):
         self.agent.cli_console = mock_console
-        execution = self.agent.execute_task()
+        _ = self.agent.execute_task()
         mock_console.start.assert_called_once()
 
     def test_task_completion_detection(self):

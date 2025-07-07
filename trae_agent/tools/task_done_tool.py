@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 from typing import override
+
 from .base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
 
 

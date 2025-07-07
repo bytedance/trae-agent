@@ -5,13 +5,13 @@
 
 from abc import ABC, abstractmethod
 
+from ..tools.base import Tool, ToolExecutor, ToolResult
 from ..utils.cli_console import CLIConsole
 from ..utils.config import Config, ModelParameters
-from ..utils.trajectory_recorder import TrajectoryRecorder
-from .agent_basics import AgentStep, AgentExecution, AgentState
+from ..utils.llm_basics import LLMMessage, LLMResponse
 from ..utils.llm_client import LLMClient
-from ..utils.llm_basics import LLMResponse, LLMMessage
-from ..tools.base import Tool, ToolExecutor, ToolResult
+from ..utils.trajectory_recorder import TrajectoryRecorder
+from .agent_basics import AgentExecution, AgentState, AgentStep
 
 
 class Agent(ABC):
@@ -154,7 +154,7 @@ class Agent(ABC):
                             if self.cli_console:
                                 self.cli_console.update_status(step)
 
-                            messages: list[LLMMessage] = []
+                            messages = []
                             for tool_result in tool_results:
                                 # Add tool result to conversation
                                 message = LLMMessage(

@@ -1,13 +1,12 @@
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from unittest.mock import patch
-from trae_agent.tools.bash_tool import BashTool
 from trae_agent.tools.base import ToolCallArguments
-import asyncio
+from trae_agent.tools.bash_tool import BashTool
+
 
 
 class TestBashTool(unittest.IsolatedAsyncioTestCase):

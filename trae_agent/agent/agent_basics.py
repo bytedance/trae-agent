@@ -1,8 +1,8 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
 
 from ..tools.base import ToolCall, ToolResult
 from ..utils.llm_basics import LLMResponse, LLMUsage

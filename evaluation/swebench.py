@@ -1,16 +1,18 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-from pathlib import Path
+import argparse
+import json
+import shutil
 import subprocess
+import traceback
+from pathlib import Path
+from typing import Any
+
 from datasets import load_dataset
 from docker import from_env
 from docker.errors import ImageNotFound
 from tqdm import tqdm
-import argparse
-import shutil
-import traceback
-import json
 
 
 def docker_exec(container, command: str):
@@ -58,7 +60,7 @@ class SWEBenchEvaluation:
         self.dataset_name = dataset
 
         self.docker_client = from_env()
-        self.image_status = {}
+        self.image_status: dict[Any, Any] = {}
         self.working_dir = Path(working_dir)
         self.swebench_harness_path = swebench_harness_path
         self.run_id = run_id

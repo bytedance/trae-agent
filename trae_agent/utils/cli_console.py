@@ -1,17 +1,17 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-from dataclasses import dataclass
 import asyncio
-from rich.panel import Panel
+from dataclasses import dataclass
+
 from rich.console import Console, Group
 from rich.live import Live
+from rich.panel import Panel
 from rich.table import Table
 
-from .lake_view import LakeView
 from ..agent.agent_basics import AgentExecution, AgentState, AgentStep
 from .config import Config, LakeviewConfig
-
+from .lake_view import LakeView
 
 AGENT_STATE_INFO = {
     AgentState.THINKING: ("blue", "🤔"),
@@ -230,7 +230,7 @@ class CLIConsole:
             width=80,
         )
 
-    def create_agent_steps_display(self):
+    def create_agent_steps_display(self) -> Group:
         panels: list[Panel] = []
         if self.agent_execution is None:
             previous_steps = (
@@ -287,7 +287,7 @@ class CLIConsole:
         panels = panels[::-1]
         return Group(*panels, fit=False)
 
-    def print_task_progress(self):
+    def print_task_progress(self) -> None:
         if self.agent_execution is not None:
             render_group: Group = Group(
                 self.create_agent_steps_display(),

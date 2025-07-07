@@ -3,8 +3,9 @@
 
 
 from dataclasses import dataclass
-from ..tools.base import ToolCall, ToolResult
 from typing import override
+
+from ..tools.base import ToolCall, ToolResult
 
 
 @dataclass

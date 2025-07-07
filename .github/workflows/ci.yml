@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+
+    - name: Create virtual environment and install dependencies
+      run: |
+        uv sync --all-extras
+        source .venv/bin/activate
+
+    - name: Run pre-commit hooks
+      run: |
+        source .venv/bin/activate
+        uv run pre-commit run --all-files

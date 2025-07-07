@@ -3,7 +3,9 @@
 
 """Tools module for Trae Agent."""
 
-from .base import Tool, ToolResult, ToolCall, ToolExecutor
+from typing import Type
+
+from .base import Tool, ToolCall, ToolExecutor, ToolResult
 from .bash_tool import BashTool
 from .edit_tool import TextEditorTool
 from .sequential_thinking_tool import SequentialThinkingTool
@@ -20,7 +22,7 @@ __all__ = [
     "TaskDoneTool",
 ]
 
-tools_registry = {
+tools_registry: dict[str, Type[Tool]] = {
     "bash": BashTool,
     "str_replace_based_edit_tool": TextEditorTool,
     "sequentialthinking": SequentialThinkingTool,

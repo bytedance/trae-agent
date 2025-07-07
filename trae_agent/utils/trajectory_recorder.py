@@ -235,7 +235,7 @@ class TrajectoryRecorder:
 
     def _serialize_message(self, message: LLMMessage) -> dict[str, Any]:
         """Serialize an LLM message to a dictionary."""
-        data = {"role": message.role, "content": message.content}
+        data: dict[str, Any] = {"role": message.role, "content": message.content}
 
         if message.tool_call:
             data["tool_call"] = self._serialize_tool_call(message.tool_call)

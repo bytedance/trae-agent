@@ -3,20 +3,18 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
  ![Alpha]( https://img.shields.io/badge/Status-Alpha-red)
 
-**Trae Agent** is an LLM-based agent for general purpose software engineering tasks. It provides a powerful CLI interface that can understand natural language instructions and execute complex software engineering workflows using various tools and LLM providers.
-
 *Please note that this project is still in the alpha stage and being actively developed. We welcome various contributions from the community.*
 
-- [ ] Unit tests
-- [ ] Richer CLI support
-- [ ] Migrate to Rust
+**Trae Agent** is an LLM-based agent for general purpose software engineering tasks. It provides a powerful CLI interface that can understand natural language instructions and execute complex software engineering workflows using various tools and LLM providers.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=bytedance/trae-agent&type=Date)](https://www.star-history.com/#bytedance/trae-agent&Date)
+**Difference with Other CLI Agents:** Trae Agent offers a transparent, modular architecture that researchers and developers can easily modify, extend, and analyze. The open-source nature allows for deep customization of agent behaviors, tool implementations, and workflow patterns, making it an ideal platform for **studying AI agent architectures, conducting ablation studies, and developing novel agent capabilities**. This ***research-friendly design*** enables the academic and open-source communities to contribute to and build upon the foundational agent framework, fostering innovation in the rapidly evolving field of AI agents.
+
+**Project Status:** Trae Agent is currently an experimental project. We are working hard on supporting more LLM providers, enriched command-line interface, developing more tools and adding MCP supports. Building a robust unit testing framework for Trae Agent is also our priority.
 
 ## ✨ Features
 
 - 🌊 **Lakeview**: Provides short and concise summarisation for agent steps
-- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, and OpenRouter APIs
+- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure and OpenRouter APIs
 - 🛠️ **Rich Tool Ecosystem**: File editing, bash execution, sequential thinking, and more
 - 🎯 **Interactive Mode**: Conversational interface for iterative development
 - 📊 **Trajectory Recording**: Detailed logging of all agent actions for debugging and analysis
@@ -48,6 +46,10 @@ export OPENAI_API_KEY="your-openai-api-key"
 # For Anthropic
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
 
+# For Doubao (also works with other OpenAI-compatible model providers)
+export DOUBAO_API_KEY="your-doubao-api-key"
+export DOUBAO_API_BASE_URL="your-model-provider-base-url"
+
 # For OpenRouter
 export OPENROUTER_API_KEY="your-openrouter-api-key"
 
@@ -61,6 +63,9 @@ export OPENROUTER_SITE_NAME="Your App Name"
 ```bash
 # Run a simple task
 trae-cli run "Create a hello world Python script"
+
+# Run with Doubao
+trae-cli run "Create a hello world Python script" --provider doubao --model doubao-seed-1.6
 ```
 
 ## 📖 Usage
@@ -126,13 +131,15 @@ Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
 {
   "default_provider": "anthropic",
   "max_steps": 20,
+  "enable_lakeview": true,
   "model_providers": {
     "openai": {
       "api_key": "your_openai_api_key",
       "model": "gpt-4o",
       "max_tokens": 128000,
       "temperature": 0.5,
-      "top_p": 1
+      "top_p": 1,
+      "max_retries": 10
     },
     "anthropic": {
       "api_key": "your_anthropic_api_key",
@@ -140,7 +147,19 @@ Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
       "max_tokens": 4096,
       "temperature": 0.5,
       "top_p": 1,
-      "top_k": 0
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "azure": {
+      "api_key": "you_azure_api_key",
+      "base_url": "your_azure_base_url",
+      "api_version": "2024-03-01-preview",
+      "model": "model_name",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
     },
     "openrouter": {
       "api_key": "your_openrouter_api_key",
@@ -148,8 +167,22 @@ Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
       "max_tokens": 4096,
       "temperature": 0.5,
       "top_p": 1,
-      "top_k": 0
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "doubao": {
+      "api_key": "you_doubao_api_key",
+      "model": "model_name",
+      "base_url": "your_doubao_base_url",
+      "max_tokens": 8192,
+      "temperature": 0.5,
+      "top_p": 1,
+      "max_retries": 20
     }
+  },
+  "lakeview_config": {
+    "model_provider": "anthropic",
+    "model_name": "claude-sonnet-4-20250514"
   }
 }
 ```
@@ -169,6 +202,9 @@ trae-cli run "Review this code" --provider openrouter --model "anthropic/claude-
 
 # Use Gemini through OpenRouter
 trae-cli run "Generate docs" --provider openrouter --model "google/gemini-pro"
+
+# Use Qwen through Ollama
+trae-cli run "Comment this code" --provider ollama --model "qwen3"
 ```
 
 **Popular OpenRouter Models:**

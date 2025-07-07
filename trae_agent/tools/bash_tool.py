@@ -13,7 +13,7 @@ import asyncio
 import os
 from typing import override
 
-from .base import Tool, ToolCallArguments, ToolExecResult, ToolError, ToolParameter
+from .base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
 
 
 class _BashSession:
@@ -27,33 +27,39 @@ class _BashSession:
     _timeout: float = 120.0  # seconds
     _sentinel: str = "<<exit>>"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._started = False
         self._timed_out = False
         self._process: asyncio.subprocess.Process | None = None
 
-    async def start(self):
+    async def start(self) -> None:
         if self._started:
             return
 
         # Windows compatibility: os.setsid not available
-        kwargs = {
-            "shell": True,
-            "bufsize": 0,
-            "stdin": asyncio.subprocess.PIPE,
-            "stdout": asyncio.subprocess.PIPE,
-            "stderr": asyncio.subprocess.PIPE,
-        }
         if os.name != "nt":  # Unix-like systems
-            kwargs["preexec_fn"] = os.setsid
-
-        self._process = await asyncio.create_subprocess_shell(
-            "cmd.exe" if os.name == "nt" else self.command, **kwargs
-        )
+            self._process = await asyncio.create_subprocess_shell(
+                self.command,
+                shell=True,
+                bufsize=0,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                preexec_fn=os.setsid,
+            )
+        else:
+            self._process = await asyncio.create_subprocess_shell(
+                "cmd.exe",
+                shell=True,
+                bufsize=0,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
 
         self._started = True
 
-    def stop(self):
+    def stop(self) -> None:
         """Terminate the bash shell."""
         if not self._started:
             raise ToolError("Session has not started.")
@@ -95,10 +101,10 @@ class _BashSession:
                     await asyncio.sleep(self._output_delay)
                     # if we read directly from stdout/stderr, it will wait forever for
                     # EOF. use the StreamReader buffer directly instead.
-                    output: str = self._process.stdout._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+                    output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined]
                     if self._sentinel in output:
                         # strip the sentinel and break
-                        output = output[: output.index(self._sentinel)]  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                        output = output[: output.index(self._sentinel)]
                         break
         except asyncio.TimeoutError:
             self._timed_out = True
@@ -106,22 +112,22 @@ class _BashSession:
                 f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
             ) from None
 
-        if output.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
-            output = output[:-1]  # pyright: ignore[reportUnknownVariableType]
+        if output.endswith("\n"):
+            output = output[:-1]
 
-        error: str = self._process.stderr._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-        if error.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
-            error = error[:-1]  # pyright: ignore[reportUnknownVariableType]
+        error: str = self._process.stderr._buffer.decode()  # type: ignore[attr-defined]
+        if error.endswith("\n"):
+            error = error[:-1]
 
         error_code = (
             self._process.returncode if self._process.returncode is not None else 0
         )
 
         # clear the buffers so that the next output can be read correctly
-        self._process.stdout._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
-        self._process.stderr._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+        self._process.stdout._buffer.clear()  # type: ignore[attr-defined]
+        self._process.stderr._buffer.clear()  # type: ignore[attr-defined]
 
-        return ToolExecResult(output=output, error=error, error_code=error_code)  # pyright: ignore[reportUnknownArgumentType]
+        return ToolExecResult(output=output, error=error, error_code=error_code)
 
 
 class BashTool(Tool):

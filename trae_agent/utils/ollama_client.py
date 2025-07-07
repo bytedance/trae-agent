@@ -6,9 +6,12 @@ Ollama API client wrapper with tool intergration
 """
 
 import os
+
 import json
 import random
 import time
+from typing import override
+
 import openai
 from openai.types.responses import (
     EasyInputMessageParam,
@@ -17,7 +20,6 @@ from openai.types.responses import (
     ResponseInputParam,
 )
 from openai.types.responses.response_input_param import FunctionCallOutput
-from typing import override
 
 from ..tools.base import Tool, ToolCall, ToolResult
 from ..utils.config import ModelParameters
@@ -35,14 +37,14 @@ class OllamaClient(BaseLLMClient):
         self.client: openai.OpenAI = openai.OpenAI(
             # by default ollama doesn't require any api key. It should set to be "ollama".
             api_key=self.api_key,
-            base_url=model_parameters.base_url,
+            base_url=model_parameters.base_url if model_parameters.base_url else "http://localhost:11434"
         )
 
         self.message_history: ResponseInputParam = []
 
     @override
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
-        return super().set_chat_history(messages)
+        self.message_history = self.parse_messages(messages)
 
     @override
     def chat(
@@ -163,8 +165,10 @@ class OllamaClient(BaseLLMClient):
 
     @override
     def supports_tool_calling(self, model_parameters: ModelParameters) -> bool:
-        """Check if the current model supports tool calling."""
-
+        """
+            Check if the current model supports tool calling.
+            TODO: there should be a more robust way to handle tool_support check or we have to manually type every supported model which is not really that feasible. for example deepseek familay has deepseek:1.5b deepseek:7b ...
+        """
         tool_support_model = [
             "deepseek-r1",
             "qwen3",
@@ -192,7 +196,7 @@ class OllamaClient(BaseLLMClient):
 
     def parse_messages(self, messages: list[LLMMessage]) -> ResponseInputParam:
         """
-        Ollama parse messages should be compitable with openai handling
+        Ollama parse messages should be compatible with openai handling
         """
         openai_messages: ResponseInputParam = []
         for msg in messages:

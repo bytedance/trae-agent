@@ -1,12 +1,11 @@
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from trae_agent.agent.agent_basics import AgentStep
 
+from .config import Config, ModelParameters
 from .llm_basics import LLMMessage
 from .llm_client import LLMClient
-from .config import Config, ModelParameters
-
 
 StepType = tuple[
     str,  # content for human (will write into result file)

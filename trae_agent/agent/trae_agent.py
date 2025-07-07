@@ -8,12 +8,12 @@ import os
 import subprocess
 from typing import override
 
-from .base import Agent
-from .agent_basics import AgentError, AgentExecution
+from ..tools import tools_registry
+from ..tools.base import Tool, ToolExecutor, ToolResult
 from ..utils.config import Config
 from ..utils.llm_basics import LLMMessage, LLMResponse
-from ..tools.base import Tool, ToolExecutor, ToolResult
-from ..tools import tools_registry
+from .agent_basics import AgentError, AgentExecution
+from .base import Agent
 
 TraeAgentToolNames = [
     "str_replace_based_edit_tool",

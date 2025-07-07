@@ -6,10 +6,10 @@
 from enum import Enum
 
 from ..tools.base import Tool
-from .config import ModelParameters
-from .trajectory_recorder import TrajectoryRecorder
 from .base_client import BaseLLMClient
+from .config import ModelParameters
 from .llm_basics import LLMMessage, LLMResponse
+from .trajectory_recorder import TrajectoryRecorder
 
 
 class LLMProvider(Enum):

@@ -3,10 +3,11 @@
 
 
 from abc import ABC, abstractmethod
+
 from ..tools.base import Tool
 from ..utils.config import ModelParameters
-from ..utils.trajectory_recorder import TrajectoryRecorder
 from ..utils.llm_basics import LLMMessage, LLMResponse
+from ..utils.trajectory_recorder import TrajectoryRecorder
 
 
 class BaseLLMClient(ABC):
