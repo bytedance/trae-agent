@@ -14,7 +14,7 @@ from trae_agent.utils.doubao_client import DoubaoClient
 from trae_agent.utils.llm_basics import LLMMessage
 
 TEST_MODEL = "doubao-1.5-pro-32k-250115"
-BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/"
 
 
 class TestDouBaoClient(unittest.TestCase):
