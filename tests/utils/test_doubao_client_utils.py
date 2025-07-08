@@ -41,18 +41,6 @@ class TestDouBaoClient(unittest.TestCase):
         self.assertEqual(client.base_url, BASE_URL)
 
     def test_set_chat_history(self):
-        model_parameters = ModelParameters(
-            TEST_MODEL,
-            API_KEY,
-            1000,
-            0.8,
-            7.0,
-            8,
-            False,
-            1,
-            BASE_URL,
-            None,
-        )
         client = DoubaoClient(model_parameters)
         message = LLMMessage("user", "this is a test message")
         client.set_chat_history(messages=[message])
