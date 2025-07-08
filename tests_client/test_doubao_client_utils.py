@@ -4,9 +4,7 @@ The purpose of this test file is to ensure it is funtionable from the doubao cli
 """
 
 import os
-import sys
 import unittest
-
 
 from trae_agent.utils.config import ModelParameters
 from trae_agent.utils.doubao_client import DoubaoClient

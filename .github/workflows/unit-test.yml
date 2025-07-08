@@ -28,8 +28,5 @@ jobs:
         uv sync --all-extras
 
     - name: Run unit tests
-      env:
-        SKIP_OLLAMA_TEST: true
-        SKIP_OPENROUTER_TEST: true
       run: |
         uv run pytest tests/ -v --tb=short --continue-on-collection-errors
