@@ -28,7 +28,7 @@
 We strongly recommend using [UV](https://docs.astral.sh/uv/) to setup the project.
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/bytedance/trae-agent
 cd trae-agent
 uv sync
 ```
