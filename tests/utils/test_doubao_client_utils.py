@@ -15,7 +15,7 @@ from trae_agent.utils.llm_basics import LLMMessage
 
 TEST_MODEL = "doubao-1.5-pro-32k-250115"
 BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/"
-
+API_KEY =os.getenv("DOUBAO_API_KEY") 
 
 class TestDouBaoClient(unittest.TestCase):
     """
@@ -25,7 +25,7 @@ class TestDouBaoClient(unittest.TestCase):
     def DoubaoClient_init(self):
         model_parameters = ModelParameters(
             TEST_MODEL,
-            os.getenv("DOUBAO_API_KEY"),
+            API_KEY,  
             1000,
             0.8,
             7.0,
@@ -41,7 +41,7 @@ class TestDouBaoClient(unittest.TestCase):
     def test_set_chat_history(self):
         model_parameters = ModelParameters(
             TEST_MODEL,
-            os.getenv("DOUBAO_API_KEY"),
+            API_KEY, 
             1000,
             0.8,
             7.0,
@@ -62,7 +62,7 @@ class TestDouBaoClient(unittest.TestCase):
         """
         model_parameters = ModelParameters(
             TEST_MODEL,
-            os.getenv("DOUBAO_API_KEY"),
+            API_KEY,
             1000,
             0.8,
             7.0,
@@ -83,7 +83,7 @@ class TestDouBaoClient(unittest.TestCase):
         """
         model_parameters = ModelParameters(
             TEST_MODEL,
-            os.getenv("DOUBAO_API_KEY"),
+            API_KEY,
             1000,
             0.8,
             7.0,
