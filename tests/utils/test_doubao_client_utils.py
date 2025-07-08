@@ -14,7 +14,7 @@ from trae_agent.utils.llm_basics import LLMMessage
 
 TEST_MODEL = "doubao-1.5-pro-32k-250115"
 BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/"
-API_KEY = os.getenv("DOUBAO_API_KEY")
+API_KEY = os.getenv("DOUBAO_API_KEY", "DOUBAO_API_KEY_NOT_FOUND")
 
 MODEL_PARAMETERS = ModelParameters(
     TEST_MODEL,
