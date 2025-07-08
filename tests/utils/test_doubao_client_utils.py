@@ -1,6 +1,6 @@
 """
-This test file is for the purpsoe to check if Doubao client is functionable.
-The purpsoe of this test file is to ensure it is funtionable from the doubao client
+This test file is for the purpose to check if Doubao client is functional.
+The purpose of this test file is to ensure it is funtionable from the doubao client
 """
 
 import os
