@@ -70,8 +70,12 @@ class TraeAgent(Agent):
 
         if tool_names is None:
             tool_names = TraeAgentToolNames
+
+        # Get the model provider from the LLM client
+        provider = self.llm_client.provider.value
         self.tools: list[Tool] = [
-            tools_registry[tool_name]() for tool_name in tool_names
+            tools_registry[tool_name](model_provider=provider)
+            for tool_name in tool_names
         ]
         self.tool_caller: ToolExecutor = ToolExecutor(self.tools)
 
@@ -132,6 +136,9 @@ class TraeAgent(Agent):
     def get_system_prompt(self) -> str:
         """Get the system prompt for TraeAgent."""
         return """You are an expert AI software engineering agent.
+
+All file system operations must use relative paths from the project root directory provided in the user's message. Do not assume you are in a `/repo` or `/workspace` directory. Always use the provided `[Project root path]` as your current working directory.
+
 Your primary goal is to resolve a given GitHub issue by navigating the provided codebase, identifying the root cause of the bug, implementing a robust fix, and ensuring your changes are safe and well-tested.
 
 Follow these steps methodically:

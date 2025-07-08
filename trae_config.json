@@ -20,6 +20,15 @@
       "top_k": 0,
       "max_retries": 10
     },
+    "google": {
+      "api_key": "your_google_api_key",
+      "model": "gemini-2.5-flash",
+      "max_tokens": 120000,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
+    },
     "azure": {
       "api_key": "you_azure_api_key",
       "base_url": "your_azure_base_url",

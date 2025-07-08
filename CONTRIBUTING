@@ -24,39 +24,36 @@ There are many ways you can contribute to Trae Agent:
 3. Set up your development environment:
    ```bash
    # Install dependencies, uv will take care of the python interpreter and venv creation
-   uv sync
-   ```
-
-## Development Process
-1. Do a development install:
-   ```bash
    uv sync --all-extras
+   # Install pre-commit hooks
    pre-commit install
    ```
 
-2. Create a new branch:
+## Development Process
+
+1. Create a new branch:
    ```bash
    git checkout -b feature/amazing-feature
    ```
 
-3. Make your changes following our coding standards:
+2. Make your changes following our coding standards:
    - Write clear, documented code
    - Follow PEP 8 style guidelines
    - Add tests for new features
    - Update documentation as needed
    - Maintain type hints and add type checking when possible
 
-4. Commit your changes:
+3. Commit your changes:
    ```bash
    git commit -m 'Add some amazing feature'
    ```
 
-5. Push to your fork:
+4. Push to your fork:
    ```bash
    git push origin feature/amazing-feature
    ```
 
-6. Open a Pull Request
+5. Open a Pull Request
 
 ## Pull Request Guidelines
 

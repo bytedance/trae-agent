@@ -12,7 +12,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import override
+from typing import Any, override
 
 
 # data class for model parameters
@@ -30,6 +30,8 @@ class ModelParameters:
     max_retries: int
     base_url: str | None = None
     api_version: str | None = None
+    candidate_count: int | None = None  # Gemini specific field
+    stop_sequences: list[str] | None = None
 
 
 @dataclass
@@ -88,9 +90,11 @@ class Config:
             }
         else:
             for provider in self._config.get("model_providers", {}):
-                provider_config: dict[str, str | int | float | bool] = self._config.get(
+                provider_config: dict[str, Any] = self._config.get(
                     "model_providers", {}
                 ).get(provider, {})
+
+                candidate_count = provider_config.get("candidate_count")
                 self.model_providers[provider] = ModelParameters(
                     model=str(provider_config.get("model", "")),
                     api_key=str(provider_config.get("api_key", "")),
@@ -107,6 +111,12 @@ class Config:
                     else None,
                     api_version=str(provider_config.get("api_version"))
                     if "api_version" in provider_config
+                    else None,
+                    candidate_count=int(candidate_count)
+                    if candidate_count is not None
+                    else None,
+                    stop_sequences=provider_config.get("stop_sequences")
+                    if "stop_sequences" in provider_config
                     else None,
                 )
 

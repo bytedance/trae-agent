@@ -1,25 +1,48 @@
-import os
-import sys
+import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
-
 
 from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
 from trae_agent.utils.config import Config
+from trae_agent.utils.llm_basics import LLMResponse
 
 
 class TestTraeAgentExtended(unittest.TestCase):
     def setUp(self):
-        self.config = Config({"llm": {"provider": "test", "model": "test-model"}})
+        test_config = {
+            "default_provider": "anthropic",
+            "max_steps": 20,
+            "model_providers": {
+                "anthropic": {
+                    "model": "claude-sonnet-4-20250514",
+                    "api_key": "test-dummy-api-key",  # dummy api key
+                    "max_tokens": 4096,
+                    "temperature": 0.5,
+                    "top_p": 1,
+                    "top_k": 0,
+                    "parallel_tool_calls": False,
+                    "max_retries": 10,
+                }
+            },
+        }
+        self.config = Config(test_config)
+
+        # Avoid create real LLMClient instance to avoid actual API calls
+        self.llm_client_patcher = patch("trae_agent.agent.base.LLMClient")
+        mock_llm_client = self.llm_client_patcher.start()
+        mock_llm_client.return_value.client = MagicMock()
+
         self.agent = TraeAgent(self.config)
         self.test_project_path = "/test/project"
         self.test_patch_path = "/test/patch.diff"
 
+    def tearDown(self):
+        self.llm_client_patcher.stop()
+
     @patch("trae_agent.utils.trajectory_recorder.TrajectoryRecorder")
     def test_trajectory_setup(self, mock_recorder):
+        self.agent.task = "test task"
         _ = self.agent.setup_trajectory_recording()
         self.assertIsNotNone(self.agent.trajectory_recorder)
         mock_recorder.return_value.start_recording.assert_called_once()
@@ -43,7 +66,9 @@ class TestTraeAgentExtended(unittest.TestCase):
         self.assertTrue(any(tool.get_name() == "bash" for tool in self.agent.tools))
 
     @patch("subprocess.check_output")
-    def test_git_diff_generation(self, mock_subprocess):
+    @patch("os.chdir")
+    @patch("os.path.isdir", return_value=True)
+    def test_git_diff_generation(self, mock_isdir, mock_chdir, mock_subprocess):
         mock_subprocess.return_value = b"test diff"
         self.agent.project_path = self.test_project_path
 
@@ -63,20 +88,22 @@ class TestTraeAgentExtended(unittest.TestCase):
         self.assertEqual(filtered, "")
 
     @patch("asyncio.create_task")
-    @patch("trae_agent.utils.cli_console.CliConsole")
+    @patch("trae_agent.utils.cli_console.CLIConsole")
     def test_task_execution_flow(self, mock_console, mock_task):
         self.agent.cli_console = mock_console
-        _ = self.agent.execute_task()
+        asyncio.run(self.agent.execute_task())
         mock_console.start.assert_called_once()
 
     def test_task_completion_detection(self):
+        mock_response = MagicMock(spec=LLMResponse)
+
         # Test empty patch scenario
         self.agent.must_patch = "true"
-        self.assertFalse(self.agent.is_task_completed(MagicMock()))
+        self.assertFalse(self.agent.is_task_completed(mock_response))
 
         # Test valid patch scenario
         with patch.object(self.agent, "get_git_diff", return_value="valid patch"):
-            self.assertTrue(self.agent.is_task_completed(MagicMock()))
+            self.assertTrue(self.agent.is_task_completed(mock_response))
 
     def test_tool_initialization(self):
         tools = [
@@ -85,11 +112,14 @@ class TestTraeAgentExtended(unittest.TestCase):
             "sequentialthinking",
             "task_done",
         ]
-        self.agent.new_task(
-            "test", {"project_path": self.test_project_path, "tool_names": tools}
-        )
+        self.agent.new_task("test", {"project_path": self.test_project_path}, tools)
+        tool_names = [tool.get_name() for tool in self.agent.tools]
+
         self.assertEqual(len(self.agent.tools), len(tools))
-        self.assertEqual(self.agent.tools[0].get_name(), "bash")
+        self.assertIn("bash", tool_names)
+        self.assertIn("str_replace_based_edit_tool", tool_names)
+        self.assertIn("sequentialthinking", tool_names)
+        self.assertIn("task_done", tool_names)
 
 
 if __name__ == "__main__":

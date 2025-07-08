@@ -21,6 +21,7 @@ class LLMProvider(Enum):
     OLLAMA = "ollama"
     OPENROUTER = "openrouter"
     DOUBAO = "doubao"
+    GOOGLE = "google"
 
 
 class LLMClient:
@@ -57,6 +58,10 @@ class LLMClient:
                 from .ollama_client import OllamaClient
 
                 self.client = OllamaClient(model_parameters)
+            case LLMProvider.GOOGLE:
+                from .google_client import GoogleClient
+
+                self.client = GoogleClient(model_parameters)
 
     def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for the underlying client."""

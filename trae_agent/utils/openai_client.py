@@ -11,7 +11,6 @@ from typing import override
 
 import openai
 from openai.types.responses import (
-    EasyInputMessageParam,
     FunctionToolParam,
     ResponseFunctionToolCallParam,
     ResponseInputParam,
@@ -70,20 +69,22 @@ class OpenAIClient(BaseLLMClient):
                 for tool in tools
             ]
 
+        api_call_input: ResponseInputParam = []
         if reuse_history:
-            self.message_history = self.message_history + openai_messages
-        else:
-            self.message_history = openai_messages
+            api_call_input.extend(self.message_history)
+        api_call_input.extend(openai_messages)
 
         response = None
         error_message = ""
         for i in range(model_parameters.max_retries):
             try:
                 response = self.client.responses.create(
-                    input=self.message_history,
+                    input=api_call_input,
                     model=model_parameters.model,
                     tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
-                    temperature=model_parameters.temperature,
+                    temperature=model_parameters.temperature
+                    if "o3" not in model_parameters.model
+                    else openai.NOT_GIVEN,
                     top_p=model_parameters.top_p,
                     max_output_tokens=model_parameters.max_tokens,
                 )
@@ -99,6 +100,8 @@ class OpenAIClient(BaseLLMClient):
                 f"Failed to get response from OpenAI after max retries: {error_message}"
             )
 
+        self.message_history = api_call_input + response.output
+
         content = ""
         tool_calls: list[ToolCall] = []
         for output_block in response.output:
@@ -113,28 +116,12 @@ class OpenAIClient(BaseLLMClient):
                         id=output_block.id,
                     )
                 )
-                tool_call_param = ResponseFunctionToolCallParam(
-                    arguments=output_block.arguments,
-                    call_id=output_block.call_id,
-                    name=output_block.name,
-                    type="function_call",
-                )
-                if output_block.status:
-                    tool_call_param["status"] = output_block.status
-                if output_block.id:
-                    tool_call_param["id"] = output_block.id
-                self.message_history.append(tool_call_param)
             elif output_block.type == "message":
                 content = "".join(
                     content_block.text
                     for content_block in output_block.content
                     if content_block.type == "output_text"
                 )
-
-        if content != "":
-            self.message_history.append(
-                EasyInputMessageParam(content=content, role="assistant", type="message")
-            )
 
         usage = None
         if response.usage:
@@ -220,17 +207,16 @@ class OpenAIClient(BaseLLMClient):
     def parse_tool_call_result(
         self, tool_call_result: ToolResult
     ) -> FunctionCallOutput:
-        """Parse the tool call result from the LLM response."""
-        result: str = ""
-        if tool_call_result.result:
-            result = result + tool_call_result.result + "\n"
+        """Parse the tool call result from the LLM response to FunctionCallOutput format."""
+        result_content: str = ""
+        if tool_call_result.result is not None:
+            result_content += str(tool_call_result.result)
         if tool_call_result.error:
-            result += tool_call_result.error
-        result = result.strip()
+            result_content += f"\nError: {tool_call_result.error}"
+        result_content = result_content.strip()
 
         return FunctionCallOutput(
+            type="function_call_output",  # Explicitly set the type field
             call_id=tool_call_result.call_id,
-            id=tool_call_result.id,
-            output=result,
-            type="function_call_output",
+            output=result_content,
         )

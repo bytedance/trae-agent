@@ -151,10 +151,14 @@ You should:
             ),
         ]
 
-    def __init__(self) -> None:
+    def __init__(self, model_provider: str | None = None) -> None:
+        super().__init__(model_provider)
         self.thought_history: list[ThoughtData] = []
         self.branches: dict[str, list[ThoughtData]] = {}
-        super().__init__()
+
+    @override
+    def get_model_provider(self) -> str | None:
+        return self._model_provider
 
     def _validate_thought_data(self, arguments: ToolCallArguments) -> ThoughtData:
         """Validate the input arguments and return a ThoughtData object."""
@@ -184,7 +188,11 @@ You should:
             raise ValueError("total_thoughts must be at least 1")
 
         # Validate optional revision fields
-        if "revises_thought" in arguments and arguments["revises_thought"] is not None:
+        if (
+            "revises_thought" in arguments
+            and arguments["revises_thought"] is not None
+            and arguments["revises_thought"] != 0
+        ):
             if (
                 not isinstance(arguments["revises_thought"], int)
                 or arguments["revises_thought"] < 1
@@ -198,6 +206,7 @@ You should:
         if (
             "branch_from_thought" in arguments
             and arguments["branch_from_thought"] is not None
+            and arguments["branch_from_thought"] != 0
         ):
             if (
                 not isinstance(arguments["branch_from_thought"], int)

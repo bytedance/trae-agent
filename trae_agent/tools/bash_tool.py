@@ -137,11 +137,13 @@ class BashTool(Tool):
     The tool parameters are defined by Anthropic and are not editable.
     """
 
-    _session: _BashSession | None
+    def __init__(self, model_provider: str | None = None):
+        super().__init__(model_provider)
+        self._session: _BashSession | None = None
 
-    def __init__(self):
-        self._session = None
-        super().__init__()
+    @override
+    def get_model_provider(self) -> str | None:
+        return self._model_provider
 
     @override
     def get_name(self) -> str:
@@ -160,6 +162,10 @@ class BashTool(Tool):
 
     @override
     def get_parameters(self) -> list[ToolParameter]:
+        # For OpenAI models, all parameters must be required=True
+        # For other providers, optional parameters can have required=False
+        restart_required = self.model_provider == "openai"
+
         return [
             ToolParameter(
                 name="command",
@@ -171,7 +177,7 @@ class BashTool(Tool):
                 name="restart",
                 type="boolean",
                 description="Set to true to restart the bash session.",
-                required=False,
+                required=restart_required,
             ),
         ]
 

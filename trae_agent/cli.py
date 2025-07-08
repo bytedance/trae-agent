@@ -70,6 +70,7 @@ def load_config(
         "azure": "AZURE_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
         "doubao": "DOUBAO_API_KEY",
+        "google": "GOOGLE_API_KEY",
     }
 
     resolved_api_key = resolve_config_value(

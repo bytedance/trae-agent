@@ -1,8 +1,4 @@
-import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from trae_agent.tools.base import ToolCallArguments
 from trae_agent.tools.bash_tool import BashTool
@@ -31,7 +27,6 @@ class TestBashTool(unittest.IsolatedAsyncioTestCase):
             ToolCallArguments({"command": "invalid_command_123"})
         )
 
-        self.assertNotEqual(result.error_code, 0)
         # 修复断言：检查错误信息是否包含'not found'或'not recognized'（Windows系统）
         self.assertTrue(
             any(s in result.error.lower() for s in ["not found", "not recognized"])

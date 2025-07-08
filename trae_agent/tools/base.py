@@ -32,6 +32,7 @@ class ToolResult:
     """Result of a tool execution."""
 
     call_id: str
+    name: str  # Gemini specific field
     success: bool
     result: str | None = None
     error: str | None = None
@@ -72,6 +73,13 @@ class ToolParameter:
 class Tool(ABC):
     """Base class for all tools."""
 
+    def __init__(self, model_provider: str | None = None):
+        self._model_provider = model_provider
+
+    @cached_property
+    def model_provider(self) -> str | None:
+        return self.get_model_provider()
+
     @cached_property
     def name(self) -> str:
         return self.get_name()
@@ -83,6 +91,10 @@ class Tool(ABC):
     @cached_property
     def parameters(self) -> list[ToolParameter]:
         return self.get_parameters()
+
+    def get_model_provider(self) -> str | None:
+        """Get the model provider."""
+        return self._model_provider
 
     @abstractmethod
     def get_name(self) -> str:
@@ -138,6 +150,12 @@ class Tool(ABC):
         if len(required) > 0:
             schema["required"] = required
 
+        # For OpenAI, we need to specify that additional properties are not allowed.
+        # For Gemini, this field is not allowed.
+        if self.model_provider == "openai":
+            # extra properties are not allowed
+            schema["additionalProperties"] = False
+
         return schema
 
 
@@ -158,6 +176,7 @@ class ToolExecutor:
         """Execute a tool call."""
         if tool_call.name not in self.tools:
             return ToolResult(
+                name=tool_call.name,
                 success=False,
                 error=f"Tool '{tool_call.name}' not found. Available tools: {list(self.tools.keys())}",
                 call_id=tool_call.call_id,
@@ -169,6 +188,7 @@ class ToolExecutor:
         try:
             tool_exec_result = await tool.execute(tool_call.arguments)
             return ToolResult(
+                name=tool_call.name,
                 success=tool_exec_result.error_code == 0,
                 result=tool_exec_result.output,
                 error=tool_exec_result.error,
@@ -177,6 +197,7 @@ class ToolExecutor:
             )
         except Exception as e:
             return ToolResult(
+                name=tool_call.name,
                 success=False,
                 error=f"Error executing tool '{tool_call.name}': {str(e)}",
                 call_id=tool_call.call_id,

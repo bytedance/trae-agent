@@ -7,10 +7,7 @@ WARNING: This Ollama test should not be used in the GitHub Actions workflow, as 
 """
 
 import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from trae_agent.utils.config import ModelParameters
 from trae_agent.utils.llm_basics import LLMMessage
@@ -19,6 +16,10 @@ from trae_agent.utils.ollama_client import OllamaClient
 TEST_MODEL = "qwen3:4b"
 
 
+@unittest.skipIf(
+    os.getenv("SKIP_OLLAMA_TEST", "").lower() == "true",
+    "Ollama tests skipped due to SKIP_OLLAMA_TEST environment variable",
+)
 class TestOllamaClient(unittest.TestCase):
     def test_OllamaClient_init(self):
         """
