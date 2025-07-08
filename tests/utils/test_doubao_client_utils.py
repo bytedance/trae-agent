@@ -15,7 +15,21 @@ from trae_agent.utils.llm_basics import LLMMessage
 
 TEST_MODEL = "doubao-1.5-pro-32k-250115"
 BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/"
-API_KEY =os.getenv("DOUBAO_API_KEY") 
+API_KEY = os.getenv("DOUBAO_API_KEY")
+
+model_parameters = ModelParameters(
+    TEST_MODEL,
+    API_KEY,
+    1000,
+    0.8,
+    7.0,
+    8,
+    False,
+    1,
+    BASE_URL,
+    None,
+)
+
 
 class TestDouBaoClient(unittest.TestCase):
     """
@@ -23,25 +37,13 @@ class TestDouBaoClient(unittest.TestCase):
     """
 
     def DoubaoClient_init(self):
-        model_parameters = ModelParameters(
-            TEST_MODEL,
-            API_KEY,  
-            1000,
-            0.8,
-            7.0,
-            8,
-            False,
-            1,
-            BASE_URL,
-            None,
-        )
         client = DoubaoClient(model_parameters)
         self.assertEqual(client.base_url, BASE_URL)
 
     def test_set_chat_history(self):
         model_parameters = ModelParameters(
             TEST_MODEL,
-            API_KEY, 
+            API_KEY,
             1000,
             0.8,
             7.0,
@@ -60,18 +62,6 @@ class TestDouBaoClient(unittest.TestCase):
         """
         There is nothing we have to assert for this test case just see if it can run
         """
-        model_parameters = ModelParameters(
-            TEST_MODEL,
-            API_KEY,
-            1000,
-            0.8,
-            7.0,
-            8,
-            False,
-            1,
-            BASE_URL,
-            None,
-        )
         client = DoubaoClient(model_parameters)
         message = LLMMessage("user", "this is a test message")
         client.chat(messages=[message], model_parameters=model_parameters)
@@ -81,18 +71,6 @@ class TestDouBaoClient(unittest.TestCase):
         """
         A test case to check the support tool calling function
         """
-        model_parameters = ModelParameters(
-            TEST_MODEL,
-            API_KEY,
-            1000,
-            0.8,
-            7.0,
-            8,
-            False,
-            1,
-            BASE_URL,
-            None,
-        )
         client = DoubaoClient(model_parameters)
         self.assertEqual(client.supports_tool_calling(model_parameters), True)
         model_parameters.model = "no such model"
