@@ -12,7 +12,6 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
     "typing-extensions>=4.0.0",
-    "ruff>=0.12.2",
 ]
 
 [project.optional-dependencies]
