@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
     "typing-extensions>=4.0.0",
+    "ollama>=0.5.1",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,1 @@
+This folder is intended for testing the LLM client. Since LLM client unit tests should not be executed in the CI workflow, please create a separate test folder specifically for this purpose.
