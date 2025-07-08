@@ -1,0 +1,103 @@
+"""
+This test file is for the purpsoe to check if Doubao client is functionable.
+The purpsoe of this test file is to ensure it is funtionable from the doubao client
+"""
+
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+
+from trae_agent.utils.config import ModelParameters
+from trae_agent.utils.doubao_client import DoubaoClient
+from trae_agent.utils.llm_basics import LLMMessage
+
+TEST_MODEL = "doubao-1.5-pro-32k-250115"
+BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+
+
+class TestDouBaoClient(unittest.TestCase):
+    """
+    Doubao client test cases
+    """
+
+    def DoubaoClient_init(self):
+        model_parameters = ModelParameters(
+            TEST_MODEL,
+            os.getenv("DOUBAO_API_KEY"),
+            1000,
+            0.8,
+            7.0,
+            8,
+            False,
+            1,
+            BASE_URL,
+            None,
+        )
+        client = DoubaoClient(model_parameters)
+        self.assertEqual(client.base_url, BASE_URL)
+
+    def test_set_chat_history(self):
+        model_parameters = ModelParameters(
+            TEST_MODEL,
+            os.getenv("DOUBAO_API_KEY"),
+            1000,
+            0.8,
+            7.0,
+            8,
+            False,
+            1,
+            BASE_URL,
+            None,
+        )
+        client = DoubaoClient(model_parameters)
+        message = LLMMessage("user", "this is a test message")
+        client.set_chat_history(messages=[message])
+        self.assertTrue(True)  # runnable
+
+    def test_doubao_chat(self):
+        """
+        There is nothing we have to assert for this test case just see if it can run
+        """
+        model_parameters = ModelParameters(
+            TEST_MODEL,
+            os.getenv("DOUBAO_API_KEY"),
+            1000,
+            0.8,
+            7.0,
+            8,
+            False,
+            1,
+            BASE_URL,
+            None,
+        )
+        client = DoubaoClient(model_parameters)
+        message = LLMMessage("user", "this is a test message")
+        client.chat(messages=[message], model_parameters=model_parameters)
+        self.assertTrue(True)  # runnable
+
+    def test_supports_tool_calling(self):
+        """
+        A test case to check the support tool calling function
+        """
+        model_parameters = ModelParameters(
+            TEST_MODEL,
+            os.getenv("DOUBAO_API_KEY"),
+            1000,
+            0.8,
+            7.0,
+            8,
+            False,
+            1,
+            BASE_URL,
+            None,
+        )
+        client = DoubaoClient(model_parameters)
+        self.assertEqual(client.supports_tool_calling(model_parameters), True)
+        model_parameters.model = "no such model"
+        self.assertEqual(client.supports_tool_calling(model_parameters), False)
+
+
+if __name__ == "__main__":
+    unittest.main()
