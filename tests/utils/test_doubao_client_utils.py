@@ -1,5 +1,5 @@
 """
-This test file is for the purpose to check if Doubao client is functional.
+This test file is for the purpose to check if Doubao client is functioning.
 The purpose of this test file is to ensure it is funtionable from the doubao client
 """
 
