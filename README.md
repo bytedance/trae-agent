@@ -210,8 +210,8 @@ base_url=https://ark.cn-beijing.volces.com/api/v3/
 
 **Configuration Priority:**
 1. Command-line arguments (highest)
-2. Configuration file values
-3. Environment variables
+2. Environment variables
+3. Configuration file values
 4. Default values (lowest)
 
 ```bash
