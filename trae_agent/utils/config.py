@@ -145,12 +145,12 @@ def resolve_config_value(
     env_var: str | None = None,
 ) -> int | str | float | None:
     
-    """Resolve configuration value with priority: CLI > Config > ENV > Default."""
+     """Resolve configuration value with priority: CLI > ENV > Config > Default."""
     if cli_value is not None:
         return cli_value
+    if env_var and os.getenv(env_var) is not None:
+        return os.getenv(env_var)
     if config_value is not None:
         return config_value
-    if env_var and os.getenv(env_var):
-        return os.getenv(env_var)
-    return None
+    return default
 
