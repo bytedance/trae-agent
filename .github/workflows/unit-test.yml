@@ -8,7 +8,6 @@ on:
 
 jobs:
   test:
-    if: github.repository == 'bytedance/trae-agent'
     runs-on: ubuntu-latest
 
     steps:
