@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from typing import override
 
+from ..utils.config import Config
+
 
 class ToolError(Exception):
     """Base class for tool errors."""
@@ -209,3 +211,8 @@ class ToolExecutor:
     async def sequential_tool_call(self, tool_calls: list[ToolCall]) -> list[ToolResult]:
         """Execute tool calls in sequential"""
         return [await self.execute_tool_call(call) for call in tool_calls]
+
+
+def get_tool_list() -> list[str]:
+    config = Config()
+    return config.tool_list

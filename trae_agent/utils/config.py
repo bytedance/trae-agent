@@ -126,6 +126,10 @@ class Config:
                     )
                 ),
             )
+        self.tool_list: list[str] = self._config.get("tool_list" , [])
+
+        if len(self.tool_list) == 0:
+           raise ValueError("tool list can't be empty")
 
         return
 

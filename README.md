@@ -199,7 +199,13 @@ Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
   "lakeview_config": {
     "model_provider": "anthropic",
     "model_name": "claude-sonnet-4-20250514"
-  }
+  },"tool_list":[
+    "bash",
+    "str_replace_based_edit_tool",
+    "json_edit_tool",
+    "sequentialthinking",
+    "task_done"
+  ]
 }
 ```
 **WARNING:**

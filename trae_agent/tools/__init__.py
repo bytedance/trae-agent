@@ -5,7 +5,7 @@
 
 from typing import Type
 
-from .base import Tool, ToolCall, ToolExecutor, ToolResult
+from .base import Tool, ToolCall, ToolExecutor, ToolResult, get_tool_list
 from .bash_tool import BashTool
 from .edit_tool import TextEditorTool
 from .json_edit_tool import JSONEditTool
@@ -24,10 +24,17 @@ __all__ = [
     "TaskDoneTool",
 ]
 
-tools_registry: dict[str, Type[Tool]] = {
+_tools_registry: dict[str, Type[Tool]] = {
     "bash": BashTool,
     "str_replace_based_edit_tool": TextEditorTool,
     "json_edit_tool": JSONEditTool,
     "sequentialthinking": SequentialThinkingTool,
     "task_done": TaskDoneTool,
 }
+
+tools_list = get_tool_list()
+tools_registry: dict[str , Type[Tool]] = {}
+
+for tool_name in tools_list:
+    tool = _tools_registry.get(tool_name)
+    tools_registry[tool_name] = tool
