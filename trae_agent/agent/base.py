@@ -218,9 +218,10 @@ class Agent(ABC):
             self.cli_console.update_status(step)
 
     def _update_llm_usage(self, llm_response: LLMResponse, execution: AgentExecution) -> None:
-        if not llm_response:
+        if not llm_response.usage:
             return None
         # if execution.total_tokens is None then set it to be llm_response.usage else sum it up
+        # execution.total_tokens is not None
         if not execution.total_tokens:
             execution.total_tokens = llm_response.usage
         else:
@@ -261,6 +262,7 @@ class Agent(ABC):
     async def _tool_call_handler(
         self, tool_calls: list[ToolCall] | None, step: AgentStep
     ) -> list[LLMMessage]:
+        messages: list[LLMMessage] = []
         if not tool_calls or len(tool_calls) <= 0:
             messages = [
                 LLMMessage(
@@ -281,7 +283,6 @@ class Agent(ABC):
         step.tool_results = tool_results
 
         self._update_cli_console(step)
-        messages: list[LLMMessage] = []
         for tool_result in tool_results:
             # Add tool result to conversation
             message = LLMMessage(role="user", tool_result=tool_result)
