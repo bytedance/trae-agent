@@ -223,11 +223,10 @@ class Agent(ABC):
     def _update_llm_usage(self, llm_response: LLMResponse, execution: AgentExecution) -> None:
         if not llm_response:
             return None
-        execution.total_tokens = (
-            llm_response.usage
-            if execution.total_tokens
-            else llm_response.usage + execution.total_tokens
-        )
+
+        # if execution.total_tokens is None then set it to be llm_response.usage else sum it up
+        execution.total_tokens = llm_response.usage if not execution.total_tokens else llm_response.usage + execution.total_tokens
+        
 
     def _llm_complete_response_task_handler(
         self,
@@ -277,9 +276,9 @@ class Agent(ABC):
         self._update_cli_console(step)
 
         if self.model_parameters.parallel_tool_calls:
-            tool_results = await self.tool_caller.parallel_tool_call(tool_calls)
+            tool_results = await self._tool_caller.parallel_tool_call(tool_calls)
         else:
-            tool_results = await self.tool_caller.sequential_tool_call(tool_calls)
+            tool_results = await self._tool_caller.sequential_tool_call(tool_calls)
         step.tool_results = tool_results
 
         self._update_cli_console(step)
