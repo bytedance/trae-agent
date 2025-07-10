@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
 from trae_agent.utils.config import Config
-from trae_agent.utils.llm_basics import LLMMessage, LLMResponse
+from trae_agent.utils.llm_basics import LLMResponse
 from trae_agent.utils.llm_client import LLMClient
 
 
@@ -50,10 +50,10 @@ class TestTraeAgentExtended(unittest.TestCase):
         mock_client = MagicMock(spec=LLMClient)
         mock_client.model_parameters = self.config.model_providers["anthropic"]
         mock_client._max_steps = 20
-        
+
         # Initialize TraeAgent with mock client
         agent = TraeAgent(llm_client=mock_client)
-        
+
         # Verify agent initialization
         self.assertIsNotNone(agent)
         self.assertEqual(agent.llm_client, mock_client)
@@ -174,8 +174,6 @@ class TestTraeAgentExtended(unittest.TestCase):
         mock_console = MagicMock(spec=CLIConsole)
         self.agent.set_cli_console(mock_console)
         self.assertEqual(self.agent.cli_console, mock_console)
-    
-    
 
 
 if __name__ == "__main__":
