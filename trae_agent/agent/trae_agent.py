@@ -12,6 +12,7 @@ from ..tools import tools_registry
 from ..tools.base import Tool, ToolExecutor, ToolResult
 from ..utils.config import Config
 from ..utils.llm_basics import LLMMessage, LLMResponse
+from ..utils.llm_client import LLMClient
 from .agent_basics import AgentError, AgentExecution
 from .base import Agent
 
@@ -27,12 +28,36 @@ TraeAgentToolNames = [
 class TraeAgent(Agent):
     """Trae Agent specialized for software engineering tasks."""
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config | None = None, llm_client: LLMClient | None = None):
+        """Initialize TraeAgent.
+
+        Args:
+            config: Configuration object containing model parameters and other settings.
+                   Required if llm_client is not provided.
+            llm_client: Optional pre-configured LLMClient instance.
+                       If provided, it will be used instead of creating a new one from config.
+        """
         self.project_path: str = ""
         self.base_commit: str | None = None
         self.must_patch: str = "false"
         self.patch_path: str | None = None
-        super().__init__(config)
+        super().__init__(config=config, llm_client=llm_client)
+
+    @classmethod
+    @override
+    def from_config(cls, config: Config) -> "TraeAgent":
+        """Create a TraeAgent instance from a configuration object.
+
+        This factory method provides the traditional config-based initialization
+        while allowing for future customization of the instantiation process.
+
+        Args:
+            config: Configuration object containing model parameters and other settings.
+
+        Returns:
+            An instance of TraeAgent.
+        """
+        return cls(config=config)
 
     def setup_trajectory_recording(self, trajectory_path: str | None = None) -> str:
         """Set up trajectory recording for this agent.
@@ -97,7 +122,7 @@ class TraeAgent(Agent):
                 task=task,
                 provider=self._llm_client.provider.value,
                 model=self._model_parameters.model,
-                max_steps=self._max_steps,
+                max_steps=self._max_steps
             )
 
     @override
