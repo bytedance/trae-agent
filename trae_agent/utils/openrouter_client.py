@@ -142,8 +142,8 @@ class OpenRouterClient(BaseLLMClient):
             model=response.model,
             usage=(
                 LLMUsage(
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
+                    input_tokens=response.usage.prompt_tokens or 0,
+                    output_tokens=response.usage.completion_tokens or 0,
                 )
                 if response.usage
                 else None

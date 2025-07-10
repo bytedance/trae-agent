@@ -97,10 +97,10 @@ def chat(
     usage = None
     if response.usage:
         usage = LLMUsage(
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            cache_read_input_tokens=response.usage.input_tokens_details.cached_tokens,
-            reasoning_tokens=response.usage.output_tokens_details.reasoning_tokens,
+            input_tokens=response.usage.input_tokens or 0,
+            output_tokens=response.usage.output_tokens or 0,
+            cache_read_input_tokens=response.usage.input_tokens_details.cached_tokens or 0,
+            reasoning_tokens=response.usage.output_tokens_details.reasoning_tokens or 0,
         )
 
     llm_response = LLMResponse(

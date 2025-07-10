@@ -97,6 +97,7 @@ class OpenAIClient(BaseLLMClient):
                 break
             except Exception as e:
                 error_message += f"Error {i + 1}: {str(e)}\n"
+                print(error_message)
                 # Randomly sleep for 3-30 seconds
                 time.sleep(random.randint(3, 30))
                 continue
@@ -132,10 +133,10 @@ class OpenAIClient(BaseLLMClient):
         usage = None
         if response.usage:
             usage = LLMUsage(
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-                cache_read_input_tokens=response.usage.input_tokens_details.cached_tokens,
-                reasoning_tokens=response.usage.output_tokens_details.reasoning_tokens,
+                input_tokens=response.usage.input_tokens or 0,
+                output_tokens=response.usage.output_tokens or 0,
+                cache_read_input_tokens=response.usage.input_tokens_details.cached_tokens or 0,
+                reasoning_tokens=response.usage.output_tokens_details.reasoning_tokens or 0,
             )
 
         llm_response = LLMResponse(

@@ -137,8 +137,8 @@ class AnthropicClient(BaseLLMClient):
         usage = None
         if response.usage:
             usage = LLMUsage(
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
+                input_tokens=response.usage.input_tokens or 0,
+                output_tokens=response.usage.output_tokens or 0,
                 cache_creation_input_tokens=response.usage.cache_creation_input_tokens or 0,
                 cache_read_input_tokens=response.usage.cache_read_input_tokens or 0,
             )
