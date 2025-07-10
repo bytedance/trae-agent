@@ -55,27 +55,21 @@ class AnthropicClient(BaseLLMClient):
             anthropic.NOT_GIVEN
         )
         if tools:
-            tool_schemas = []
-            for tool in tools:
-                if tool.name == "str_replace_based_edit_tool":
-                    tool_schemas.append(
-                        TextEditor20250429(
-                            name="str_replace_based_edit_tool",
-                            type="text_editor_20250429",
-                        )
-                    )
-                elif tool.name == "bash":
-                    tool_schemas.append(
-                        anthropic.types.ToolBash20250124Param(name="bash", type="bash_20250124")
-                    )
-                else:
-                    tool_schemas.append(
-                        anthropic.types.ToolParam(
-                            name=tool.name,
-                            description=tool.description,
-                            input_schema=tool.get_input_schema(),
-                        )
-                    )
+            tool_schemas = [
+                TextEditor20250429(
+                    name="str_replace_based_edit_tool",
+                    type="text_editor_20250429",
+                )
+                if tool.name == "str_replace_based_edit_tool"
+                else anthropic.types.ToolBash20250124Param(name="bash", type="bash_20250124")
+                if tool.name == "bash"
+                else anthropic.types.ToolParam(
+                    name=tool.name,
+                    description=tool.description,
+                    input_schema=tool.get_input_schema(),
+                )
+                for tool in tools
+            ]
 
         response = None
         error_message = ""
@@ -190,18 +184,13 @@ class AnthropicClient(BaseLLMClient):
                     )
                 )
             else:
-                if msg.role == "user":
-                    role = "user"
-                elif msg.role == "assistant":
-                    role = "assistant"
-                else:
+                if msg.role not in ["user", "assistant"]:
                     raise ValueError(f"Invalid message role: {msg.role}")
-
                 if not msg.content:
                     raise ValueError("Message content is required")
 
                 anthropic_messages.append(
-                    anthropic.types.MessageParam(role=role, content=msg.content)
+                    anthropic.types.MessageParam(role=msg.role, content=msg.content)
                 )
         return anthropic_messages
 

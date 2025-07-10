@@ -12,7 +12,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, override
+from typing import override
 
 
 # data class for model parameters
@@ -54,27 +54,39 @@ class Config:
 
     def __init__(self, config_or_config_file: str | dict = "trae_config.json"):
         # Accept either file path or direct config dict
-        if isinstance(config_or_config_file, dict):
-            self._config = config_or_config_file
-        else:
-            config_path = Path(config_or_config_file)
-            if config_path.exists():
-                try:
-                    with open(config_path, "r") as f:
-                        self._config = json.load(f)
-                except Exception as e:
-                    print(f"Warning: Could not load config file {config_or_config_file}: {e}")
-                    self._config = {}
-            else:
-                self._config = {}
+        self._config = self._load_config_from_source(config_or_config_file)
 
         self.default_provider = self._config.get("default_provider", "anthropic")
         self.max_steps = self._config.get("max_steps", 20)
         self.model_providers = {}
         self.enable_lakeview = self._config.get("enable_lakeview", True)
 
-        if len(self._config.get("model_providers", [])) == 0:
-            self.model_providers = {
+        self.model_providers = self._init_model_providers()
+
+        self.lakeview_config = self._init_lakeview_config()
+
+        return
+
+    def _load_config_from_source(self, config_or_config_file: str | dict) -> dict:
+        if isinstance(config_or_config_file, dict):
+            return config_or_config_file
+        else:
+            config_path = Path(config_or_config_file)
+            if not config_path.exists():
+                return {}
+
+            try:
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+            except Exception as e:
+                print(f"Warning: Could not load config file {config_or_config_file}: {e}")
+                config = {}
+            return config
+
+    def _init_model_providers(self) -> dict[str, ModelParameters]:
+        provider_config = self._config.get("model_providers")
+        if not provider_config:
+            return {
                 "anthropic": ModelParameters(
                     model="claude-sonnet-4-20250514",
                     api_key="",
@@ -87,47 +99,34 @@ class Config:
                     max_retries=10,
                 ),
             }
-        else:
-            for provider in self._config.get("model_providers", {}):
-                provider_config: dict[str, Any] = self._config.get("model_providers", {}).get(
-                    provider, {}
-                )
 
-                candidate_count = provider_config.get("candidate_count")
-                self.model_providers[provider] = ModelParameters(
-                    model=str(provider_config.get("model", "")),
-                    api_key=str(provider_config.get("api_key", "")),
-                    base_url=str(provider_config.get("base_url"))
-                    if "base_url" in provider_config
-                    else None,
-                    max_tokens=int(provider_config.get("max_tokens", 1000)),
-                    temperature=float(provider_config.get("temperature", 0.5)),
-                    top_p=float(provider_config.get("top_p", 1)),
-                    top_k=int(provider_config.get("top_k", 0)),
-                    max_retries=int(provider_config.get("max_retries", 10)),
-                    parallel_tool_calls=bool(provider_config.get("parallel_tool_calls", False)),
-                    api_version=str(provider_config.get("api_version"))
-                    if "api_version" in provider_config
-                    else None,
-                    candidate_count=int(candidate_count) if candidate_count is not None else None,
-                    stop_sequences=provider_config.get("stop_sequences")
-                    if "stop_sequences" in provider_config
-                    else None,
-                )
-
-        if "lakeview_config" in self._config:
-            self.lakeview_config = LakeviewConfig(
-                model_provider=str(
-                    self._config.get("lakeview_config", {}).get("model_provider", "anthropic")
-                ),
-                model_name=str(
-                    self._config.get("lakeview_config", {}).get(
-                        "model_name", "claude-sonnet-4-20250514"
-                    )
-                ),
+        model_providers = {}
+        for name, config in provider_config.items():
+            candidate_count = config.get("candidate_count")
+            model_providers[name] = ModelParameters(
+                model=str(config.get("model", "")),
+                api_key=str(config.get("api_key", "")),
+                base_url=str(config.get("base_url")) if "base_url" in config else None,
+                max_tokens=int(config.get("max_tokens", 1000)),
+                temperature=float(config.get("temperature", 0.5)),
+                top_p=float(config.get("top_p", 1)),
+                top_k=int(config.get("top_k", 0)),
+                max_retries=int(config.get("max_retries", 10)),
+                parallel_tool_calls=bool(config.get("parallel_tool_calls", False)),
+                api_version=str(config.get("api_version")) if "api_version" in config else None,
+                candidate_count=int(candidate_count) if candidate_count is not None else None,
+                stop_sequences=config.get("stop_sequences") if "stop_sequences" in config else None,
             )
+        return model_providers
 
-        return
+    def _init_lakeview_config(self) -> LakeviewConfig | None:
+        lakeview_config_data = self._config.get("lakeview_config")
+        if not lakeview_config_data:
+            return None
+        return LakeviewConfig(
+            model_provider=str(lakeview_config_data.get("model_provider", "anthropic")),
+            model_name=str(lakeview_config_data.get("model_name", "claude-sonnet-4-20250514")),
+        )
 
     @override
     def __str__(self) -> str:

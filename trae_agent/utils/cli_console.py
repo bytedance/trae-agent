@@ -54,12 +54,11 @@ class CLIConsole:
         agent_step: AgentStep | None = None,
         agent_execution: AgentExecution | None = None,
     ):
-        if agent_step:
-            if len(self.agent_step_history) > 0:
-                if agent_step.step_number > self.agent_step_history[-1].step_number:
-                    self.agent_step_history.append(agent_step)
-            else:
-                self.agent_step_history.append(agent_step)
+        if agent_step and (
+            not self.agent_step_history
+            or agent_step.step_number > self.agent_step_history[-1].step_number
+        ):
+            self.agent_step_history.append(agent_step)
 
         self.agent_execution = agent_execution
 
@@ -217,52 +216,59 @@ class CLIConsole:
 
     def create_agent_steps_display(self) -> Group:
         panels: list[Panel] = []
-        if self.agent_execution is None:
-            previous_steps = (
-                self.agent_step_history[:-1] if len(self.agent_step_history) >= 2 else []
-            )
-            current_step = self.agent_step_history[-1] if len(self.agent_step_history) > 0 else None
-        else:
-            previous_steps = self.agent_step_history
-            current_step = None
-        if len(previous_steps) > 0:
+        previous_steps, current_step = self._get_steps_to_display()
+        if previous_steps:
             for step in previous_steps:
                 step_id = step.step_number
                 if step_id not in self.console_steps:
-                    panel = self._create_compact_step_display(step)
-                    if self.lake_view is not None:
-                        lake_view_panel_generator = asyncio.create_task(
-                            self._create_lakeview_step_display(step)
-                        )
-                    else:
-                        lake_view_panel_generator = None
-                    self.console_steps[step_id] = ConsoleStep(panel, lake_view_panel_generator)
-                    panels.append(panel)
+                    panels.append(self._process_new_step(step))
                 else:
-                    console_step = self.console_steps[step_id]
-                    if self.lake_view is None:
-                        panels.append(console_step.panel)
-                    else:
-                        if console_step.lake_view_panel_generator is not None:
-                            if console_step.lake_view_panel_generator.done():
-                                lake_view_panel = (
-                                    console_step.lake_view_panel_generator.result()
-                                    or console_step.panel
-                                )
-                                panels.append(lake_view_panel)
-                                self.console_steps[step_id] = ConsoleStep(
-                                    lake_view_panel, None, True
-                                )
-                            else:
-                                panels.append(console_step.panel)
-                        else:
-                            panels.append(console_step.panel)
+                    panels.append(self._process_existing_step(step))
 
         if current_step is not None:
             panels.append(self._create_step_display(current_step))
         # reorder panels
         panels = panels[::-1]
         return Group(*panels, fit=False)
+
+    def _get_steps_to_display(self) -> tuple[list[AgentStep], AgentStep | None]:
+        """Determine which steps to display based on the current agent state"""
+        if self.agent_execution is None:
+            # if a list is empty or has 1 element, then [:-1] return []
+            previous_steps = self.agent_step_history[:-1]
+            current_step = self.agent_step_history[-1] if len(self.agent_step_history) > 0 else None
+        else:
+            previous_steps = self.agent_step_history
+            current_step = None
+        return previous_steps, current_step
+
+    def _process_new_step(self, step: AgentStep) -> Panel:
+        """Process a step that has not been seen by the console before."""
+        panel = self._create_compact_step_display(step)
+
+        lake_view_panel_generator = None
+        if self.lake_view is not None:
+            lake_view_panel_generator = asyncio.create_task(
+                self._create_lakeview_step_display(step)
+            )
+
+        self.console_steps[step.step_number] = ConsoleStep(panel, lake_view_panel_generator)
+        return panel
+
+    def _process_existing_step(self, step: AgentStep) -> Panel:
+        """Process a step that has been seen by the console before."""
+        console_step = self.console_steps[step.step_number]
+
+        if not self.lake_view or not console_step.lake_view_panel_generator:
+            return console_step.panel
+
+        if console_step.lake_view_panel_generator.done():
+            lake_view_panel = console_step.lake_view_panel_generator.result()
+            final_panel = lake_view_panel or console_step.panel
+
+            self.console_steps[step.step_number] = ConsoleStep(final_panel, None, True)
+            return final_panel
+        return console_step.panel
 
     def print_task_progress(self) -> None:
         if self.agent_execution is not None:

@@ -107,17 +107,14 @@ class AzureClient(BaseLLMClient):
 
         tool_calls: list[ToolCall] | None = None
         if choice.message.tool_calls:
-            tool_calls = []
-            for tool_call in choice.message.tool_calls:
-                tool_calls.append(
-                    ToolCall(
-                        name=tool_call.function.name,
-                        call_id=tool_call.id,
-                        arguments=json.loads(tool_call.function.arguments)
-                        if tool_call.function.arguments
-                        else {},
-                    )
+            tool_calls = [
+                ToolCall(
+                    name=tc.function.name,
+                    arguments=json.loads(tc.function.arguments) if tc.function.arguments else {},
+                    call_id=tc.id,
                 )
+                for tc in choice.message.tool_calls
+            ]
 
         llm_response = LLMResponse(
             content=choice.message.content or "",
