@@ -281,7 +281,6 @@ class Agent(ABC):
         else:
             tool_results = await self._tool_caller.sequential_tool_call(tool_calls)
         step.tool_results = tool_results
-
         self._update_cli_console(step)
         for tool_result in tool_results:
             # Add tool result to conversation
