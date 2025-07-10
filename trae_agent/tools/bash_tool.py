@@ -191,7 +191,7 @@ class BashTool(Tool):
         command = str(arguments["command"]) if "command" in arguments else None
         if arguments.get("dangerous") and not self.sudo:
             allow = Prompt.ask(
-                f'Command "{command}" is considered dangerous. Are you sure you want to allow the agent to run this command? [Y/N/D] \n Y: Yes , N: No , D: Always Allow'
+                f'Command "{command}" is considered dangerous. Are you sure you want to allow the agent to run this command? [Y/N/A] \n Y: Yes , N: No , A: Always Allow'
             )
 
             if allow != "Y" and allow != "A":
