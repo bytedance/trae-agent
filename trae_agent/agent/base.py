@@ -86,7 +86,7 @@ class Agent(ABC):
 
                     if self.llm_indicates_task_completed(llm_response):
                         if self._is_task_completed(llm_response):
-                            self._llm_complete_response_task_handler(llm_response, step, execution)
+                            self._llm_complete_response_task_handler(llm_response, step, execution , messages)
                             break
                         else:
                             step.state = AgentState.THINKING
@@ -210,7 +210,7 @@ class Agent(ABC):
             )
 
     async def _tool_call_handler(
-        self, tool_calls: list[ToolCall], step: AgentStep
+        self, tool_calls: list[ToolCall]|None, step: AgentStep
     ) -> list[LLMMessage]:
         if not tool_calls or len(tool_calls) <= 0:
             messages = [
