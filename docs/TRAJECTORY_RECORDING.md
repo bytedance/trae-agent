@@ -5,7 +5,7 @@ This document describes the trajectory recording functionality added to the Trae
 ## Overview
 
 The trajectory recording system captures:
-- **Raw LLM interactions**: Input messages, responses, token usage, and tool calls for both Anthropic and OpenAI clients
+- **Raw LLM interactions**: Input messages, responses, token usage, and tool calls for various providers including Anthropic, OpenAI, Google Gemini, Azure, and others.
 - **Agent execution steps**: State transitions, tool calls, tool results, reflections, and errors
 - **Metadata**: Task description, timestamps, model configuration, and execution metrics
 
@@ -23,7 +23,7 @@ The core class that handles recording trajectory data to JSON files.
 
 ### 2. Client Integration
 
-Both Anthropic and OpenAI clients automatically record interactions when a trajectory recorder is attached:
+All supported LLM clients automatically record interactions when a trajectory recorder is attached.
 
 **Anthropic Client** (`trae_agent/utils/anthropic_client.py`):
 ```python
@@ -48,6 +48,71 @@ if self.trajectory_recorder:
         provider="openai",
         model=model_parameters.model,
         tools=tools
+    )
+```
+
+**Google Gemini Client** (`trae_agent/utils/google_client.py`):
+```python
+# Record trajectory if recorder is available
+if self.trajectory_recorder:
+    self.trajectory_recorder.record_llm_interaction(
+        messages=messages,
+        response=llm_response,
+        provider="google",
+        model=model_parameters.model,
+        tools=tools,
+    )
+```
+
+**Azure Client** (`trae_agent/utils/azure_client.py`):
+```python
+# Record trajectory if recorder is available
+if self.trajectory_recorder:
+    self.trajectory_recorder.record_llm_interaction(
+        messages=messages,
+        response=llm_response,
+        provider="azure",
+        model=model_parameters.model,
+        tools=tools,
+    )
+```
+
+**Doubao Client** (`trae_agent/utils/doubao_client.py`):
+```python
+# Record trajectory if recorder is available
+if self.trajectory_recorder:
+    self.trajectory_recorder.record_llm_interaction(
+        messages=messages,
+        response=llm_response,
+        provider="doubao",
+        model=model_parameters.model,
+        tools=tools,
+    )
+```
+
+**Ollama Client** (`trae_agent/utils/ollama_client.py`):
+```python
+# Record trajectory if recorder is available
+if self.trajectory_recorder:
+    self.trajectory_recorder.record_llm_interaction(
+        messages=messages,
+        response=llm_response,
+        provider="openai", # Ollama client uses OpenAI's provider name for consistency
+        model=model_parameters.model,
+        tools=tools,
+    )
+```
+
+**OpenRouter Client** (`trae_agent/utils/openrouter_client.py`):
+```python
+# Record trajectory if recorder is available
+if self.trajectory_recorder:
+    self.trajectory_recorder.record_llm_interaction(
+        messages=messages,
+        response=llm_response,
+        provider="openrouter",
+        model=model_parameters.model,
+        tools=tools,
     )
 ```
 
@@ -202,7 +267,7 @@ The trajectory file is a JSON document with the following structure:
 **Root Level:**
 - `task`: The original task description
 - `start_time`/`end_time`: ISO format timestamps
-- `provider`: LLM provider used ("anthropic" or "openai")
+- `provider`: LLM provider used (e.g., "anthropic", "openai", "google", "azure", "doubao", "ollama", "openrouter")
 - `model`: Model name
 - `max_steps`: Maximum allowed execution steps
 - `success`: Whether the task completed successfully
@@ -211,6 +276,8 @@ The trajectory file is a JSON document with the following structure:
 
 **LLM Interactions:**
 - `timestamp`: When the interaction occurred
+- `provider`: LLM provider used for this interaction
+- `model`: Model used for this interaction
 - `input_messages`: Messages sent to the LLM
 - `response`: Complete LLM response including content, usage, and tool calls
 - `tools_available`: List of tools available during this interaction

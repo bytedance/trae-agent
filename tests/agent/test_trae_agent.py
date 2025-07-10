@@ -92,7 +92,7 @@ class TestTraeAgentExtended(unittest.TestCase):
     @patch("asyncio.create_task")
     @patch("trae_agent.utils.cli_console.CLIConsole")
     def test_task_execution_flow(self, mock_console, mock_task):
-        self.agent.cli_console = mock_console
+        self.agent.set_cli_console(mock_console)
         asyncio.run(self.agent.execute_task())
         mock_console.start.assert_called_once()
 
@@ -122,6 +122,39 @@ class TestTraeAgentExtended(unittest.TestCase):
         self.assertIn("str_replace_based_edit_tool", tool_names)
         self.assertIn("sequentialthinking", tool_names)
         self.assertIn("task_done", tool_names)
+
+    def test_protected_attributes_access_restrictions(self):
+        """Test that protected attributes cannot be accessed directly from outside the class."""
+
+        # Test that accessing protected attributes raises AttributeError
+        with self.assertRaises(AttributeError):
+            self.agent.llm_client = 5
+
+        with self.assertRaises(AttributeError):
+            self.agent.max_steps = None
+
+        with self.assertRaises(AttributeError):
+            self.agent.model_parameters = False
+
+        with self.assertRaises(AttributeError):
+            self.agent.initial_messages = "random"
+
+        with self.assertRaises(AttributeError):
+            _ = self.agent.tool_caller
+
+    def test_public_property_access_allowed(self):
+        """Test that public properties can be accessed properly."""
+
+        # Test that public properties work correctly
+        self.assertIsNotNone(self.agent.llm_client)
+        self.assertIsNone(self.agent.cli_console)
+
+        # Test that public property setters work
+        from trae_agent.utils.cli_console import CLIConsole
+
+        mock_console = MagicMock(spec=CLIConsole)
+        self.agent.set_cli_console(mock_console)
+        self.assertEqual(self.agent.cli_console, mock_console)
 
 
 if __name__ == "__main__":

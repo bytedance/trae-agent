@@ -16,7 +16,7 @@
 ## ✨ Features
 
 - 🌊 **Lakeview**: Provides short and concise summarisation for agent steps
-- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure and OpenRouter APIs
+- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure, OpenRouter, Ollama and Google Gemini APIs
 - 🛠️ **Rich Tool Ecosystem**: File editing, bash execution, sequential thinking, and more
 - 🎯 **Interactive Mode**: Conversational interface for iterative development
 - 📊 **Trajectory Recording**: Detailed logging of all agent actions for debugging and analysis
@@ -55,6 +55,9 @@ export DOUBAO_API_BASE_URL="your-model-provider-base-url"
 # For OpenRouter
 export OPENROUTER_API_KEY="your-openrouter-api-key"
 
+# For Google Gemini
+export GOOGLE_API_KEY="your-google-api-key"
+
 # Optional: For OpenRouter rankings
 export OPENROUTER_SITE_URL="https://your-site.com"
 export OPENROUTER_SITE_NAME="Your App Name"
@@ -73,6 +76,9 @@ trae-cli run "Create a hello world Python script"
 
 # Run with Doubao
 trae-cli run "Create a hello world Python script" --provider doubao --model doubao-seed-1.6
+
+# Run with Google Gemini
+trae-cli run "Create a hello world Python script" --provider google --model gemini-2.5-flash
 ```
 
 ## 📖 Usage
@@ -93,6 +99,9 @@ trae-cli run "Fix the bug in main.py" --provider anthropic --model claude-sonnet
 # Using OpenRouter with any supported model
 trae-cli run "Optimize this code" --provider openrouter --model "openai/gpt-4o"
 trae-cli run "Add documentation" --provider openrouter --model "anthropic/claude-3-5-sonnet"
+
+# Using Google Gemini
+trae-cli run "Implement a data parsing function" --provider google --model gemini-2.5-pro
 
 # With custom working directory
 trae-cli run "Add unit tests for the utils module" --working-dir /path/to/project
@@ -115,6 +124,7 @@ trae-cli interactive --provider openai --model gpt-4o --max-steps 30
 ```
 
 In interactive mode, you can:
+
 - Type any task description to execute it
 - Use `status` to see agent information
 - Use `help` for available commands
@@ -177,6 +187,16 @@ Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
       "top_k": 0,
       "max_retries": 10
     },
+    "ollama": {
+      "api_key": "ollama",
+      "base_url": "http://localhost:11434",
+      "model": "model_name",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
+    },
     "openrouter": {
       "api_key": "your_openrouter_api_key",
       "model": "openai/gpt-4o",
@@ -209,6 +229,7 @@ base_url=https://ark.cn-beijing.volces.com/api/v3/
 ```
 
 **Configuration Priority:**
+
 1. Command-line arguments (highest)
 2. Configuration file values
 3. Environment variables
@@ -224,11 +245,15 @@ trae-cli run "Review this code" --provider openrouter --model "anthropic/claude-
 # Use Gemini through OpenRouter
 trae-cli run "Generate docs" --provider openrouter --model "google/gemini-pro"
 
+# Use Gemini directly
+trae-cli run "Analyze this dataset" --provider google --model gemini-2.5-flash
+
 # Use Qwen through Ollama
 trae-cli run "Comment this code" --provider ollama --model "qwen3"
 ```
 
 **Popular OpenRouter Models:**
+
 - `openai/gpt-4o` - Latest GPT-4 model
 - `anthropic/claude-3-5-sonnet` - Excellent for coding tasks
 - `google/gemini-pro` - Strong reasoning capabilities
@@ -241,32 +266,15 @@ trae-cli run "Comment this code" --provider ollama --model "qwen3"
 - `ANTHROPIC_API_KEY` - Anthropic API key
 - `GOOGLE_API_KEY` - Google API key
 - `OPENROUTER_API_KEY` - OpenRouter API key
+- `GOOGLE_API_KEY` - Google Gemini API key
 - `OPENROUTER_SITE_URL` - (Optional) Your site URL for OpenRouter rankings
 - `OPENROUTER_SITE_NAME` - (Optional) Your site name for OpenRouter rankings
 
 ## 🛠️ Available Tools
 
-Trae Agent comes with several built-in tools:
+Trae Agent provides a comprehensive toolkit for file editing, bash execution, structured thinking, task completion, and JSON manipulation, with new tools actively being developed and existing ones continuously enhanced.
 
-- **str_replace_based_edit_tool**: Create, edit, view, and manipulate files
-  - `view` - Display file contents or directory listings
-  - `create` - Create new files
-  - `str_replace` - Replace text in files
-  - `insert` - Insert text at specific lines
-
-- **bash**: Execute shell commands and scripts
-  - Run commands with persistent state
-  - Handle long-running processes
-  - Capture output and errors
-
-- **sequential_thinking**: Structured problem-solving and analysis
-  - Break down complex problems
-  - Iterative thinking with revision capabilities
-  - Hypothesis generation and verification
-
-- **task_done**: Signal task completion
-  - Mark tasks as successfully completed
-  - Provide final results and summaries
+For detailed information about all available tools and their capabilities, see [docs/tools.md](docs/tools.md).
 
 ## 📊 Trajectory Recording
 
@@ -282,6 +290,7 @@ trae-cli run "Optimize the database queries" --trajectory-file optimization_debu
 ```
 
 Trajectory files contain:
+
 - **LLM Interactions**: All messages, responses, and tool calls
 - **Agent Steps**: State transitions and decision points
 - **Tool Usage**: Which tools were called and their results
@@ -317,30 +326,35 @@ For detailed contribution guidelines, please refer to [CONTRIBUTING.md](CONTRIBU
   - OpenAI API key (for OpenAI models)
   - Anthropic API key (for Anthropic models)
   - OpenRouter API key (for OpenRouter models)
+  - Google API key (for Google Gemini models)
 
 ## 🔧 Troubleshooting
 
 ### Common Issues
 
 **Import Errors:**
+
 ```bash
 # Try setting PYTHONPATH
 PYTHONPATH=. trae-cli run "your task"
 ```
 
 **API Key Issues:**
+
 ```bash
 # Verify your API keys are set
 echo $OPENAI_API_KEY
 echo $ANTHROPIC_API_KEY
 echo $GOOGLE_API_KEY
 echo $OPENROUTER_API_KEY
+echo $GOOGLE_API_KEY
 
 # Check configuration
 trae-cli show-config
 ```
 
 **Permission Errors:**
+
 ```bash
 # Ensure proper permissions for file operations
 chmod +x /path/to/your/project

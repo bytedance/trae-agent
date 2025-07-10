@@ -25,11 +25,8 @@ jobs:
 
     - name: Create virtual environment and install dependencies
       run: |
-        uv sync --all-extras
+        make uv-sync
 
     - name: Run unit tests
-      env:
-        SKIP_OLLAMA_TEST: true
-        SKIP_OPENROUTER_TEST: true
       run: |
-        uv run pytest tests/ -v --tb=short --continue-on-collection-errors
+        make uv-test

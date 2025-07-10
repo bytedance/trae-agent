@@ -46,7 +46,7 @@ class TraeAgent(Agent):
         from ..utils.trajectory_recorder import TrajectoryRecorder
 
         recorder = TrajectoryRecorder(trajectory_path)
-        self.set_trajectory_recorder(recorder)
+        self._set_trajectory_recorder(recorder)
 
         return recorder.get_trajectory_path()
 
@@ -58,20 +58,20 @@ class TraeAgent(Agent):
         tool_names: list[str] | None = None,
     ):
         """Create a new task."""
-        self.task: str = task
+        self._task: str = task
 
         if tool_names is None:
             tool_names = TraeAgentToolNames
 
         # Get the model provider from the LLM client
-        provider = self.llm_client.provider.value
-        self.tools: list[Tool] = [
+        provider = self._llm_client.provider.value
+        self._tools: list[Tool] = [
             tools_registry[tool_name](model_provider=provider) for tool_name in tool_names
         ]
-        self.tool_caller: ToolExecutor = ToolExecutor(self.tools)
+        self._tool_caller: ToolExecutor = ToolExecutor(self._tools)
 
-        self.initial_messages: list[LLMMessage] = []
-        self.initial_messages.append(LLMMessage(role="system", content=self.get_system_prompt()))
+        self._initial_messages: list[LLMMessage] = []
+        self._initial_messages.append(LLMMessage(role="system", content=self.get_system_prompt()))
 
         user_message = ""
         if not extra_args:
@@ -89,28 +89,28 @@ class TraeAgent(Agent):
             if attr in extra_args:
                 setattr(self, attr, extra_args[attr])
 
-        self.initial_messages.append(LLMMessage(role="user", content=user_message))
+        self._initial_messages.append(LLMMessage(role="user", content=user_message))
 
         # If trajectory recorder is set, start recording
-        if self.trajectory_recorder:
-            self.trajectory_recorder.start_recording(
+        if self._trajectory_recorder:
+            self._trajectory_recorder.start_recording(
                 task=task,
-                provider=self.llm_client.provider.value,
-                model=self.model_parameters.model,
-                max_steps=self.max_steps,
+                provider=self._llm_client.provider.value,
+                model=self._model_parameters.model,
+                max_steps=self._max_steps,
             )
 
     @override
     async def execute_task(self) -> AgentExecution:
         """Execute the task and finalize trajectory recording."""
-        console_task = asyncio.create_task(self.cli_console.start()) if self.cli_console else None
+        console_task = asyncio.create_task(self._cli_console.start()) if self._cli_console else None
         execution = await super().execute_task()
-        if self.cli_console and console_task and not console_task.done():
+        if self._cli_console and console_task and not console_task.done():
             await console_task
 
         # Finalize trajectory recording if recorder is available
-        if self.trajectory_recorder:
-            self.trajectory_recorder.finalize_recording(
+        if self._trajectory_recorder:
+            self._trajectory_recorder.finalize_recording(
                 success=execution.success, final_result=execution.final_result
             )
 
