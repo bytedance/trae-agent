@@ -13,6 +13,8 @@ import asyncio
 import os
 from typing import override
 
+from rich.prompt import Prompt
+
 from .base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
 
 
@@ -175,10 +177,24 @@ class BashTool(Tool):
                 description="Set to true to restart the bash session.",
                 required=restart_required,
             ),
+            ToolParameter(
+                name="dangerous",
+                type="boolean",
+                description="Set to true if the command is dangerous.",
+                required=True,
+            ),
         ]
 
     @override
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
+        command = str(arguments["command"]) if "command" in arguments else None
+        if arguments.get("dangerous"):
+            allow = Prompt.ask(
+                f'Command "{command}" is considered dangerous. Are you sure you want to allow the agent to run this command? [Y/N]'
+            )
+            if allow != "Y":
+                return ToolExecResult(error=f"user does not allow to run {command}", error_code=-1)
+
         if arguments.get("restart"):
             if self._session:
                 self._session.stop()
@@ -194,7 +210,6 @@ class BashTool(Tool):
             except Exception as e:
                 return ToolExecResult(error=f"Error starting bash session: {e}", error_code=-1)
 
-        command = str(arguments["command"]) if "command" in arguments else None
         if command is None:
             return ToolExecResult(
                 error=f"No command provided for the {self.get_name()} tool",
