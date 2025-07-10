@@ -119,7 +119,6 @@ class Agent(ABC):
                     # Display thinking state
                     self._update_cli_console(step)
 
-
                     llm_response = self._llm_client.chat(
                         messages, self._model_parameters, self._tools
                     )
@@ -128,13 +127,14 @@ class Agent(ABC):
                     # Display step with LLM response
                     self._update_cli_console(step)
 
-
                     # Update token usage
                     self._update_llm_usage(llm_response, execution)
 
                     if self.llm_indicates_task_completed(llm_response):
                         if self._is_task_completed(llm_response):
-                            self._llm_complete_response_task_handler(llm_response, step, execution , messages)
+                            self._llm_complete_response_task_handler(
+                                llm_response, step, execution, messages
+                            )
                             break
                         else:
                             step.state = AgentState.THINKING
@@ -162,7 +162,6 @@ class Agent(ABC):
                     # Record agent step
                     self._record_handler(step, messages)
                     self._update_cli_console(step)
-
 
                     execution.steps.append(step)
                     break
@@ -222,8 +221,11 @@ class Agent(ABC):
         if not llm_response:
             return None
         # if execution.total_tokens is None then set it to be llm_response.usage else sum it up
-        execution.total_tokens = llm_response.usage if not execution.total_tokens else llm_response.usage + execution.total_tokens
-        
+        if not execution.total_tokens:
+            execution.total_tokens = llm_response.usage
+        else:
+            execution.total_tokens += llm_response.usage
+        return None
 
     def _llm_complete_response_task_handler(
         self,
@@ -257,7 +259,7 @@ class Agent(ABC):
             )
 
     async def _tool_call_handler(
-        self, tool_calls: list[ToolCall]|None, step: AgentStep
+        self, tool_calls: list[ToolCall] | None, step: AgentStep
     ) -> list[LLMMessage]:
         if not tool_calls or len(tool_calls) <= 0:
             messages = [
@@ -279,7 +281,7 @@ class Agent(ABC):
         step.tool_results = tool_results
 
         self._update_cli_console(step)
-        messages = []
+        messages: list[LLMMessage] = []
         for tool_result in tool_results:
             # Add tool result to conversation
             message = LLMMessage(role="user", tool_result=tool_result)
@@ -295,4 +297,4 @@ class Agent(ABC):
 
             messages.append(LLMMessage(role="assistant", content=reflection))
 
-        return message
+        return messages
