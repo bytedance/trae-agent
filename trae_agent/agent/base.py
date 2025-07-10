@@ -5,7 +5,7 @@
 
 from abc import ABC, abstractmethod
 
-from ..tools.base import Tool, ToolExecutor, ToolResult
+from ..tools.base import Tool, ToolCall, ToolExecutor, ToolResult
 from ..utils.cli_console import CLIConsole
 from ..utils.config import Config, ModelParameters
 from ..utils.llm_basics import LLMMessage, LLMResponse
@@ -73,44 +73,20 @@ class Agent(ABC):
                     step.state = AgentState.THINKING
 
                     # Display thinking state
-                    if self.cli_console:
-                        self.cli_console.update_status(step)
+                    self._update_cli_console(step)
 
                     llm_response = self.llm_client.chat(messages, self.model_parameters, self.tools)
                     step.llm_response = llm_response
 
                     # Display step with LLM response
-                    if self.cli_console:
-                        self.cli_console.update_status(step)
+                    self._update_cli_console(step)
 
                     # Update token usage
-                    if llm_response.usage:
-                        if execution.total_tokens:
-                            execution.total_tokens += llm_response.usage
-                        else:
-                            execution.total_tokens = llm_response.usage
+                    self._update_llm_usage(llm_response, execution)
 
                     if self.llm_indicates_task_completed(llm_response):
-                        if self.is_task_completed(llm_response):
-                            step.state = AgentState.COMPLETED
-                            execution.final_result = llm_response.content
-                            execution.success = True
-
-                            # Record agent step
-                            if self.trajectory_recorder:
-                                self.trajectory_recorder.record_agent_step(
-                                    step_number=step.step_number,
-                                    state=step.state.value,
-                                    llm_messages=messages,
-                                    llm_response=step.llm_response,
-                                    tool_calls=step.tool_calls,
-                                    tool_results=step.tool_results,
-                                    reflection=step.reflection,
-                                    error=step.error,
-                                )
-                            if self.cli_console:
-                                self.cli_console.update_status(step)
-                            execution.steps.append(step)
+                        if self._is_task_completed(llm_response):
+                            self._llm_complete_response_task_handler(llm_response, step, execution)
                             break
                         else:
                             step.state = AgentState.THINKING
@@ -120,66 +96,12 @@ class Agent(ABC):
                     else:
                         # Check if the response contains a tool call
                         tool_calls = llm_response.tool_calls
-
-                        if tool_calls and len(tool_calls) > 0:
-                            # Execute tool call
-                            step.state = AgentState.CALLING_TOOL
-                            step.tool_calls = tool_calls
-
-                            # Display tool calling state with tool calls
-                            if self.cli_console:
-                                self.cli_console.update_status(step)
-
-                            if self.model_parameters.parallel_tool_calls:
-                                tool_results = await self.tool_caller.parallel_tool_call(tool_calls)
-                            else:
-                                tool_results = await self.tool_caller.sequential_tool_call(
-                                    tool_calls
-                                )
-                            step.tool_results = tool_results
-
-                            # Display tool results
-                            if self.cli_console:
-                                self.cli_console.update_status(step)
-
-                            messages = []
-                            for tool_result in tool_results:
-                                # Add tool result to conversation
-                                message = LLMMessage(role="user", tool_result=tool_result)
-                                messages.append(message)
-
-                            reflection = self.reflect_on_result(tool_results)
-                            if reflection:
-                                step.state = AgentState.REFLECTING
-                                step.reflection = reflection
-
-                                # Display reflection
-                                if self.cli_console:
-                                    self.cli_console.update_status(step)
-
-                                messages.append(LLMMessage(role="assistant", content=reflection))
-                        else:
-                            messages = [
-                                LLMMessage(
-                                    role="user",
-                                    content="It seems that you have not completed the task.",
-                                )
-                            ]
+                        messages = await self._tool_call_handler(tool_calls, step)
 
                     # Record agent step
-                    if self.trajectory_recorder:
-                        self.trajectory_recorder.record_agent_step(
-                            step_number=step.step_number,
-                            state=step.state.value,
-                            llm_messages=messages,
-                            llm_response=step.llm_response,
-                            tool_calls=step.tool_calls,
-                            tool_results=step.tool_results,
-                            reflection=step.reflection,
-                            error=step.error,
-                        )
-                    if self.cli_console:
-                        self.cli_console.update_status(step)
+                    self._record_handler(step, messages)
+                    self._update_cli_console(step)
+
                     execution.steps.append(step)
                     step_number += 1
 
@@ -188,23 +110,11 @@ class Agent(ABC):
                     step.error = str(e)
 
                     # Display error
-                    if self.cli_console:
-                        self.cli_console.update_status(step)
-
+                    self._update_cli_console(step)
                     # Record agent step
-                    if self.trajectory_recorder:
-                        self.trajectory_recorder.record_agent_step(
-                            step_number=step.step_number,
-                            state=step.state.value,
-                            llm_messages=messages,
-                            llm_response=step.llm_response,
-                            tool_calls=step.tool_calls,
-                            tool_results=step.tool_results,
-                            reflection=step.reflection,
-                            error=step.error,
-                        )
-                    if self.cli_console:
-                        self.cli_console.update_status(step)
+                    self._record_handler(step, messages)
+                    self._update_cli_console(step)
+
                     execution.steps.append(step)
                     break
 
@@ -217,8 +127,7 @@ class Agent(ABC):
         execution.execution_time = time.time() - start_time
 
         # Display final summary
-        if self.cli_console:
-            self.cli_console.update_status(agent_execution=execution)
+        self._update_cli_console(step)
 
         return execution
 
@@ -248,10 +157,95 @@ class Agent(ABC):
         response_lower = llm_response.content.lower()
         return any(indicator in response_lower for indicator in completion_indicators)
 
-    def is_task_completed(self, llm_response: LLMResponse) -> bool:  # pyright: ignore[reportUnusedParameter]
+    def _is_task_completed(self, llm_response: LLMResponse) -> bool:  # pyright: ignore[reportUnusedParameter]
         """Check if the task is completed based on the response. Override for custom logic."""
         return True
 
     def task_incomplete_message(self) -> str:
         """Return a message indicating that the task is incomplete. Override for custom logic."""
         return "The task is incomplete. Please try again."
+
+    def _update_cli_console(self, step: AgentStep) -> None:
+        if self.cli_console:
+            self.cli_console.update_status(step)
+
+    def _update_llm_usage(self, llm_response: LLMResponse, execution: AgentExecution) -> None:
+        if not llm_response:
+            return None
+        execution.total_tokens = (
+            llm_response.usage
+            if execution.total_tokens
+            else llm_response.usage + execution.total_tokens
+        )
+
+    def _llm_complete_response_task_handler(
+        self,
+        llm_response: LLMResponse,
+        step: AgentStep,
+        execution: AgentExecution,
+        messages: list[LLMMessage],
+    ) -> None:
+        """
+        update states
+        """
+        step.state = AgentState.COMPLETED
+        execution.final_result = llm_response.content
+        execution.success = True
+
+        self._record_handler(step, messages)
+        self._update_cli_console(step)
+        execution.steps.append(step)
+
+    def _record_handler(self, step: AgentStep, messages: list[LLMMessage]) -> None:
+        if self.trajectory_recorder:
+            self.trajectory_recorder.record_agent_step(
+                step_number=step.step_number,
+                state=step.state.value,
+                llm_messages=messages,
+                llm_response=step.llm_response,
+                tool_calls=step.tool_calls,
+                tool_results=step.tool_results,
+                reflection=step.reflection,
+                error=step.error,
+            )
+
+    async def _tool_call_handler(
+        self, tool_calls: list[ToolCall], step: AgentStep
+    ) -> list[LLMMessage]:
+        if not tool_calls or len(tool_calls) <= 0:
+            messages = [
+                LLMMessage(
+                    role="user",
+                    content="It seems that you have not completed the task.",
+                )
+            ]
+            return messages
+
+        step.state = AgentState.CALLING_TOOL
+        step.tool_calls = tool_calls
+        self._update_cli_console(step)
+
+        if self.model_parameters.parallel_tool_calls:
+            tool_results = await self.tool_caller.parallel_tool_call(tool_calls)
+        else:
+            tool_results = await self.tool_caller.sequential_tool_call(tool_calls)
+        step.tool_results = tool_results
+
+        self._update_cli_console(step)
+        messages = []
+        for tool_result in tool_results:
+            # Add tool result to conversation
+            message = LLMMessage(role="user", tool_result=tool_result)
+            messages.append(message)
+
+        reflection = self.reflect_on_result(tool_results)
+        if reflection:
+            step.state = AgentState.REFLECTING
+            step.reflection = reflection
+
+            # Display reflection
+            self._update_cli_console(step)
+
+            messages.append(LLMMessage(role="assistant", content=reflection))
+
+        return message
