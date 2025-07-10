@@ -30,9 +30,6 @@ class OllamaClient(BaseLLMClient):
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
 
-        # ollama default api key is ollama
-        self.api_key = "ollama"
-
         self.client: openai.OpenAI = openai.OpenAI(
             # by default ollama doesn't require any api key. It should set to be "ollama".
             api_key=self.api_key,

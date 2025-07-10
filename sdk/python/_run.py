@@ -15,7 +15,7 @@ from rich.console import Console
 # Import the necessary components from the main trae_agent package
 from trae_agent.agent import TraeAgent
 from trae_agent.utils.cli_console import CLIConsole
-from trae_agent.utils.config import Config, resolve_config_value
+from trae_agent.utils.config import Config, load_config
 
 # Load environment variables
 _ = load_dotenv()
@@ -36,67 +36,6 @@ class TraeAgentSDK:
         self.config = config
         self.agent = None
         self.cli_console = None
-
-    def load_config(
-        self,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        config_file: str = "trae_config.json",
-        max_steps: Optional[int] = 20,
-    ) -> Config:
-        """
-        Load configuration for the agent.
-
-        Args:
-            provider: LLM provider to use (default: openai)
-            model: Specific model to use
-            api_key: API key for the provider
-            config_file: Path to configuration file
-            max_steps: Maximum number of execution steps
-
-        Returns:
-            Config object with resolved configuration
-        """
-        config = Config(config_file)
-
-        # Resolve model provider
-        resolved_provider = resolve_config_value(provider, config.default_provider) or "openai"
-        config.default_provider = str(resolved_provider)
-
-        # Resolve configuration values with overrides
-        resolved_model = resolve_config_value(
-            model, config.model_providers[str(resolved_provider)].model
-        )
-
-        model_parameters = config.model_providers[str(resolved_provider)]
-        if resolved_model is not None:
-            model_parameters.model = str(resolved_model)
-
-        # Map providers to their environment variable names
-        env_var_map = {
-            "openai": "OPENAI_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "azure": "AZURE_API_KEY",
-            "openrouter": "OPENROUTER_API_KEY",
-            "doubao": "DOUBAO_API_KEY",
-            "google": "GOOGLE_API_KEY",
-        }
-
-        resolved_api_key = resolve_config_value(
-            api_key,
-            config.model_providers[str(resolved_provider)].api_key,
-            env_var_map.get(str(resolved_provider)),
-        )
-
-        if resolved_api_key is not None:
-            model_parameters.api_key = str(resolved_api_key)
-
-        resolved_max_steps = resolve_config_value(max_steps, config.max_steps)
-        if resolved_max_steps is not None:
-            config.max_steps = int(resolved_max_steps)
-
-        return config
 
     def create_agent(self, config: Config) -> TraeAgent:
         """
@@ -125,6 +64,7 @@ class TraeAgentSDK:
         patch_path: Optional[str] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
+        model_base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         max_steps: Optional[int] = None,
         working_dir: Optional[str] = None,
@@ -177,7 +117,9 @@ class TraeAgentSDK:
 
             # Load or use existing configuration
             if self.config is None:
-                config = self.load_config(provider, model, api_key, config_file, max_steps)
+                config = load_config(
+                    config_file, provider, model, model_base_url, api_key, max_steps
+                )
             else:
                 config = self.config
 

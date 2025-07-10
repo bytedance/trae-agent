@@ -4,7 +4,6 @@
 """Azure client wrapper with tool integrations"""
 
 import json
-import os
 import random
 import time
 from typing import override
@@ -36,28 +35,6 @@ class AzureClient(BaseLLMClient):
 
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
-
-        if self.api_key == "":
-            self.api_key: str = os.getenv("AZURE_API_KEY", "")
-
-        if self.api_key == "":
-            raise ValueError(
-                "Azure API key not provided. Set AZURE_API_KEY in environment variables or config file."
-            )
-
-        if self.base_url is None or self.base_url == "":
-            self.base_url: str | None = os.getenv("AZURE_API_BASE_URL")
-
-        if self.base_url is None:
-            raise ValueError(
-                "Azure API base url not provided. Set AZURE_API_BASE_URL in environment variables or config file."
-            )
-
-        if self.api_version is None or self.api_version == "":
-            self.api_version: str | None = os.getenv("AZURE_API_VERSION")
-
-        if self.api_version is None:
-            raise ValueError("Azure API version not provided. ")
 
         self.client: openai.AzureOpenAI = openai.AzureOpenAI(
             azure_endpoint=self.base_url,

@@ -1,7 +1,6 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-import os
 import unittest
 from unittest.mock import patch
 
@@ -128,30 +127,6 @@ class TestConfigBaseURL(unittest.TestCase):
             api_key="test-api-key", base_url="https://custom-openai.example.com/v1"
         )
         self.assertEqual(client.base_url, "https://custom-openai.example.com/v1")
-
-    @patch("trae_agent.utils.openai_client.openai.OpenAI")
-    def test_openai_client_with_environment_base_url(self, mock_openai):
-        model_params = ModelParameters(
-            model="gpt-4o",
-            api_key="test-api-key",
-            base_url="https://api.openai.com/v1",  # original config
-            max_tokens=4096,
-            temperature=0.5,
-            top_p=1,
-            top_k=0,
-            parallel_tool_calls=False,
-            max_retries=10,
-        )
-
-        # when env variable is set, the base_url should be the env variable
-        with patch.dict(os.environ, {"OPENAI_BASE_URL": "https://env-openai.example.com/v1"}):
-            client = OpenAIClient(model_params)
-
-            mock_openai.assert_called_once_with(
-                api_key="test-api-key", base_url="https://env-openai.example.com/v1"
-            )
-
-            self.assertEqual(client.base_url, "https://env-openai.example.com/v1")
 
     @patch("trae_agent.utils.anthropic_client.anthropic.Anthropic")
     def test_anthropic_client_base_url_attribute_set(self, mock_anthropic):
