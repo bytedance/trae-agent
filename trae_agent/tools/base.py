@@ -123,29 +123,12 @@ class Tool(ABC):
 
     def get_input_schema(self) -> dict[str, object]:
         """Get the input schema for the tool."""
-        schema: dict[str, object] = {
-            "type": "object",
-        }
 
-        properties: dict[str, dict[str, str | list[str] | dict[str, object]]] = {}
-        required: list[str] = []
+        properties = {param.name: self._build_param_schema(param) for param in self.parameters}
+        required: list[str] = [param.name for param in self.parameters if param.required]
 
-        for param in self.parameters:
-            properties[param.name] = {
-                "type": param.type,
-                "description": param.description,
-            }
-            if param.enum:
-                properties[param.name]["enum"] = param.enum
-
-            if param.items:
-                properties[param.name]["items"] = param.items
-
-            if param.required:
-                required.append(param.name)
-
-        schema["properties"] = properties
-        if len(required) > 0:
+        schema: dict[str, object] = {"type": "object", "properties": properties}
+        if required:
             schema["required"] = required
 
         # For OpenAI, we need to specify that additional properties are not allowed.
@@ -155,6 +138,15 @@ class Tool(ABC):
             schema["additionalProperties"] = False
 
         return schema
+
+    def _build_param_schema(self, param: ToolParameter) -> dict[str, object]:
+        """Build the parameter schema for a single tool parameter."""
+        param_schema: dict[str, object] = {"type": param.type, "description": param.description}
+        if param.enum:
+            param_schema["enum"] = param.enum
+        if param.items:
+            param_schema["items"] = param.items
+        return param_schema
 
 
 class ToolExecutor:
