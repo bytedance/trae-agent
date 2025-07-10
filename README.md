@@ -48,7 +48,7 @@ export ANTHROPIC_API_KEY="your-anthropic-api-key"
 
 # For Doubao (also works with other OpenAI-compatible model providers)
 export DOUBAO_API_KEY="your-doubao-api-key"
-export DOUBAO_API_BASE_URL="your-model-provider-base-url"
+export DOUBAO_BASE_URL="your-model-provider-base-url"
 
 # For OpenRouter
 export OPENROUTER_API_KEY="your-openrouter-api-key"
