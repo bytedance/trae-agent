@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
 from trae_agent.utils.config import Config
-from trae_agent.utils.llm_basics import LLMResponse
+from trae_agent.utils.llm_basics import LLMMessage, LLMResponse
+from trae_agent.utils.llm_client import LLMClient
 
 
 class TestTraeAgentExtended(unittest.TestCase):
@@ -42,6 +43,24 @@ class TestTraeAgentExtended(unittest.TestCase):
 
     def tearDown(self):
         self.llm_client_patcher.stop()
+
+    def test_init_with_mock_client(self):
+        """测试使用mock client初始化TraeAgent"""
+        # 创建一个mock的LLMClient
+        mock_client = MagicMock(spec=LLMClient)
+        mock_client.model_parameters = self.config.model_providers["anthropic"]
+        mock_client._max_steps = 20
+        
+        # 使用mock client初始化TraeAgent
+        agent = TraeAgent(llm_client=mock_client)
+        
+        # 验证agent是否正确初始化
+        self.assertIsNotNone(agent)
+        self.assertEqual(agent.llm_client, mock_client)
+        self.assertEqual(agent._model_parameters, mock_client.model_parameters)
+        self.assertEqual(agent._max_steps, mock_client._max_steps)
+        self.assertEqual(len(agent._initial_messages), 0)
+        self.assertEqual(len(agent._tools), 0)
 
     @patch("trae_agent.utils.trajectory_recorder.TrajectoryRecorder")
     def test_trajectory_setup(self, mock_recorder):
@@ -155,6 +174,8 @@ class TestTraeAgentExtended(unittest.TestCase):
         mock_console = MagicMock(spec=CLIConsole)
         self.agent.set_cli_console(mock_console)
         self.assertEqual(self.agent.cli_console, mock_console)
+    
+    
 
 
 if __name__ == "__main__":
