@@ -134,8 +134,6 @@ class Agent(ABC):
 
                     if self.llm_indicates_task_completed(llm_response):
                         if self._is_task_completed(llm_response):
-                            self._llm_complete_response_task_handler(llm_response, step, execution)
-
                             self._llm_complete_response_task_handler(llm_response, step, execution , messages)
                             break
                         else:
@@ -223,7 +221,6 @@ class Agent(ABC):
     def _update_llm_usage(self, llm_response: LLMResponse, execution: AgentExecution) -> None:
         if not llm_response:
             return None
-
         # if execution.total_tokens is None then set it to be llm_response.usage else sum it up
         execution.total_tokens = llm_response.usage if not execution.total_tokens else llm_response.usage + execution.total_tokens
         
