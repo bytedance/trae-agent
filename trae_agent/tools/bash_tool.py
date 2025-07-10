@@ -138,6 +138,7 @@ class BashTool(Tool):
     def __init__(self, model_provider: str | None = None):
         super().__init__(model_provider)
         self._session: _BashSession | None = None
+        self.sudo: bool | None = None
 
     @override
     def get_model_provider(self) -> str | None:
@@ -188,12 +189,18 @@ class BashTool(Tool):
     @override
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
         command = str(arguments["command"]) if "command" in arguments else None
-        if arguments.get("dangerous"):
+        if arguments.get("dangerous") and not self.sudo:
             allow = Prompt.ask(
-                f'Command "{command}" is considered dangerous. Are you sure you want to allow the agent to run this command? [Y/N]'
+                f'Command "{command}" is considered dangerous. Are you sure you want to allow the agent to run this command? [Y/N/D] \n Y: Yes , N: No , D: Always Allow'
             )
-            if allow != "Y":
+
+            if allow != "Y" and allow != "A":
                 return ToolExecResult(error=f"user does not allow to run {command}", error_code=-1)
+
+            if allow == "A":
+                self.sudo = True
+            else:
+                self.sudo = False
 
         if arguments.get("restart"):
             if self._session:
