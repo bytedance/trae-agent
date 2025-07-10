@@ -296,7 +296,7 @@ class SWEBenchEvaluation:
         Run all instances in the dataset.
         """
         for instance in tqdm(self.dataset, desc="Running all instances"):
-            self.run_one_instance(instance)
+            self.run_one_instance(instance["instance_id"])
 
     def run_eval(self):
         """
