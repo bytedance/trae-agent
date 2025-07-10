@@ -22,9 +22,18 @@ install-test:
 install-dev:
 	uv pip install -e ".[test,evaluation]"
 
+uv-sync:
+	uv sync --all-extras
+
+uv-pre-commit:
+	uv run pre-commit run --all-files
+
+uv-test:
+	SKIP_OLLAMA_TEST=true SKIP_OPENROUTER_TEST=true SKIP_GOOGLE_TEST=true uv run pytest tests/ -v --tb=short --continue-on-collection-errors
+
 # Testing commands
 test:
-	SKIP_OLLAMA_TEST=true SKIP_OPENROUTER_TEST=true pytest
+	SKIP_OLLAMA_TEST=true SKIP_OPENROUTER_TEST=true SKIP_GOOGLE_TEST=true pytest
 
 # Pre-commit commands
 pre-commit: pre-commit-install pre-commit-run

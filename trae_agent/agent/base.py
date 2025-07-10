@@ -18,30 +18,74 @@ class Agent(ABC):
     """Base class for LLM-based agents."""
 
     def __init__(self, config: Config):
-        self.llm_client: LLMClient = LLMClient(
+        self._llm_client: LLMClient = LLMClient(
             config.default_provider, config.model_providers[config.default_provider]
         )
-        self.max_steps: int = config.max_steps
-        self.model_parameters: ModelParameters = config.model_providers[config.default_provider]
-        self.initial_messages: list[LLMMessage] = []
-        self.task: str = ""
-        self.tools: list[Tool] = []
-        self.tool_caller: ToolExecutor = ToolExecutor([])
+        self._max_steps: int = config.max_steps
+        self._model_parameters: ModelParameters = config.model_providers[config.default_provider]
+        self._initial_messages: list[LLMMessage] = []
+        self._task: str = ""
+        self._tools: list[Tool] = []
+        self._tool_caller: ToolExecutor = ToolExecutor([])
 
-        self.cli_console: CLIConsole | None = None
+        self._cli_console: CLIConsole | None = None
 
         # Trajectory recorder
-        self.trajectory_recorder: TrajectoryRecorder | None = None
+        self._trajectory_recorder: TrajectoryRecorder | None = None
 
-    def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
+    @property
+    def llm_client(self) -> LLMClient:
+        return self._llm_client
+
+    @property
+    def trajectory_recorder(self) -> TrajectoryRecorder | None:
+        """Get the trajectory recorder for this agent."""
+        return self._trajectory_recorder
+
+    def _set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for this agent."""
-        self.trajectory_recorder = recorder
+        self._trajectory_recorder = recorder
         # Also set it on the LLM client
-        self.llm_client.set_trajectory_recorder(recorder)
+        self._llm_client.set_trajectory_recorder(recorder)
+
+    @property
+    def cli_console(self) -> CLIConsole | None:
+        """Get the CLI console for this agent."""
+        return self._cli_console
 
     def set_cli_console(self, cli_console: CLIConsole | None) -> None:
         """Set the CLI console for this agent."""
-        self.cli_console = cli_console
+        self._cli_console = cli_console
+
+    @property
+    def tools(self) -> list[Tool]:
+        """Get the tools available to this agent."""
+        return self._tools
+
+    @property
+    def task(self) -> str:
+        """Get the current task of the agent."""
+        return self._task
+
+    @task.setter
+    def task(self, value: str):
+        """Set the current task of the agent."""
+        self._task = value
+
+    @property
+    def initial_messages(self) -> list[LLMMessage]:
+        """Get the initial messages for the agent."""
+        return self._initial_messages
+
+    @property
+    def model_parameters(self) -> ModelParameters:
+        """Get the model parameters for the agent."""
+        return self._model_parameters
+
+    @property
+    def max_steps(self) -> int:
+        """Get the maximum number of steps for the agent."""
+        return self._max_steps
 
     @abstractmethod
     def new_task(
@@ -59,13 +103,13 @@ class Agent(ABC):
 
         start_time = time.time()
 
-        execution = AgentExecution(task=self.task, steps=[])
+        execution = AgentExecution(task=self._task, steps=[])
 
         try:
-            messages = self.initial_messages
+            messages = self._initial_messages
             step_number = 1
 
-            while step_number <= self.max_steps:
+            while step_number <= self._max_steps:
                 step = AgentStep(step_number=step_number, state=AgentState.THINKING)
 
                 try:
@@ -75,17 +119,23 @@ class Agent(ABC):
                     # Display thinking state
                     self._update_cli_console(step)
 
-                    llm_response = self.llm_client.chat(messages, self.model_parameters, self.tools)
+
+                    llm_response = self._llm_client.chat(
+                        messages, self._model_parameters, self._tools
+                    )
                     step.llm_response = llm_response
 
                     # Display step with LLM response
                     self._update_cli_console(step)
+
 
                     # Update token usage
                     self._update_llm_usage(llm_response, execution)
 
                     if self.llm_indicates_task_completed(llm_response):
                         if self._is_task_completed(llm_response):
+                            self._llm_complete_response_task_handler(llm_response, step, execution)
+
                             self._llm_complete_response_task_handler(llm_response, step, execution , messages)
                             break
                         else:
@@ -115,10 +165,11 @@ class Agent(ABC):
                     self._record_handler(step, messages)
                     self._update_cli_console(step)
 
+
                     execution.steps.append(step)
                     break
 
-            if step_number > self.max_steps and not execution.success:
+            if step_number > self._max_steps and not execution.success:
                 execution.final_result = "Task execution exceeded maximum steps without completion."
 
         except Exception as e:
