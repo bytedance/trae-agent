@@ -30,7 +30,14 @@ We strongly recommend using [uv](https://docs.astral.sh/uv/) to setup the projec
 ```bash
 git clone https://github.com/bytedance/trae-agent.git
 cd trae-agent
-make install
+uv venv
+uv sync --all-extras
+```
+or use make.
+
+```bash
+make uv-venv
+make uv-sync
 ```
 
 ### Setup API Keys
