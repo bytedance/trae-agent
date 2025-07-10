@@ -105,7 +105,7 @@ class TestTraeAgentExtended(unittest.TestCase):
 
         # Test valid patch scenario
         with patch.object(self.agent, "get_git_diff", return_value="valid patch"):
-            self.assertTrue(self.agent.is_task_completed(mock_response))
+            self.assertTrue(self.agent._is_task_completed(mock_response))
 
     def test_tool_initialization(self):
         tools = [
