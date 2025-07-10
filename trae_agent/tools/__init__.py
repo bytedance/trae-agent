@@ -5,7 +5,7 @@
 
 from typing import Type
 
-from .base import Tool, ToolCall, ToolExecutor, ToolResult, get_tool_list
+from .base import Tool, ToolCall, ToolExecutor, ToolResult, tools_list
 from .bash_tool import BashTool
 from .edit_tool import TextEditorTool
 from .json_edit_tool import JSONEditTool
@@ -32,8 +32,7 @@ _tools_registry: dict[str, Type[Tool]] = {
     "task_done": TaskDoneTool,
 }
 
-tools_list = get_tool_list()
-tools_registry: dict[str , Type[Tool]] = {}
+tools_registry: dict[str, Type[Tool]] = {}
 
 for tool_name in tools_list:
     tool = _tools_registry.get(tool_name)

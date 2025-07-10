@@ -216,3 +216,6 @@ class ToolExecutor:
 def get_tool_list() -> list[str]:
     config = Config()
     return config.tool_list
+
+
+tools_list = get_tool_list()
