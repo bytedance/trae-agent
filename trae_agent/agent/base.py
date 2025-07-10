@@ -115,7 +115,7 @@ class Agent(ABC):
     @property
     def max_steps(self) -> int:
         """Get the maximum number of steps for the agent."""
-        return self._model_parameters.max_steps
+        return self._max_steps
 
     @abstractmethod
     def new_task(
