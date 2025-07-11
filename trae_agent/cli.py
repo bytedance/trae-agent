@@ -18,73 +18,12 @@ from rich.table import Table
 from trae_agent.utils.cli_console import CLIConsole
 
 from .agent import TraeAgent
-from .utils.config import Config, resolve_config_value
+from .utils.config import Config, load_config
 
 # Load environment variables
 _ = load_dotenv()
 
 console = Console()
-
-
-def load_config(
-    provider: str | None = None,
-    model: str | None = None,
-    api_key: str | None = None,
-    config_file: str = "trae_config.json",
-    max_steps: int | None = 20,
-) -> Config:
-    """
-    load_config loads provider , model , api key , config file and maximum steps. By default, the provider is set to be OpenAI.
-    Args:
-        provider: default provider is openai, currently only support openai and claude
-        model: the model that you want to use
-        api_key: your api key
-        config_file: the relative path of your config file, default setting would be trae_config.json
-        maximum_step: maximum number of step of the agent. Default setting is 20
-
-    Return:
-        Config Object
-    """
-
-    config: Config = Config(config_file)
-    # Resolve model provider
-    resolved_provider = resolve_config_value(provider, config.default_provider) or "openai"
-
-    config.default_provider = str(resolved_provider)
-
-    # Resolve configuration values with CLI overrides
-    resolved_model = resolve_config_value(
-        model, config.model_providers[str(resolved_provider)].model
-    )
-
-    model_parameters = config.model_providers[str(resolved_provider)]
-    if resolved_model is not None:
-        model_parameters.model = str(resolved_model)
-
-    # Map providers to their environment variable names
-    env_var_map = {
-        "openai": "OPENAI_API_KEY",
-        "anthropic": "ANTHROPIC_API_KEY",
-        "azure": "AZURE_API_KEY",
-        "openrouter": "OPENROUTER_API_KEY",
-        "doubao": "DOUBAO_API_KEY",
-        "google": "GOOGLE_API_KEY",
-    }
-
-    resolved_api_key = resolve_config_value(
-        api_key,
-        config.model_providers[str(resolved_provider)].api_key,
-        env_var_map.get(str(resolved_provider)),
-    )
-
-    if resolved_api_key is not None:
-        # If None shall we stop the program ?
-        model_parameters.api_key = str(resolved_api_key)
-
-    resolved_max_steps = resolve_config_value(max_steps, config.max_steps)
-    if resolved_max_steps is not None:
-        config.max_steps = int(resolved_max_steps)
-    return config
 
 
 def create_agent(config: Config) -> TraeAgent:
@@ -120,6 +59,7 @@ def cli():
 @click.argument("task")
 @click.option("--provider", "-p", help="LLM provider to use")
 @click.option("--model", "-m", help="Specific model to use")
+@click.option("--model-base-url", help="Base URL for the model API")
 @click.option("--api-key", "-k", help="API key (or set via environment variable)")
 @click.option("--max-steps", help="Maximum number of execution steps", type=int)
 @click.option("--working-dir", "-w", help="Working directory for the agent")
@@ -132,6 +72,7 @@ def run(
     patch_path: str,
     provider: str | None = None,
     model: str | None = None,
+    model_base_url: str | None = None,
     api_key: str | None = None,
     max_steps: int | None = None,
     working_dir: str | None = None,
@@ -164,7 +105,7 @@ def run(
     if task_path.exists() and task_path.is_file():
         task = task_path.read_text()
 
-    config = load_config(provider, model, api_key, config_file, max_steps)
+    config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
 
     # Create agent
     agent: TraeAgent = create_agent(config)
@@ -218,6 +159,7 @@ def run(
 @cli.command()
 @click.option("--provider", "-p", help="LLM provider to use")
 @click.option("--model", "-m", help="Specific model to use")
+@click.option("--model-base-url", help="Base URL for the model API")
 @click.option("--api-key", "-k", help="API key (or set via environment variable)")
 @click.option("--config-file", help="Path to configuration file", default="trae_config.json")
 @click.option("--max-steps", help="Maximum number of execution steps", type=int, default=20)
@@ -225,6 +167,7 @@ def run(
 def interactive(
     provider: str | None = None,
     model: str | None = None,
+    model_base_url: str | None = None,
     api_key: str | None = None,
     config_file: str = "trae_config.json",
     max_steps: int | None = None,
@@ -235,7 +178,7 @@ def interactive(
     Args:
         tasks: the task that you want your agent to solve. This is required to be in the input
     """
-    config = load_config(provider, model, api_key, config_file=config_file, max_steps=max_steps)
+    config = load_config(config_file, provider, model, model_base_url, api_key, max_steps=max_steps)
 
     console.print(
         Panel(

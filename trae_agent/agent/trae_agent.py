@@ -230,7 +230,7 @@ If you are sure the issue has been solved, you should call the `task_done` to fi
         return any(tool_call.name == "task_done" for tool_call in llm_response.tool_calls)
 
     @override
-    def is_task_completed(self, llm_response: LLMResponse) -> bool:
+    def _is_task_completed(self, llm_response: LLMResponse) -> bool:
         """Enhanced task completion detection."""
         if self.must_patch == "true":
             model_patch = self.get_git_diff()

@@ -4,7 +4,6 @@
 """Anthropic API client wrapper with tool integration."""
 
 import json
-import os
 import random
 import time
 from typing import override
@@ -23,14 +22,6 @@ class AnthropicClient(BaseLLMClient):
 
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
-
-        if self.api_key == "":
-            self.api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
-
-        if self.api_key == "":
-            raise ValueError(
-                "Anthropic API key not provided. Set ANTHROPIC_API_KEY in environment variables or config file."
-            )
 
         self.client: anthropic.Anthropic = anthropic.Anthropic(
             api_key=self.api_key, base_url=self.base_url
@@ -141,8 +132,8 @@ class AnthropicClient(BaseLLMClient):
         usage = None
         if response.usage:
             usage = LLMUsage(
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
+                input_tokens=response.usage.input_tokens or 0,
+                output_tokens=response.usage.output_tokens or 0,
                 cache_creation_input_tokens=response.usage.cache_creation_input_tokens or 0,
                 cache_read_input_tokens=response.usage.cache_read_input_tokens or 0,
             )

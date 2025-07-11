@@ -4,7 +4,6 @@
 """OpenAI API client wrapper with tool integration."""
 
 import json
-import os
 import random
 import time
 from typing import override
@@ -28,19 +27,6 @@ class OpenAIClient(BaseLLMClient):
 
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
-
-        if self.api_key == "":
-            self.api_key: str = os.getenv("OPENAI_API_KEY", "")
-
-        if self.api_key == "":
-            raise ValueError(
-                "OpenAI API key not provided. Set OPENAI_API_KEY in environment variables or config file."
-            )
-
-        if "OPENAI_BASE_URL" in os.environ:
-            # If OPENAI_BASE_URL is set, which means the user wants to use a specific openai compatible api provider,
-            # we should use the base url from the environment variable
-            self.base_url = os.environ["OPENAI_BASE_URL"]
 
         self.client: openai.OpenAI = openai.OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.message_history: ResponseInputParam = []
@@ -136,10 +122,10 @@ class OpenAIClient(BaseLLMClient):
         usage = None
         if response.usage:
             usage = LLMUsage(
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-                cache_read_input_tokens=response.usage.input_tokens_details.cached_tokens,
-                reasoning_tokens=response.usage.output_tokens_details.reasoning_tokens,
+                input_tokens=response.usage.input_tokens or 0,
+                output_tokens=response.usage.output_tokens or 0,
+                cache_read_input_tokens=response.usage.input_tokens_details.cached_tokens or 0,
+                reasoning_tokens=response.usage.output_tokens_details.reasoning_tokens or 0,
             )
 
         llm_response = LLMResponse(

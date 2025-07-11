@@ -5,13 +5,11 @@
  [![Pre-commit](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml)
  [![Unit Tests](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml)
 
-
 **Trae Agent** is an LLM-based agent for general purpose software engineering tasks. It provides a powerful CLI interface that can understand natural language instructions and execute complex software engineering workflows using various tools and LLM providers.
 
 **Project Status:** The project is still being actively developed. Please refer to [docs/roadmap.md](docs/roadmap.md) and [CONTRIBUTING](CONTRIBUTING.md) if you are willing to help us improve Trae Agent.
 
 **Difference with Other CLI Agents:** Trae Agent offers a transparent, modular architecture that researchers and developers can easily modify, extend, and analyze, making it an ideal platform for **studying AI agent architectures, conducting ablation studies, and developing novel agent capabilities**. This ***research-friendly design*** enables the academic and open-source communities to contribute to and build upon the foundational agent framework, fostering innovation in the rapidly evolving field of AI agents.
-
 
 ## ✨ Features
 
@@ -50,7 +48,7 @@ export ANTHROPIC_API_KEY="your-anthropic-api-key"
 
 # For Doubao (also works with other OpenAI-compatible model providers)
 export DOUBAO_API_KEY="your-doubao-api-key"
-export DOUBAO_API_BASE_URL="your-model-provider-base-url"
+export DOUBAO_BASE_URL="your-model-provider-base-url"
 
 # For OpenRouter
 export OPENROUTER_API_KEY="your-openrouter-api-key"
@@ -142,86 +140,8 @@ trae-cli show-config --config-file my_config.json
 
 ### Configuration
 
-Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
+Trae Agent uses a JSON configuration file for settings. Please refer to the `trae_config.json` file in the root directory for the detailed configuration structure.
 
-```json
-{
-  "default_provider": "anthropic",
-  "max_steps": 20,
-  "enable_lakeview": true,
-  "model_providers": {
-    "openai": {
-      "api_key": "your_openai_api_key",
-      "model": "gpt-4o",
-      "max_tokens": 128000,
-      "temperature": 0.5,
-      "top_p": 1,
-      "max_retries": 10
-    },
-    "anthropic": {
-      "api_key": "your_anthropic_api_key",
-      "model": "claude-sonnet-4-20250514",
-      "max_tokens": 4096,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "google": {
-      "api_key": "your_google_api_key",
-      "model": "gemini-2.5-pro",
-      "max_tokens": 128000,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "azure": {
-      "api_key": "you_azure_api_key",
-      "base_url": "your_azure_base_url",
-      "api_version": "2024-03-01-preview",
-      "model": "model_name",
-      "max_tokens": 4096,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "ollama": {
-      "api_key": "ollama",
-      "base_url": "http://localhost:11434",
-      "model": "model_name",
-      "max_tokens": 4096,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "openrouter": {
-      "api_key": "your_openrouter_api_key",
-      "model": "openai/gpt-4o",
-      "max_tokens": 4096,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "doubao": {
-      "api_key": "you_doubao_api_key",
-      "model": "model_name",
-      "base_url": "your_doubao_base_url",
-      "max_tokens": 8192,
-      "temperature": 0.5,
-      "top_p": 1,
-      "max_retries": 20
-    }
-  },
-  "lakeview_config": {
-    "model_provider": "anthropic",
-    "model_name": "claude-sonnet-4-20250514"
-  }
-}
-```
 **WARNING:**
 For Doubao users, please use the following base_url.
 ```
@@ -358,6 +278,13 @@ trae-cli show-config
 ```bash
 # Ensure proper permissions for file operations
 chmod +x /path/to/your/project
+```
+
+**Command not found Errors:**
+
+```bash
+# you can try
+uv run trae-cli `xxxxx`
 ```
 
 ## 📄 License

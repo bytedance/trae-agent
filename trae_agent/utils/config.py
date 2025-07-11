@@ -134,9 +134,69 @@ class Config:
         return f"Config(default_provider={self.default_provider}, max_steps={self.max_steps}, model_providers={self.model_providers})"
 
 
-def load_config(config_file: str = "trae_config.json") -> Config:
-    """Load configuration from file."""
-    return Config(config_file)
+def load_config(
+    config_file: str = "trae_config.json",
+    provider: str | None = None,
+    model: str | None = None,
+    model_base_url: str | None = None,
+    api_key: str | None = None,
+    max_steps: int | None = 20,
+) -> Config:
+    """
+    load_config loads provider , model , model base url , api key , and maximum steps. By default, the provider is set to be OpenAI.
+    Args:
+        config_file: the relative path of your config file, default setting would be trae_config.json
+        provider: default provider is openai, currently only support openai and claude
+        model: the model that you want to use
+        model_base_url: the base url of the model
+        api_key: your api key
+        maximum_step: maximum number of step of the agent. Default setting is 20
+
+    Return:
+        Config Object
+    """
+
+    config: Config = Config(config_file)
+
+    resolved_provider = resolve_config_value(provider, config.default_provider) or "openai"
+    config.default_provider = str(resolved_provider)
+
+    # Resolve configuration values with CLI overrides
+    resolved_model = resolve_config_value(
+        model, config.model_providers[str(resolved_provider)].model
+    )
+
+    model_parameters = config.model_providers[str(resolved_provider)]
+    if resolved_model is not None:
+        model_parameters.model = str(resolved_model)
+
+    # Map providers to their environment variable names
+    env_var_api_key = str(resolved_provider).upper() + "_API_KEY"
+    env_var_api_base_url = str(resolved_provider).upper() + "_BASE_URL"
+
+    resolved_api_key = resolve_config_value(
+        api_key,
+        config.model_providers[str(resolved_provider)].api_key,
+        env_var_api_key,
+    )
+
+    resolved_api_base_url = resolve_config_value(
+        model_base_url,
+        config.model_providers[str(resolved_provider)].base_url,
+        env_var_api_base_url,
+    )
+
+    if resolved_api_key is not None:
+        # If None shall we stop the program ?
+        model_parameters.api_key = str(resolved_api_key)
+
+    if resolved_api_base_url is not None:
+        model_parameters.base_url = str(resolved_api_base_url)
+
+    resolved_max_steps = resolve_config_value(max_steps, config.max_steps)
+    if resolved_max_steps is not None:
+        config.max_steps = int(resolved_max_steps)
+    return config
 
 
 def resolve_config_value(

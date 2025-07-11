@@ -96,8 +96,8 @@ class TrajectoryRecorder:
                 "model": response.model,
                 "finish_reason": response.finish_reason,
                 "usage": {
-                    "input_tokens": response.usage.input_tokens if response.usage else None,
-                    "output_tokens": response.usage.output_tokens if response.usage else None,
+                    "input_tokens": response.usage.input_tokens if response.usage else 0,
+                    "output_tokens": response.usage.output_tokens if response.usage else 0,
                     "cache_creation_input_tokens": getattr(
                         response.usage, "cache_creation_input_tokens", None
                     )
