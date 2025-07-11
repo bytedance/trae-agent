@@ -122,7 +122,7 @@ class TraeAgent(Agent):
                 task=task,
                 provider=self._llm_client.provider.value,
                 model=self._model_parameters.model,
-                max_steps=self._max_steps
+                max_steps=self._max_steps,
             )
 
     @override

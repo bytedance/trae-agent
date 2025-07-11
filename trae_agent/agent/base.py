@@ -30,7 +30,9 @@ class Agent(ABC):
             if config is None:
                 raise ValueError("Either config or llm_client must be provided")
             self._llm_client = LLMClient(
-                config.default_provider, config.model_providers[config.default_provider], config.max_steps
+                config.default_provider,
+                config.model_providers[config.default_provider],
+                config.max_steps,
             )
             self._model_parameters = config.model_providers[config.default_provider]
             self._max_steps = config.max_steps

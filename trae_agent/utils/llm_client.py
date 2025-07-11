@@ -7,7 +7,7 @@ from enum import Enum
 
 from ..tools.base import Tool
 from .base_client import BaseLLMClient
-from .config import Config, ModelParameters
+from .config import ModelParameters
 from .llm_basics import LLMMessage, LLMResponse
 from .trajectory_recorder import TrajectoryRecorder
 
@@ -27,7 +27,9 @@ class LLMProvider(Enum):
 class LLMClient:
     """Main LLM client that supports multiple providers."""
 
-    def __init__(self, provider: str | LLMProvider, model_parameters: ModelParameters, max_steps: int):
+    def __init__(
+        self, provider: str | LLMProvider, model_parameters: ModelParameters, max_steps: int
+    ):
         if isinstance(provider, str):
             provider = LLMProvider(provider)
 
