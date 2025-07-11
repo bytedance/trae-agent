@@ -57,10 +57,10 @@ class TestTraeAgentExtended(unittest.TestCase):
         # Verify agent initialization
         self.assertIsNotNone(agent)
         self.assertEqual(agent.llm_client, mock_client)
-        self.assertEqual(agent._model_parameters, mock_client.model_parameters)
-        self.assertEqual(agent._max_steps, mock_client._max_steps)
-        self.assertEqual(len(agent._initial_messages), 0)
-        self.assertEqual(len(agent._tools), 0)
+        self.assertEqual(agent.model_parameters, mock_client.model_parameters)
+        self.assertEqual(agent.max_steps, mock_client.max_steps)
+        self.assertEqual(len(agent.initial_messages), 0)
+        self.assertEqual(len(agent.tools), 0)
 
     @patch("trae_agent.utils.trajectory_recorder.TrajectoryRecorder")
     def test_trajectory_setup(self, mock_recorder):
