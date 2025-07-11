@@ -97,7 +97,7 @@ class OllamaClient(BaseLLMClient):
                 f"Failed to get response from OpenAI after max retries: {error_message}"
             )
 
-        content = ""
+        content = response.message.content
         tool_calls: list[ToolCall] = []
         if response.message.tool_calls:
             for output_block in response.message.tool_calls:
@@ -157,7 +157,7 @@ class OllamaClient(BaseLLMClient):
             self.trajectory_recorder.record_llm_interaction(
                 messages=messages,
                 response=llm_response,
-                provider="openai",
+                provider="ollama",
                 model=model_parameters.model,
                 tools=tools,
             )
