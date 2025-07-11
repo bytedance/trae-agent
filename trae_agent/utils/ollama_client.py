@@ -87,10 +87,14 @@ class OllamaClient(BaseLLMClient):
                 )
                 break
             except Exception as e:
-                error_message += f"Error {i + 1}: {str(e)}\n"
+                this_error_message = str(e)
+                error_message += f"Error {i + 1}: {this_error_message}\n"
+                sleep_time = random.randint(3, 30)
+                print(
+                    f"Ollama API call failed: {this_error_message} will sleep for {sleep_time} seconds and will retry."
+                )
                 # Randomly sleep for 3-30 seconds
-                time.sleep(random.randint(3, 30))
-                continue
+                time.sleep(sleep_time)
 
         if response is None:
             raise ValueError(

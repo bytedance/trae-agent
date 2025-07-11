@@ -68,7 +68,7 @@ class GoogleClient(BaseLLMClient):
                     types.FunctionDeclaration(
                         name=tool.name,
                         description=tool.description,
-                        parameters=tool.get_input_schema(),
+                        parameters=tool.get_input_schema(),  # pyright: ignore[reportArgumentType]
                     )
                     for tool in tools
                 ]
@@ -90,10 +90,13 @@ class GoogleClient(BaseLLMClient):
                 )
                 break
             except Exception as e:
-                tb = traceback.format_exc()
-                error_message += f"Error {i + 1}: {str(e)}\nTraceback:\n{tb}\n"
-                time.sleep(random.randint(3, 30))
-                continue
+                this_error_message = str(e)
+                error_message += f"Error {i + 1}: {this_error_message}\n"
+                sleep_time = random.randint(3, 30)
+                print(
+                    f"Google API call failed: {this_error_message} will sleep for {sleep_time} seconds and will retry."
+                )
+                time.sleep(sleep_time)
 
         if response is None:
             raise ValueError(
