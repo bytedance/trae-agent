@@ -210,70 +210,65 @@ class OpenRouterClient(BaseLLMClient):
                 case msg if msg.tool_result is not None:
                     _msg_tool_result_handler(openrouter_messages, msg)
                 case msg if msg.role is not None:
-                    match msg.role:
-                        case "system":
-                            if not msg.content:
-                                raise ValueError("System message content is required")
-                            openrouter_messages.append(
-                                ChatCompletionSystemMessageParam(content=msg.content, role="system")
-                            )
-                        case "user":
-                            if not msg.content:
-                                raise ValueError("User message content is required")
-                            openrouter_messages.append(
-                                ChatCompletionUserMessageParam(content=msg.content, role="user")
-                            )
-                        case "assistant":
-                            if not msg.content:
-                                raise ValueError("Assistant message content is required")
-                            openrouter_messages.append(
-                                ChatCompletionAssistantMessageParam(
-                                    content=msg.content, role="assistant"
-                                )
-                            )
-                        case _:
-                            raise ValueError(f"Invalid message role: {msg.role}")
+                    _msg_role_handler(openrouter_messages, msg)
                 case _:
                     raise ValueError(f"Invalid message: {msg}")
 
         return openrouter_messages
 
 
-"""
-    The _msg_tool_call_handler function should be static since it is stateless when its arguments involve messages and msg.
-    All other private handlers should follow the same pattern.
-"""
-
-
-@staticmethod
 def _msg_tool_call_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
-    messages.append(
-        ChatCompletionFunctionMessageParam(
-            content=json.dumps(
-                {
-                    "name": msg.tool_call.name,
-                    "arguments": msg.tool_call.arguments,
-                }
-            ),
-            role="function",
-            name=msg.tool_call.name,
+    if msg.tool_call:
+        messages.append(
+            ChatCompletionFunctionMessageParam(
+                content=json.dumps(
+                    {
+                        "name": msg.tool_call.name,
+                        "arguments": msg.tool_call.arguments,
+                    }
+                ),
+                role="function",
+                name=msg.tool_call.name,
+            )
         )
-    )
 
 
-@staticmethod
 def _msg_tool_result_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
-    result: str = ""
-    if msg.tool_result.result:
-        result = result + msg.tool_result.result + "\n"
-    if msg.tool_result.error:
-        result += "Tool call failed with error:\n"
-        result += msg.tool_result.error
-    result = result.strip()
-    messages.append(
-        ChatCompletionToolMessageParam(
-            content=result,
-            role="tool",
-            tool_call_id=msg.tool_result.call_id,
+    if msg.tool_result:
+        result: str = ""
+        if msg.tool_result.result:
+            result = result + msg.tool_result.result + "\n"
+        if msg.tool_result.error:
+            result += "Tool call failed with error:\n"
+            result += msg.tool_result.error
+        result = result.strip()
+        messages.append(
+            ChatCompletionToolMessageParam(
+                content=result,
+                role="tool",
+                tool_call_id=msg.tool_result.call_id,
+            )
         )
-    )
+
+
+def _msg_role_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
+    if msg.role:
+        match msg.role:
+            case "system":
+                if not msg.content:
+                    raise ValueError("System message content is required")
+                messages.append(
+                    ChatCompletionSystemMessageParam(content=msg.content, role="system")
+                )
+            case "user":
+                if not msg.content:
+                    raise ValueError("User message content is required")
+                messages.append(ChatCompletionUserMessageParam(content=msg.content, role="user"))
+            case "assistant":
+                if not msg.content:
+                    raise ValueError("Assistant message content is required")
+                messages.append(
+                    ChatCompletionAssistantMessageParam(content=msg.content, role="assistant")
+                )
+            case _:
+                raise ValueError(f"Invalid message role: {msg.role}")
