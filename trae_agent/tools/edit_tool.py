@@ -12,6 +12,7 @@
 from pathlib import Path
 from typing import override
 
+from ..prompt.tools import EDITTOOL_DESCRIPTION
 from .base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
 from .run import maybe_truncate, run
 
@@ -40,17 +41,7 @@ class TextEditorTool(Tool):
 
     @override
     def get_description(self) -> str:
-        return """Custom editing tool for viewing, creating and editing files
-* State is persistent across command calls and discussions with the user
-* If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep
-* The `create` command cannot be used if the specified `path` already exists as a file !!! If you know that the `path` already exists, please remove it first and then perform the `create` operation!
-* If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
-
-Notes for using the `str_replace` command:
-* The `old_str` parameter should match EXACTLY one or more consecutive lines from the original file. Be mindful of whitespaces!
-* If the `old_str` parameter is not unique in the file, the replacement will not be performed. Make sure to include enough context in `old_str` to make it unique
-* The `new_str` parameter should contain the edited lines that should replace the `old_str`
-"""
+        return EDITTOOL_DESCRIPTION
 
     @override
     def get_parameters(self) -> list[ToolParameter]:
@@ -100,6 +91,8 @@ Notes for using the `str_replace` command:
     @override
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
         """Execute the str_replace_editor tool."""
+
+        # TODO Refactor
         command = str(arguments["command"]) if "command" in arguments else None
         if command is None:
             return ToolExecResult(

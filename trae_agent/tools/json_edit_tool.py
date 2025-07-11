@@ -11,6 +11,7 @@ from jsonpath_ng import Fields, Index
 from jsonpath_ng import parse as jsonpath_parse
 from jsonpath_ng.exceptions import JSONPathError
 
+from ..prompt.tools import JSONEDID_TOOL_DESCRIPTION
 from .base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
 
 
@@ -30,27 +31,7 @@ class JSONEditTool(Tool):
 
     @override
     def get_description(self) -> str:
-        return """Tool for editing JSON files with JSONPath expressions
-* Supports targeted modifications to JSON structures using JSONPath syntax
-* Operations: view, set, add, remove
-* JSONPath examples: '$.users[0].name', '$.config.database.host', '$.items[*].price'
-* Safe JSON parsing and validation with detailed error messages
-* Preserves JSON formatting where possible
-
-Operation details:
-- `view`: Display JSON content or specific paths
-- `set`: Update existing values at specified paths
-- `add`: Add new key-value pairs (for objects) or append to arrays
-- `remove`: Delete elements at specified paths
-
-JSONPath syntax supported:
-- `$` - root element
-- `.key` - object property access
-- `[index]` - array index access
-- `[*]` - all elements in array/object
-- `..key` - recursive descent (find key at any level)
-- `[start:end]` - array slicing
-"""
+        return JSONEDID_TOOL_DESCRIPTION
 
     @override
     def get_parameters(self) -> list[ToolParameter]:
