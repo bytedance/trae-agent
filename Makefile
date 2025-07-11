@@ -13,14 +13,8 @@ help:
 	@echo "  clean           - Clean up build artifacts and cache"
 
 # Installation commands
-install:
-	uv pip install -e .
-
-install-test:
-	uv pip install -e ".[test]"
-
-install-dev:
-	uv pip install -e ".[test,evaluation]"
+uv-venv:
+	uv venv
 
 uv-sync:
 	uv sync --all-extras

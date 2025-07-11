@@ -37,14 +37,6 @@ class OpenRouterClient(BaseLLMClient):
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
 
-        if self.api_key == "":
-            self.api_key: str = os.getenv("OPENROUTER_API_KEY", "")
-
-        if self.api_key == "":
-            raise ValueError(
-                "OpenRouter API key not provided. Set OPENROUTER_API_KEY in environment variables or config file."
-            )
-
         # Use OpenAI SDK with OpenRouter's base URL
         self.client: openai.OpenAI = openai.OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.message_history: list[ChatCompletionMessageParam] = []
@@ -142,8 +134,8 @@ class OpenRouterClient(BaseLLMClient):
             model=response.model,
             usage=(
                 LLMUsage(
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
+                    input_tokens=response.usage.prompt_tokens or 0,
+                    output_tokens=response.usage.completion_tokens or 0,
                 )
                 if response.usage
                 else None

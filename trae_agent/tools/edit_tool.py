@@ -114,62 +114,20 @@ Notes for using the `str_replace` command:
         _path = Path(path)
         try:
             self.validate_path(command, _path)
-
-            if command == "view":
-                view_range = arguments.get("view_range", None)
-                if view_range is None:
-                    return await self.view(_path, None)
-                if not (
-                    isinstance(view_range, list) and all(isinstance(i, int) for i in view_range)
-                ):
+            match command:
+                case "view":
+                    return await self._view_handler(arguments, _path)
+                case "create":
+                    return self._create_handler(arguments, _path)
+                case "str_replace":
+                    return self._str_replace_handler(arguments, _path)
+                case "insert":
+                    return self._insert_handler(arguments, _path)
+                case _:
                     return ToolExecResult(
-                        error="Parameter `view_range` should be a list of integers.",
+                        error=f"Unrecognized command {command}. The allowed commands for the {self.name} tool are: {', '.join(EditToolSubCommands)}",
                         error_code=-1,
                     )
-                view_range_int: list[int] = [i for i in view_range if isinstance(i, int)]
-                return await self.view(_path, view_range_int)
-            elif command == "create":
-                file_text = arguments.get("file_text", None)
-                if not isinstance(file_text, str):
-                    return ToolExecResult(
-                        error="Parameter `file_text` is required and must be a string for command: create",
-                        error_code=-1,
-                    )
-                self.write_file(_path, file_text)
-                return ToolExecResult(output=f"File created successfully at: {_path}")
-            elif command == "str_replace":
-                old_str = arguments.get("old_str") if "old_str" in arguments else None
-                if not isinstance(old_str, str):
-                    return ToolExecResult(
-                        error="Parameter `old_str` is required and should be a string for command: str_replace",
-                        error_code=-1,
-                    )
-                new_str = arguments.get("new_str") if "new_str" in arguments else None
-                if not (new_str is None or isinstance(new_str, str)):
-                    return ToolExecResult(
-                        error="Parameter `new_str` should be a string or null for command: str_replace",
-                        error_code=-1,
-                    )
-                return self.str_replace(_path, old_str, new_str)
-            elif command == "insert":
-                insert_line = arguments.get("insert_line") if "insert_line" in arguments else None
-                if not isinstance(insert_line, int):
-                    return ToolExecResult(
-                        error="Parameter `insert_line` is required and should be integer for command: insert",
-                        error_code=-1,
-                    )
-                new_str_to_insert = arguments.get("new_str") if "new_str" in arguments else None
-                if not isinstance(new_str_to_insert, str):
-                    return ToolExecResult(
-                        error="Parameter `new_str` is required for command: insert",
-                        error_code=-1,
-                    )
-                return self.insert(_path, insert_line, new_str_to_insert)
-            else:
-                return ToolExecResult(
-                    error=f"Unrecognized command {command}. The allowed commands for the {self.name} tool are: {', '.join(EditToolSubCommands)}",
-                    error_code=-1,
-                )
         except ToolError as e:
             return ToolExecResult(error=str(e), error_code=-1)
 
@@ -348,3 +306,55 @@ Notes for using the `str_replace` command:
         return (
             f"Here's the result of running `cat -n` on {file_descriptor}:\n" + file_content + "\n"
         )
+
+    async def _view_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
+        view_range = arguments.get("view_range", None)
+        if view_range is None:
+            return await self.view(_path, None)
+        if not (isinstance(view_range, list) and all(isinstance(i, int) for i in view_range)):
+            return ToolExecResult(
+                error="Parameter `view_range` should be a list of integers.",
+                error_code=-1,
+            )
+        view_range_int: list[int] = [i for i in view_range if isinstance(i, int)]
+        return await self.view(_path, view_range_int)
+
+    def _create_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
+        file_text = arguments.get("file_text", None)
+        if not isinstance(file_text, str):
+            return ToolExecResult(
+                error="Parameter `file_text` is required and must be a string for command: create",
+                error_code=-1,
+            )
+        self.write_file(_path, file_text)
+        return ToolExecResult(output=f"File created successfully at: {_path}")
+
+    def _str_replace_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
+        old_str = arguments.get("old_str") if "old_str" in arguments else None
+        if not isinstance(old_str, str):
+            return ToolExecResult(
+                error="Parameter `old_str` is required and should be a string for command: str_replace",
+                error_code=-1,
+            )
+        new_str = arguments.get("new_str") if "new_str" in arguments else None
+        if not (new_str is None or isinstance(new_str, str)):
+            return ToolExecResult(
+                error="Parameter `new_str` should be a string or null for command: str_replace",
+                error_code=-1,
+            )
+        return self.str_replace(_path, old_str, new_str)
+
+    def _insert_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
+        insert_line = arguments.get("insert_line") if "insert_line" in arguments else None
+        if not isinstance(insert_line, int):
+            return ToolExecResult(
+                error="Parameter `insert_line` is required and should be integer for command: insert",
+                error_code=-1,
+            )
+        new_str_to_insert = arguments.get("new_str") if "new_str" in arguments else None
+        if not isinstance(new_str_to_insert, str):
+            return ToolExecResult(
+                error="Parameter `new_str` is required for command: insert",
+                error_code=-1,
+            )
+        return self.insert(_path, insert_line, new_str_to_insert)

@@ -4,7 +4,6 @@
 """Doubao client wrapper with tool integrations"""
 
 import json
-import os
 import random
 import time
 from typing import override
@@ -36,29 +35,6 @@ class DoubaoClient(BaseLLMClient):
 
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
-
-        if self.api_key == "":
-            self.api_key: str = os.getenv("DOUBAO_API_KEY", "")
-
-        if self.api_key == "":
-            raise ValueError(
-                "Doubao API key not provided. Set DOUBAO_API_KEY in environment variables or config file."
-            )
-
-        if self.base_url is None or self.base_url == "":
-            self.base_url: str | None = os.getenv("DOUBAO_API_BASE_URL")
-
-        if self.base_url is None:
-            raise ValueError(
-                "Doubao API base url not provided. Set DOUBAO_API_BASE_URL in environment variables or config file."
-            )
-
-        # if self.api_version is None or self.api_version == "":
-        #     self.api_version: str | None = os.getenv("DOUBAO_API_VERSION")
-
-        # if self.api_version is None:
-        #     raise ValueError("Doubao API version not provided. ")
-
         self.client: openai.OpenAI = openai.OpenAI(base_url=self.base_url, api_key=self.api_key)
         self.message_history: list[ChatCompletionMessageParam] = []
 
@@ -144,8 +120,8 @@ class DoubaoClient(BaseLLMClient):
             finish_reason=choice.finish_reason,
             model=response.model,
             usage=LLMUsage(
-                input_tokens=response.usage.prompt_tokens,
-                output_tokens=response.usage.completion_tokens,
+                input_tokens=response.usage.prompt_tokens or 0,
+                output_tokens=response.usage.completion_tokens or 0,
             )
             if response.usage
             else None,
