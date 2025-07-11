@@ -77,11 +77,14 @@ class OpenRouterClient(BaseLLMClient):
             ]
 
         # Set up extra headers for OpenRouter
-        extra_headers = {}
-        if os.getenv("OPENROUTER_SITE_URL"):
-            extra_headers["HTTP-Referer"] = os.getenv("OPENROUTER_SITE_URL")
-        if os.getenv("OPENROUTER_SITE_NAME"):
-            extra_headers["X-Title"] = os.getenv("OPENROUTER_SITE_NAME")
+        extra_headers: dict[str, str] = {}
+
+        openrouter_site_url = os.getenv("OPENROUTER_SITE_URL")
+        if openrouter_site_url:
+            extra_headers["HTTP-Referer"] = openrouter_site_url
+        openrouter_size_name = os.getenv("OPENROUTER_SITE_NAME")
+        if openrouter_size_name:
+            extra_headers["X-Title"] = openrouter_size_name
 
         response = None
         error_message = ""
@@ -94,7 +97,7 @@ class OpenRouterClient(BaseLLMClient):
                     temperature=model_parameters.temperature,
                     top_p=model_parameters.top_p,
                     max_tokens=model_parameters.max_tokens,
-                    extra_headers=extra_headers if extra_headers else openai.NOT_GIVEN,
+                    extra_headers=extra_headers if extra_headers else None,
                     n=1,
                 )
                 break

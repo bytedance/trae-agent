@@ -36,6 +36,9 @@ class AzureClient(BaseLLMClient):
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
 
+        if not self.base_url:
+            raise ValueError("base_url is required for AzureClient")
+
         self.client: openai.AzureOpenAI = openai.AzureOpenAI(
             azure_endpoint=self.base_url,
             api_version=self.api_version,

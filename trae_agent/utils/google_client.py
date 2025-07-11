@@ -68,7 +68,7 @@ class GoogleClient(BaseLLMClient):
                     types.FunctionDeclaration(
                         name=tool.name,
                         description=tool.description,
-                        parameters=tool.get_input_schema(),
+                        parameters=tool.get_input_schema(),  # pyright: ignore[reportArgumentType]
                     )
                     for tool in tools
                 ]

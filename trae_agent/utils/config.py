@@ -52,7 +52,7 @@ class Config:
     lakeview_config: LakeviewConfig | None = None
     enable_lakeview: bool = True
 
-    def __init__(self, config_or_config_file: str | dict = "trae_config.json"):
+    def __init__(self, config_or_config_file: str | dict = "trae_config.json"):  # pyright: ignore[reportMissingTypeArgument, reportUnknownParameterType]
         # Accept either file path or direct config dict
         if isinstance(config_or_config_file, dict):
             self._config = config_or_config_file

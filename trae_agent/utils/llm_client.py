@@ -72,6 +72,11 @@ class LLMClient:
         """Get the model parameters used by this client."""
         return self._model_parameters
 
+    @property
+    def max_steps(self) -> int:
+        """Get the max steps used by this client."""
+        return self._max_steps
+
     def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for the underlying client."""
         self.client.set_trajectory_recorder(recorder)
