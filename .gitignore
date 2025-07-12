@@ -170,7 +170,6 @@ cython_debug/
 #  files for the tool.
 #.idea/
 
-trajectory_*.json
 trae-config-local.json
 
 # Trajectories
