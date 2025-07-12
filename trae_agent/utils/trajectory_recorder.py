@@ -28,7 +28,7 @@ class TrajectoryRecorder:
         """
         if trajectory_path is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            trajectory_path = f"trajectory_{timestamp}.json"
+            trajectory_path = f"trajectories/trajectory_{timestamp}.json"
 
         self.trajectory_path: Path = Path(trajectory_path)
         self.trajectory_data: dict[str, Any] = {
