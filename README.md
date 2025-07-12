@@ -194,9 +194,8 @@ trae-cli run "Comment this code" --provider ollama --model "qwen3"
 
 - `OPENAI_API_KEY` - OpenAI API key
 - `ANTHROPIC_API_KEY` - Anthropic API key
-- `GOOGLE_API_KEY` - Google API key
-- `OPENROUTER_API_KEY` - OpenRouter API key
 - `GOOGLE_API_KEY` - Google Gemini API key
+- `OPENROUTER_API_KEY` - OpenRouter API key
 - `OPENROUTER_SITE_URL` - (Optional) Your site URL for OpenRouter rankings
 - `OPENROUTER_SITE_NAME` - (Optional) Your site name for OpenRouter rankings
 
@@ -277,7 +276,6 @@ echo $OPENAI_API_KEY
 echo $ANTHROPIC_API_KEY
 echo $GOOGLE_API_KEY
 echo $OPENROUTER_API_KEY
-echo $GOOGLE_API_KEY
 
 # Check configuration
 trae-cli show-config
