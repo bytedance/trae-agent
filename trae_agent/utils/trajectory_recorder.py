@@ -9,6 +9,7 @@
 """Trajectory recording functionality for Trae Agent."""
 
 import json
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -26,11 +27,9 @@ class TrajectoryRecorder:
         Args:
             trajectory_path: Path to save trajectory file. If None, generates default path.
         """
-        if trajectory_path is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            trajectory_path = f"trajectory_{timestamp}.json"
-
-        self.trajectory_path: Path = Path(trajectory_path)
+        self._custom_trajectory_path = trajectory_path
+        self.trajectory_dir: Path | None = None
+        self.trajectory_path: Path | None = None
         self.trajectory_data: dict[str, Any] = {
             "task": "",
             "start_time": "",
@@ -56,6 +55,18 @@ class TrajectoryRecorder:
             max_steps: Maximum number of steps allowed
         """
         self._start_time = datetime.now()
+        if self._custom_trajectory_path:
+            self.trajectory_dir = Path(self._custom_trajectory_path)
+        else:
+            now = self._start_time
+            _date_str = now.strftime("%Y%m%d")
+            _timestamp = now.strftime("%H%M%S")
+            _short_uuid = str(uuid.uuid4())[:8]
+            _unique_folder_name = f"{_timestamp}_{_short_uuid}"
+
+            self.trajectory_dir = Path("trajectories") / provider / _date_str / _unique_folder_name
+
+        self.trajectory_path = self.trajectory_dir / "trajectory.json"
         self.trajectory_data.update(
             {
                 "task": task,
@@ -67,7 +78,34 @@ class TrajectoryRecorder:
                 "agent_steps": [],
             }
         )
+
+        self.trajectory_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(self.trajectory_dir / "prompt.txt", "w", encoding="utf-8") as f:
+                f.write(task)
+        except (OSError, IOError) as e:
+            print(f"Warning: Failed to save prompt to {self.trajectory_dir / 'prompt.txt'}: {e}")
+
         self.save_trajectory()
+
+    def save_trajectory(self) -> None:
+        """Save the current trajectory data to the trajectory.json file."""
+        if not self.trajectory_path or not self.trajectory_dir:
+            print("Warning: Attempted to save trajectory before path was initialized.")
+            return
+
+        try:
+            with open(self.trajectory_path, "w", encoding="utf-8") as f:
+                json.dump(self.trajectory_data, f, indent=2, ensure_ascii=False)
+
+        except (OSError, IOError) as e:
+            print(f"Warning: Failed to save trajectory to {self.trajectory_path}: {e}")
+
+    def get_trajectory_path(self) -> str:
+        """Get the path where the trajectory is being saved."""
+        if self.trajectory_dir:
+            return str(self.trajectory_dir)
+        return "Trajectory path not yet generated."
 
     def record_llm_interaction(
         self,
@@ -205,18 +243,6 @@ class TrajectoryRecorder:
         # Save to file
         self.save_trajectory()
 
-    def save_trajectory(self) -> None:
-        """Save the current trajectory data to file."""
-        try:
-            # Ensure directory exists
-            self.trajectory_path.parent.mkdir(parents=True, exist_ok=True)
-
-            with open(self.trajectory_path, "w", encoding="utf-8") as f:
-                json.dump(self.trajectory_data, f, indent=2, ensure_ascii=False)
-
-        except Exception as e:
-            print(f"Warning: Failed to save trajectory to {self.trajectory_path}: {e}")
-
     def _serialize_message(self, message: LLMMessage) -> dict[str, Any]:
         """Serialize an LLM message to a dictionary."""
         data: dict[str, Any] = {"role": message.role, "content": message.content}
@@ -247,7 +273,3 @@ class TrajectoryRecorder:
             "error": tool_result.error,
             "id": getattr(tool_result, "id", None),
         }
-
-    def get_trajectory_path(self) -> str:
-        """Get the path where trajectory is being saved."""
-        return str(self.trajectory_path)

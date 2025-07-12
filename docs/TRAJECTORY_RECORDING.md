@@ -1,6 +1,6 @@
 # Trajectory Recording Functionality
 
-This document describes the trajectory recording functionality added to the Trae Agent project. The system captures detailed information about LLM interactions and agent execution steps for analysis, debugging, and auditing purposes.
+This document describes the trajectory recording functionality added to the Trae Agent project. The system captures detailed information about LLM interactions and agent execution steps for analysis, debugging, and auditing purposes. All data is saved into a structured directory path.
 
 ## Overview
 
@@ -139,16 +139,20 @@ if self.trajectory_recorder:
 
 ### CLI Usage
 
-#### Basic Recording (Auto-generated filename)
+#### Basic Recording (Auto-generated path)
+When you run the agent, it will automatically create a unique, organized directory for the trajectory.
+
 ```bash
-trae run "Create a hello world Python script"
-# Trajectory saved to: trajectory_20250612_220546.json
+trae-cli run "Create a hello world Python script" --provider anthropic
+# Trajectory saved to directory: trajectories/anthropic/20250712/103000_a1b2c3d4/
 ```
 
 #### Custom Filename
+You can specify a custom directory for the trajectory output.
+
 ```bash
-trae run "Fix the bug in main.py" --trajectory-file my_debug_session.json
-# Trajectory saved to: my_debug_session.json
+trae-cli run "Fix the bug in main.py" --trajectory-path my_trajectories/debug_session_01
+# Trajectory saved to directory: my_trajectories/debug_session_01/
 ```
 
 #### Interactive Mode
@@ -167,19 +171,40 @@ from trae_agent.utils.config import ModelParameters
 agent = TraeAgent(LLMProvider.ANTHROPIC, model_parameters, max_steps=10)
 
 # Set up trajectory recording
-trajectory_path = agent.setup_trajectory_recording("my_trajectory.json")
+trajectory_path = agent.setup_trajectory_recording("my_custom_trajectories/task1")
 
 # Configure and run task
 agent.new_task("My task", task_args)
 execution = await agent.execute_task()
 
 # Trajectory is automatically saved
-print(f"Trajectory saved to: {trajectory_path}")
+print(f"Trajectory saved to: {trajectory_dir_path}")
 ```
 
-## Trajectory File Format
+## Trajectory Output Structure
 
-The trajectory file is a JSON document with the following structure:
+Each agent run generates a unique directory containing the full context and results of the task. The directory structure is designed for easy browsing and analysis.
+
+### Directory Structure
+
+The path to each trajectory is organized by provider and date, with a unique identifier for each run:
+`trajectories/<provider>/<YYYYMMDD>/<HHMMSS_uuid>/`
+
+A typical output directory contains the following files:
+
+```
+.
+└── trajectories/
+    └── anthropic/
+        └── 20250712/
+            └── 103000_a1b2c3d4/
+                ├── prompt.txt         <-- The raw initial prompt for the task
+                └── trajectory.json    <-- The detailed JSON log of the entire run
+```
+
+### Trajectory JSON Format
+
+The `trajectory.json` file is a document with the following structure:
 
 ```json
 {
@@ -302,17 +327,17 @@ The trajectory file is a JSON document with the following structure:
 
 ## File Management
 
-- Trajectory files are saved in the current working directory by default
-- Files use timestamp-based naming if no custom path is provided
-- Files are automatically created/overwritten
-- The system handles directory creation if needed
-- Files are saved continuously during execution (not just at the end)
+- Each run is saved in its own unique directory to prevent collisions and keep all related artifacts together.
+- By default, all trajectories are stored within a top-level `trajectories/` directory in the current working path.
+- Trajectory directories are automatically named and organized using the pattern: `trajectories/<provider>/<date>/<timestamp_uuid>`.
+- Each directory contains the full `trajectory.json` log and the initial `prompt.txt`.
+- Trajectory data is saved continuously during agent execution to ensure no data is lost if the process is interrupted.
 
 ## Security Considerations
 
 - Trajectory files may contain sensitive information (API keys are not logged)
 - Store trajectory files securely if they contain proprietary code or data
-- Consider excluding trajectory files from version control (add `trajectory_*.json` to `.gitignore`)
+- Consider excluding all generated trajectories from version control by adding the `trajectories/` directory to your `.gitignore` file.
 
 ## Example Use Cases
 

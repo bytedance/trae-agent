@@ -18,7 +18,7 @@
 - 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure, OpenRouter, Ollama and Google Gemini APIs
 - 🛠️ **Rich Tool Ecosystem**: File editing, bash execution, sequential thinking, and more
 - 🎯 **Interactive Mode**: Conversational interface for iterative development
-- 📊 **Trajectory Recording**: Detailed logging of all agent actions for debugging and analysis
+- 📊 **Trajectory Recording**: Organized Trajectory Recording: Detailed logs of all agent actions, organized by provider and date for easy analysis.
 - ⚙️ **Flexible Configuration**: JSON-based configuration with environment variable support
 - 🚀 **Easy Installation**: Simple pip-based installation
 
@@ -112,8 +112,8 @@ trae-cli run "Implement a data parsing function" --provider google --model gemin
 # With custom working directory
 trae-cli run "Add unit tests for the utils module" --working-dir /path/to/project
 
-# Save trajectory for debugging
-trae-cli run "Refactor the database module" --trajectory-file debug_session.json
+# Save trajectory to a custom path
+trae-cli run "Refactor the database module" --trajectory-path my_trajectories/refactor_run
 
 # Force to generate patches
 trae-cli run "Update the API endpoints" --must-patch
@@ -206,12 +206,15 @@ For detailed information about all available tools and their capabilities, see [
 
 ## 📊 Trajectory Recording
 
-Trae Agent automatically records detailed execution trajectories for debugging and analysis:
+Trae Agent automatically records detailed execution trajectories into a structured directory for debugging and analysis.
+
+#### Default Behavior
+By default, each run creates a unique, organized directory path.
 
 ```bash
 # Auto-generated trajectory file
 trae-cli run "Debug the authentication module"
-# Saves to: trajectory_20250612_220546.json
+# Saves to trajectories/anthropic/20250712/113000_a1b2c3d4/
 
 # Custom trajectory file
 trae-cli run "Optimize the database queries" --trajectory-file optimization_debug.json
