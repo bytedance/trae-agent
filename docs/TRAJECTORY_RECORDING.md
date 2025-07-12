@@ -5,6 +5,7 @@ This document describes the trajectory recording functionality added to the Trae
 ## Overview
 
 The trajectory recording system captures:
+
 - **Raw LLM interactions**: Input messages, responses, token usage, and tool calls for various providers including Anthropic, OpenAI, Google Gemini, Azure, and others.
 - **Agent execution steps**: State transitions, tool calls, tool results, reflections, and errors
 - **Metadata**: Task description, timestamps, model configuration, and execution metrics
@@ -16,6 +17,7 @@ The trajectory recording system captures:
 The core class that handles recording trajectory data to JSON files.
 
 **Key methods:**
+
 - `start_recording()`: Initialize recording with task metadata
 - `record_llm_interaction()`: Capture LLM request/response pairs
 - `record_agent_step()`: Capture agent execution steps
@@ -26,6 +28,7 @@ The core class that handles recording trajectory data to JSON files.
 All supported LLM clients automatically record interactions when a trajectory recorder is attached.
 
 **Anthropic Client** (`trae_agent/utils/anthropic_client.py`):
+
 ```python
 # Record trajectory if recorder is available
 if self.trajectory_recorder:
@@ -39,6 +42,7 @@ if self.trajectory_recorder:
 ```
 
 **OpenAI Client** (`trae_agent/utils/openai_client.py`):
+
 ```python
 # Record trajectory if recorder is available
 if self.trajectory_recorder:
@@ -52,6 +56,7 @@ if self.trajectory_recorder:
 ```
 
 **Google Gemini Client** (`trae_agent/utils/google_client.py`):
+
 ```python
 # Record trajectory if recorder is available
 if self.trajectory_recorder:
@@ -65,6 +70,7 @@ if self.trajectory_recorder:
 ```
 
 **Azure Client** (`trae_agent/utils/azure_client.py`):
+
 ```python
 # Record trajectory if recorder is available
 if self.trajectory_recorder:
@@ -78,6 +84,7 @@ if self.trajectory_recorder:
 ```
 
 **Doubao Client** (`trae_agent/utils/doubao_client.py`):
+
 ```python
 # Record trajectory if recorder is available
 if self.trajectory_recorder:
@@ -91,6 +98,7 @@ if self.trajectory_recorder:
 ```
 
 **Ollama Client** (`trae_agent/utils/ollama_client.py`):
+
 ```python
 # Record trajectory if recorder is available
 if self.trajectory_recorder:
@@ -104,6 +112,7 @@ if self.trajectory_recorder:
 ```
 
 **OpenRouter Client** (`trae_agent/utils/openrouter_client.py`):
+
 ```python
 # Record trajectory if recorder is available
 if self.trajectory_recorder:
@@ -140,18 +149,21 @@ if self.trajectory_recorder:
 ### CLI Usage
 
 #### Basic Recording (Auto-generated filename)
+
 ```bash
 trae run "Create a hello world Python script"
-# Trajectory saved to: trajectory_20250612_220546.json
+# Trajectory saved to: trajectories/trajectory_20250612_220546.json
 ```
 
 #### Custom Filename
+
 ```bash
 trae run "Fix the bug in main.py" --trajectory-file my_debug_session.json
 # Trajectory saved to: my_debug_session.json
 ```
 
 #### Interactive Mode
+
 ```bash
 trae interactive --trajectory-file session.json
 ```
@@ -265,6 +277,7 @@ The trajectory file is a JSON document with the following structure:
 ### Field Descriptions
 
 **Root Level:**
+
 - `task`: The original task description
 - `start_time`/`end_time`: ISO format timestamps
 - `provider`: LLM provider used (e.g., "anthropic", "openai", "google", "azure", "doubao", "ollama", "openrouter")
@@ -275,6 +288,7 @@ The trajectory file is a JSON document with the following structure:
 - `execution_time`: Total execution time in seconds
 
 **LLM Interactions:**
+
 - `timestamp`: When the interaction occurred
 - `provider`: LLM provider used for this interaction
 - `model`: Model used for this interaction
@@ -283,6 +297,7 @@ The trajectory file is a JSON document with the following structure:
 - `tools_available`: List of tools available during this interaction
 
 **Agent Steps:**
+
 - `step_number`: Sequential step number
 - `state`: Agent state ("thinking", "calling_tool", "reflecting", "completed", "error")
 - `llm_messages`: Messages used in this step
@@ -312,7 +327,7 @@ The trajectory file is a JSON document with the following structure:
 
 - Trajectory files may contain sensitive information (API keys are not logged)
 - Store trajectory files securely if they contain proprietary code or data
-- Consider excluding trajectory files from version control (add `trajectory_*.json` to `.gitignore`)
+- Trajectory files are automatically saved to the `trajectories/` directory, which is excluded from version control
 
 ## Example Use Cases
 
