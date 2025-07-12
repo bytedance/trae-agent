@@ -235,7 +235,7 @@ Notes for using the `str_replace` command:
             output=success_msg,
         )
 
-    def insert(self, path: Path, insert_line: int, new_str: str) -> ToolExecResult:
+    def _insert(self, path: Path, insert_line: int, new_str: str) -> ToolExecResult:
         """Implement the insert command, which inserts new_str at the specified line in the file content."""
         file_text = self.read_file(path).expandtabs()
         new_str = new_str.expandtabs()
@@ -357,4 +357,4 @@ Notes for using the `str_replace` command:
                 error="Parameter `new_str` is required for command: insert",
                 error_code=-1,
             )
-        return self.insert(_path, insert_line, new_str_to_insert)
+        return self._insert(_path, insert_line, new_str_to_insert)
