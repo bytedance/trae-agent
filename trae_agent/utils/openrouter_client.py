@@ -102,10 +102,14 @@ class OpenRouterClient(BaseLLMClient):
                 )
                 break
             except Exception as e:
-                error_message += f"Error {i + 1}: {str(e)}\n"
+                this_error_message = str(e)
+                error_message += f"Error {i + 1}: {this_error_message}\n"
+                sleep_time = random.randint(3, 30)
+                print(
+                    f"OpenRouter API call failed: {this_error_message} will sleep for {sleep_time} seconds and will retry."
+                )
                 # Randomly sleep for 3-30 seconds
-                time.sleep(random.randint(3, 30))
-                continue
+                time.sleep(sleep_time)
 
         if response is None:
             raise ValueError(
@@ -200,53 +204,71 @@ class OpenRouterClient(BaseLLMClient):
     def parse_messages(self, messages: list[LLMMessage]) -> list[ChatCompletionMessageParam]:
         openrouter_messages: list[ChatCompletionMessageParam] = []
         for msg in messages:
-            if msg.tool_call:
-                openrouter_messages.append(
-                    ChatCompletionFunctionMessageParam(
-                        content=json.dumps(
-                            {
-                                "name": msg.tool_call.name,
-                                "arguments": msg.tool_call.arguments,
-                            }
-                        ),
-                        role="function",
-                        name=msg.tool_call.name,
-                    )
-                )
-            elif msg.tool_result:
-                result: str = ""
-                if msg.tool_result.result:
-                    result = result + msg.tool_result.result + "\n"
-                if msg.tool_result.error:
-                    result += "Tool call failed with error:\n"
-                    result += msg.tool_result.error
-                result = result.strip()
+            match msg:
+                case msg if msg.tool_call is not None:
+                    _msg_tool_call_handler(openrouter_messages, msg)
+                case msg if msg.tool_result is not None:
+                    _msg_tool_result_handler(openrouter_messages, msg)
+                case msg if msg.role is not None:
+                    _msg_role_handler(openrouter_messages, msg)
+                case _:
+                    raise ValueError(f"Invalid message: {msg}")
 
-                openrouter_messages.append(
-                    ChatCompletionToolMessageParam(
-                        content=result,
-                        role="tool",
-                        tool_call_id=msg.tool_result.call_id,
-                    )
-                )
-            elif msg.role == "system":
+        return openrouter_messages
+
+
+def _msg_tool_call_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
+    if msg.tool_call:
+        messages.append(
+            ChatCompletionFunctionMessageParam(
+                content=json.dumps(
+                    {
+                        "name": msg.tool_call.name,
+                        "arguments": msg.tool_call.arguments,
+                    }
+                ),
+                role="function",
+                name=msg.tool_call.name,
+            )
+        )
+
+
+def _msg_tool_result_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
+    if msg.tool_result:
+        result: str = ""
+        if msg.tool_result.result:
+            result = result + msg.tool_result.result + "\n"
+        if msg.tool_result.error:
+            result += "Tool call failed with error:\n"
+            result += msg.tool_result.error
+        result = result.strip()
+        messages.append(
+            ChatCompletionToolMessageParam(
+                content=result,
+                role="tool",
+                tool_call_id=msg.tool_result.call_id,
+            )
+        )
+
+
+def _msg_role_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
+    if msg.role:
+        match msg.role:
+            case "system":
                 if not msg.content:
                     raise ValueError("System message content is required")
-                openrouter_messages.append(
+                messages.append(
                     ChatCompletionSystemMessageParam(content=msg.content, role="system")
                 )
-            elif msg.role == "user":
+            case "user":
                 if not msg.content:
                     raise ValueError("User message content is required")
-                openrouter_messages.append(
-                    ChatCompletionUserMessageParam(content=msg.content, role="user")
-                )
-            elif msg.role == "assistant":
+                messages.append(ChatCompletionUserMessageParam(content=msg.content, role="user"))
+            case "assistant":
                 if not msg.content:
                     raise ValueError("Assistant message content is required")
-                openrouter_messages.append(
+                messages.append(
                     ChatCompletionAssistantMessageParam(content=msg.content, role="assistant")
                 )
-            else:
+            case _:
                 raise ValueError(f"Invalid message role: {msg.role}")
-        return openrouter_messages

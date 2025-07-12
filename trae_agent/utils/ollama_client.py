@@ -87,17 +87,21 @@ class OllamaClient(BaseLLMClient):
                 )
                 break
             except Exception as e:
-                error_message += f"Error {i + 1}: {str(e)}\n"
+                this_error_message = str(e)
+                error_message += f"Error {i + 1}: {this_error_message}\n"
+                sleep_time = random.randint(3, 30)
+                print(
+                    f"Ollama API call failed: {this_error_message} will sleep for {sleep_time} seconds and will retry."
+                )
                 # Randomly sleep for 3-30 seconds
-                time.sleep(random.randint(3, 30))
-                continue
+                time.sleep(sleep_time)
 
         if response is None:
             raise ValueError(
                 f"Failed to get response from OpenAI after max retries: {error_message}"
             )
 
-        content = ""
+        content = response.message.content
         tool_calls: list[ToolCall] = []
         if response.message.tool_calls:
             for output_block in response.message.tool_calls:
@@ -157,7 +161,7 @@ class OllamaClient(BaseLLMClient):
             self.trajectory_recorder.record_llm_interaction(
                 messages=messages,
                 response=llm_response,
-                provider="openai",
+                provider="ollama",
                 model=model_parameters.model,
                 tools=tools,
             )
