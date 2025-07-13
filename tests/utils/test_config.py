@@ -168,5 +168,78 @@ class TestConfigBaseURL(unittest.TestCase):
         self.assertEqual(client.base_url, "https://custom-anthropic.example.com")
 
 
+class TestLakeviewConfig(unittest.TestCase):
+    def get_base_config(self):
+        return {
+            "default_provider": "anthropic",
+            "enable_lakeview": True,
+            "model_providers": {
+                "anthropic": {
+                    "api_key": "anthropic-key",
+                    "model": "claude-model",
+                    "max_tokens": 4096,
+                    "temperature": 0.5,
+                    "top_p": 1,
+                    "top_k": 0,
+                    "max_retries": 10,
+                },
+                "doubao": {
+                    "api_key": "doubao-key",
+                    "model": "doubao-model",
+                    "max_tokens": 8192,
+                    "temperature": 0.5,
+                    "top_p": 1,
+                    "max_retries": 20,
+                },
+            },
+        }
+
+    def test_lakeview_defaults_to_main_provider(self):
+        config_data = self.get_base_config()
+
+        config = Config(config_data)
+        assert config.lakeview_config is not None
+        self.assertEqual(config.lakeview_config.model_provider, "anthropic")
+        self.assertEqual(config.lakeview_config.model_name, "claude-model")
+
+    def test_lakeview_null_values_fallback(self):
+        config_data = self.get_base_config()
+        config_data["lakeview_config"] = {"model_provider": None, "model_name": None}
+
+        config = Config(config_data)
+        assert config.lakeview_config is not None
+        self.assertEqual(config.lakeview_config.model_provider, "anthropic")
+        self.assertEqual(config.lakeview_config.model_name, "claude-model")
+
+    def test_lakeview_partial_override_smart_defaults(self):
+        config_data = self.get_base_config()
+        config_data["lakeview_config"] = {"model_provider": "doubao", "model_name": None}
+
+        config = Config(config_data)
+        assert config.lakeview_config is not None
+        self.assertEqual(config.lakeview_config.model_provider, "doubao")
+        self.assertEqual(config.lakeview_config.model_name, "doubao-model")
+
+    def test_lakeview_explicit_values_respected(self):
+        config_data = self.get_base_config()
+        config_data["lakeview_config"] = {
+            "model_provider": "doubao",
+            "model_name": "custom-model-name",
+        }
+
+        config = Config(config_data)
+        assert config.lakeview_config is not None
+        self.assertEqual(config.lakeview_config.model_provider, "doubao")
+        self.assertEqual(config.lakeview_config.model_name, "custom-model-name")
+
+    def test_lakeview_disabled_ignores_config(self):
+        config_data = self.get_base_config()
+        config_data["enable_lakeview"] = False
+        config_data["lakeview_config"] = {"model_provider": "doubao", "model_name": "some-model"}
+
+        config = Config(config_data)
+        self.assertIsNone(config.lakeview_config)
+
+
 if __name__ == "__main__":
     unittest.main()
