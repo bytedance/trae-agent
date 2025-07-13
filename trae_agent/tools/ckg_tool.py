@@ -81,6 +81,7 @@ def initialise_db(codebase_snapshot_hash: str) -> sqlite3.Connection:
 
     database_path = get_ckg_database_path(codebase_snapshot_hash)
     db_connection: Connection = sqlite3.connect(database_path)
+    # TODO: Instead of executing like this, maybe using SQLAlchemy is a better option (improve database independence).
 
     db_connection.execute("""
         CREATE TABLE IF NOT EXISTS functions (
@@ -126,6 +127,7 @@ def insert_entry(
         case FunctionEntry():
             if entry.parent_class:
                 # has a parent class, so we need to insert a class method
+                # TODO: Maybe add a try-catch block to check if the connection is better?
                 db_connection.execute(
                     """
                     INSERT INTO class_methods (name, class_name, file_path, body, start_line, end_line)
