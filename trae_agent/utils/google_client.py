@@ -236,4 +236,3 @@ class GoogleClient(BaseLLMClient):
                 "ToolResult must have a 'name' attribute matching the function that was called."
             )
         return types.Part.from_function_response(name=tool_result.name, response=result_content)
-

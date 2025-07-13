@@ -21,7 +21,7 @@ from openai.types.responses.response_input_param import FunctionCallOutput
 from ..tools.base import Tool, ToolCall, ToolResult
 from ..utils.config import ModelParameters
 from .base_client import BaseLLMClient
-from .llm_basics import LLMMessage, LLMResponse, LLMUsage
+from .llm_basics import LLMMessage, LLMResponse
 from .retry_utils import retry_with
 
 
@@ -58,7 +58,7 @@ class OllamaClient(BaseLLMClient):
                         "name": tool["name"],
                         "description": tool.get("description", ""),
                         "parameters": tool["parameters"],
-                    }
+                    },
                 }
                 for tool in tool_schemas
             ]
