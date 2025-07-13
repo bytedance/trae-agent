@@ -15,6 +15,7 @@ dependencies = [
     "rich>=13.0.0",
     "typing-extensions>=4.0.0",
     "ollama>=0.5.1",
+    "socksio>=1.0.0",
 ]
 
 [project.optional-dependencies]
