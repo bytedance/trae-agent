@@ -1,0 +1,6 @@
+{
+  "default_provider": "llama3",
+  "max_steps": 20,
+  "enable_lakeview": true,
+  "model_providers": {
+    "openai": {
