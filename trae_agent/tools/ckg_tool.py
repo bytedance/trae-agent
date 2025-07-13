@@ -4,6 +4,7 @@
 import hashlib
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from sqlite3 import Connection
 from typing import Literal, override
@@ -11,13 +12,12 @@ from typing import Literal, override
 from tree_sitter import Node, Parser
 from tree_sitter_languages import get_parser
 
-from ..utils.constants import CKG_DATABASE_PATH, get_ckg_database_path
+from trae_agent.tools.run import MAX_RESPONSE_LEN
+
+from ..utils.constants import CKG_DATABASE_EXPIRY_TIME, CKG_DATABASE_PATH, get_ckg_database_path
 from .base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
 
-CKGToolCommands = [
-    "search_function",
-    "search_class",
-]
+CKGToolCommands = ["search_function", "search_class", "search_class_method"]
 
 # We need a mapping from file extension to tree-sitter language name to parse files and build the graph
 extension_to_language = {
@@ -28,28 +28,27 @@ extension_to_language = {
     ".h": "c",
 }
 
-# As tree-sitter uses different names for functions and classes for different programming languages, we define a unified mapping here
-function_types: dict[str, list[str]] = {
-    "python": ["function_definition"],
-    "java": ["method_declaration"],
-    "cpp": ["function_definition"],
-    "c": ["function_definition"],
-}
-
-class_types: dict[str, list[str]] = {
-    "python": ["class_definition"],
-    "java": ["class_declaration"],
-    "cpp": ["class_definition"],
-    "c": ["class_definition"],
-}
+EntryType = Literal["functions", "classes", "class_methods"]
 
 
 @dataclass
-class CKGEntry:
-    type: Literal["function", "class"]
+class FunctionEntry:
     name: str
     file_path: str
     body: str
+    start_line: int
+    end_line: int
+    parent_function: "FunctionEntry | None" = None
+    parent_class: "ClassEntry | None" = None
+
+
+@dataclass
+class ClassEntry:
+    name: str
+    file_path: str
+    body: str
+    fields: list[str]
+    methods: list[str]
     start_line: int
     end_line: int
 
@@ -82,6 +81,7 @@ def initialise_db(codebase_snapshot_hash: str) -> sqlite3.Connection:
 
     database_path = get_ckg_database_path(codebase_snapshot_hash)
     db_connection: Connection = sqlite3.connect(database_path)
+
     db_connection.execute("""
         CREATE TABLE IF NOT EXISTS functions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,18 +89,160 @@ def initialise_db(codebase_snapshot_hash: str) -> sqlite3.Connection:
             file_path TEXT NOT NULL,
             body TEXT NOT NULL,
             start_line INTEGER NOT NULL,
-            end_line INTEGER NOT NULL,
-        );
+            end_line INTEGER NOT NULL
+        )""")
+
+    db_connection.execute("""
         CREATE TABLE IF NOT EXISTS classes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             file_path TEXT NOT NULL,
             body TEXT NOT NULL,
+            fields TEXT NOT NULL,
+            methods TEXT NOT NULL,
             start_line INTEGER NOT NULL,
-            end_line INTEGER NOT NULL,
+            end_line INTEGER NOT NULL
+        )""")
+
+    db_connection.execute("""
+        CREATE TABLE IF NOT EXISTS class_methods (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            class_name TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            body TEXT NOT NULL,
+            start_line INTEGER NOT NULL,
+            end_line INTEGER NOT NULL
         )""")
     db_connection.commit()
     return db_connection
+
+
+def insert_entry(
+    db_connection: sqlite3.Connection, entry_type: EntryType, entry: FunctionEntry | ClassEntry
+):
+    """Insert a function, a class or a class method into the code knowledge graph."""
+    match entry:
+        case FunctionEntry():
+            if entry.parent_class:
+                # has a parent class, so we need to insert a class method
+                db_connection.execute(
+                    """
+                    INSERT INTO class_methods (name, class_name, file_path, body, start_line, end_line)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        entry.name,
+                        entry.parent_class.name,
+                        entry.file_path,
+                        entry.body,
+                        entry.start_line,
+                        entry.end_line,
+                    ),
+                )
+            else:
+                # no parent class, so we need to insert a function
+                db_connection.execute(
+                    """
+                    INSERT INTO functions (name, file_path, body, start_line, end_line)
+                    VALUES (?, ?, ?, ?, ?)
+                """,
+                    (entry.name, entry.file_path, entry.body, entry.start_line, entry.end_line),
+                )
+        case ClassEntry():
+            class_fields: str = "\n".join(entry.fields)
+            class_methods: str = "\n".join(entry.methods)
+            db_connection.execute(
+                """
+                INSERT INTO classes (name, file_path, body, fields, methods, start_line, end_line)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    entry.name,
+                    entry.file_path,
+                    entry.body,
+                    class_fields,
+                    class_methods,
+                    entry.start_line,
+                    entry.end_line,
+                ),
+            )
+    db_connection.commit()
+
+
+def recursive_visit_python(
+    root_node: Node,
+    db_connection: sqlite3.Connection,
+    file_path: str,
+    parent_class: ClassEntry | None = None,
+    parent_function: FunctionEntry | None = None,
+):
+    """Recursively visit the Python AST and insert the entries into the database."""
+    if root_node.type == "function_definition":
+        function_name_node = root_node.child_by_field_name("name")
+        if function_name_node:
+            function_entry = FunctionEntry(
+                name=function_name_node.text.decode(),
+                file_path=file_path,
+                body=root_node.text.decode(),
+                start_line=root_node.start_point[0] + 1,
+                end_line=root_node.end_point[0] + 1,
+            )
+            if parent_function and parent_class:
+                # determine if the function is a method of the class or a function within a function
+                if (
+                    parent_function.start_line >= parent_class.start_line
+                    and parent_function.end_line <= parent_class.end_line
+                ):
+                    function_entry.parent_function = parent_function
+                else:
+                    function_entry.parent_class = parent_class
+            elif parent_function:
+                function_entry.parent_function = parent_function
+            elif parent_class:
+                function_entry.parent_class = parent_class
+
+            if function_entry.parent_class:
+                insert_entry(db_connection, "class_methods", function_entry)
+            else:
+                insert_entry(db_connection, "functions", function_entry)
+
+            parent_function = function_entry
+    elif root_node.type == "class_definition":
+        class_name_node = root_node.child_by_field_name("name")
+        if class_name_node:
+            class_body_node = root_node.child_by_field_name("body")
+            class_methods: list[str] = []
+            class_entry = ClassEntry(
+                name=class_name_node.text.decode(),
+                file_path=file_path,
+                body=root_node.text.decode(),
+                fields=[],
+                methods=[],
+                start_line=root_node.start_point[0] + 1,
+                end_line=root_node.end_point[0] + 1,
+            )
+            if class_body_node:
+                for child in class_body_node.children:
+                    if child.type == "function_definition":
+                        method_name_node = child.child_by_field_name("name")
+                        if method_name_node:
+                            parameters_node = child.child_by_field_name("parameters")
+                            return_type_node = child.child_by_field_name("return_type")
+
+                            class_method_info = method_name_node.text.decode()
+                            if parameters_node:
+                                class_method_info += f"{parameters_node.text.decode()}"
+                            if return_type_node:
+                                class_method_info += f" -> {return_type_node.text.decode()}"
+                            class_methods.append(class_method_info)
+            class_entry.methods = class_methods
+            parent_class = class_entry
+            insert_entry(db_connection, "classes", class_entry)
+
+    if len(root_node.children) != 0:
+        for child in root_node.children:
+            recursive_visit_python(child, db_connection, file_path, parent_class, parent_function)
 
 
 def construct_ckg(db_connection: sqlite3.Connection, codebase_path: Path) -> None:
@@ -109,8 +251,12 @@ def construct_ckg(db_connection: sqlite3.Connection, codebase_path: Path) -> Non
     # lazy load the parsers for the languages when needed
     language_to_parser: dict[str, Parser] = {}
     for file in codebase_path.glob("**/*"):
-        # skip hidden files
-        if file.is_file() and not file.name.startswith("."):
+        # skip hidden files and files in a hidden directory
+        if (
+            file.is_file()
+            and not file.name.startswith(".")
+            and "/." not in file.absolute().as_posix()
+        ):
             extension = file.suffix
             # ignore files with unknown extensions
             if extension not in extension_to_language:
@@ -122,76 +268,29 @@ def construct_ckg(db_connection: sqlite3.Connection, codebase_path: Path) -> Non
                 language_parser = get_parser(language)
                 language_to_parser[language] = language_parser
 
-            # recursively visit the AST and insert the entries into the database
-            def recursive_visit(node: Node, file_name: str, file_language: str):
-                if node.type in function_types[file_language]:
-                    function_name_node = node.child_by_field_name("name")
-                    if function_name_node:
-                        function_entry = CKGEntry(
-                            type="function",
-                            name=function_name_node.text.decode(),
-                            file_path=file_name,
-                            body=node.text.decode(),
-                            start_line=node.start_point[0] + 1,
-                            end_line=node.end_point[0] + 1,
-                        )
-                        insert_entry(db_connection, function_entry)
-                elif node.type in class_types[file_language]:
-                    class_name_node = node.child_by_field_name("name")
-                    if class_name_node:
-                        class_entry = CKGEntry(
-                            type="class",
-                            name=class_name_node.text.decode(),
-                            file_path=file_name,
-                            body=node.text.decode(),
-                            start_line=node.start_point[0],
-                            end_line=node.end_point[0],
-                        )
-                        insert_entry(db_connection, class_entry)
-
-                if len(node.children) != 0:
-                    for child in node.children:
-                        recursive_visit(child, file_name, file_language)
-
             tree = language_parser.parse(file.read_bytes())
             root_node = tree.root_node
 
-            recursive_visit(root_node, file.name, language)
+            match language:
+                case "python":
+                    recursive_visit_python(root_node, db_connection, file.absolute().as_posix())
+                case _:
+                    continue
 
 
-def insert_entry(db_connection: sqlite3.Connection, entry: CKGEntry):
-    """Insert a function into the code knowledge graph."""
-    db_connection.execute(
-        f"""
-        INSERT INTO {entry.type}s (name, file_path, body, start_line, end_line)
-        VALUES (?, ?, ?, ?, ?)
-    """,
-        (entry.name, entry.file_path, entry.body, entry.start_line, entry.end_line),
-    )
-    db_connection.commit()
-
-
-def search_entry(
-    db_connection: sqlite3.Connection, entry_type: Literal["function", "class"], entry_name: str
-) -> list[CKGEntry]:
-    """Search for a function or class in the code knowledge graph."""
-    cursor = db_connection.execute(
-        f"""
-            SELECT name, file_path, body, start_line, end_line FROM {entry_type}s WHERE name = ?
-        """,
-        (entry_name,),
-    )
-    return [
-        CKGEntry(
-            type=entry_type,
-            name=row[0],
-            file_path=row[1],
-            body=row[2],
-            start_line=row[3],
-            end_line=row[4],
-        )
-        for row in cursor.fetchall()
-    ]
+def clear_older_ckg():
+    """Iterate over all the files in the CKG storage directory and delete the ones that are older than 1 week."""
+    for file in CKG_DATABASE_PATH.glob("**/*"):
+        if (
+            file.is_file()
+            and not file.name.startswith(".")
+            and file.name.endswith(".db")
+            and file.stat().st_mtime < datetime.now().timestamp() - CKG_DATABASE_EXPIRY_TIME
+        ):
+            try:
+                file.unlink()
+            except Exception as e:
+                print(f"error deleting older CKG database - {file.absolute().as_posix()}: {e}")
 
 
 class CKGTool(Tool):
@@ -223,8 +322,10 @@ class CKGTool(Tool):
 * State is persistent across command calls and discussions with the user
 * The `search_function` command searches for functions in the codebase
 * The `search_class` command searches for classes in the codebase
+* The `search_class_method` command searches for class methods in the codebase
 * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
 * If multiple entries are found, the tool will return all of them until the truncation is reached.
+* By default, the tool will print function or class bodies as well as the file path and line number of the function or class. You can disable this by setting the `print_body` parameter to `false`.
 """
 
     @override
@@ -249,6 +350,12 @@ class CKGTool(Tool):
                 description="The identifier of the function or class to search for in the code knowledge graph.",
                 required=True,
             ),
+            ToolParameter(
+                name="print_body",
+                type="boolean",
+                description="Whether to print the body of the function or class. This is enabled by default.",
+                required=False,
+            ),
         ]
 
     @override
@@ -271,6 +378,7 @@ class CKGTool(Tool):
                 error=f"No identifier provided for the {self.get_name()} tool",
                 error_code=-1,
             )
+        print_body = bool(arguments.get("print_body")) if "print_body" in arguments else True
 
         codebase_path = Path(path)
         if not codebase_path.exists():
@@ -288,9 +396,17 @@ class CKGTool(Tool):
 
         match command:
             case "search_function":
-                return ToolExecResult(output=self._search_function(ckg_connection, identifier))
+                return ToolExecResult(
+                    output=self._search_function(ckg_connection, identifier, print_body)
+                )
             case "search_class":
-                return ToolExecResult(output=self._search_class(ckg_connection, identifier))
+                return ToolExecResult(
+                    output=self._search_class(ckg_connection, identifier, print_body)
+                )
+            case "search_class_method":
+                return ToolExecResult(
+                    output=self._search_class_method(ckg_connection, identifier, print_body)
+                )
             case _:
                 return ToolExecResult(error=f"Invalid command: {command}", error_code=-1)
 
@@ -300,11 +416,16 @@ class CKGTool(Tool):
         codebase_snapshot_hash = get_folder_snapshot_hash(codebase_path)
 
         if codebase_path not in self._ckg_path:
-            # no previous hash, so we need to initialise the database and construct the CKG
-            db_connection = initialise_db(codebase_snapshot_hash)
-            construct_ckg(db_connection, codebase_path)
-            self._ckg_path[codebase_path] = CKGStorage(db_connection, codebase_snapshot_hash)
-            return db_connection
+            # no previous hash, so we need to check if a previously built ckg exists or otherwise initialise the database and construct the CKG
+            if get_ckg_database_path(codebase_snapshot_hash).exists():
+                db_connection = sqlite3.connect(get_ckg_database_path(codebase_snapshot_hash))
+                self._ckg_path[codebase_path] = CKGStorage(db_connection, codebase_snapshot_hash)
+                return db_connection
+            else:
+                db_connection = initialise_db(codebase_snapshot_hash)
+                construct_ckg(db_connection, codebase_path)
+                self._ckg_path[codebase_path] = CKGStorage(db_connection, codebase_snapshot_hash)
+                return db_connection
         else:
             # the codebase has a previously built CKG, so we need to check if it has changed
             if self._ckg_path[codebase_path].codebase_snapshot_hash != codebase_snapshot_hash:
@@ -320,22 +441,85 @@ class CKGTool(Tool):
                 self._ckg_path[codebase_path] = CKGStorage(db_connection, codebase_snapshot_hash)
             return self._ckg_path[codebase_path].db_connection
 
-    def _search_function(self, ckg_connection: sqlite3.Connection, identifier: str) -> str:
-        """Search for a function in the codebase."""
-        entries = search_entry(ckg_connection, "function", identifier)
-        return "\n".join(
-            [
-                f"{entry.file_path}:{entry.start_line}-{entry.end_line}: {entry.body}"
-                for entry in entries
-            ]
-        )
+    def _search_function(
+        self, ckg_connection: sqlite3.Connection, identifier: str, print_body: bool = True
+    ) -> str:
+        """Search for a function in the ckg database."""
 
-    def _search_class(self, ckg_connection: sqlite3.Connection, identifier: str) -> str:
-        """Search for a class in the codebase."""
-        entries = search_entry(ckg_connection, "class", identifier)
-        return "\n".join(
-            [
-                f"{entry.file_path}:{entry.start_line}-{entry.end_line}: {entry.body}"
-                for entry in entries
-            ]
-        )
+        entries = ckg_connection.execute(
+            """
+            SELECT file_path, start_line, end_line, body FROM functions WHERE name = ?
+            """,
+            (identifier,),
+        ).fetchall()
+
+        if len(entries) == 0:
+            return f"No functions named {identifier} found."
+
+        output = ""
+        for entry in entries:
+            output += f"{entry[0]}:{entry[1]}-{entry[2]}\n"
+            if print_body:
+                output += f"{entry[3]}\n\n"
+
+            if len(output) > MAX_RESPONSE_LEN:
+                output = output[:MAX_RESPONSE_LEN] + "\n<response clipped>"
+                break
+
+        return output
+
+    def _search_class(
+        self, ckg_connection: sqlite3.Connection, identifier: str, print_body: bool = True
+    ) -> str:
+        """Search for a class in the ckg database."""
+
+        entries = ckg_connection.execute(
+            """
+            SELECT file_path, start_line, end_line, fields, methods, body FROM classes WHERE name = ?
+            """,
+            (identifier,),
+        ).fetchall()
+
+        if len(entries) == 0:
+            return f"No classes named {identifier} found."
+
+        output = ""
+        for entry in entries:
+            output += (
+                f"{entry[0]}:{entry[1]}-{entry[2]}\nFields:\n{entry[3]}\nMethods:\n{entry[4]}\n"
+            )
+            if print_body:
+                output += f"{entry[5]}\n\n"
+
+            if len(output) > MAX_RESPONSE_LEN:
+                output = output[:MAX_RESPONSE_LEN] + "\n<response clipped>"
+                break
+
+        return output
+
+    def _search_class_method(
+        self, ckg_connection: sqlite3.Connection, identifier: str, print_body: bool = True
+    ) -> str:
+        """Search for a class method in the ckg database."""
+
+        entries = ckg_connection.execute(
+            """
+            SELECT file_path, start_line, end_line, body, class_name FROM class_methods WHERE name = ?
+            """,
+            (identifier,),
+        ).fetchall()
+
+        if len(entries) == 0:
+            return f"No class methods named {identifier} found."
+
+        output = ""
+        for entry in entries:
+            output += f"{entry[0]}:{entry[1]}-{entry[2]} Within class {entry[4]}\n"
+            if print_body:
+                output += f"{entry[3]}\n\n"
+
+            if len(output) > MAX_RESPONSE_LEN:
+                output = output[:MAX_RESPONSE_LEN] + "\n<response clipped>"
+                break
+
+        return output

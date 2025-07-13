@@ -6,6 +6,7 @@
 from abc import ABC, abstractmethod
 
 from ..tools.base import Tool, ToolCall, ToolExecutor, ToolResult
+from ..tools.ckg_tool import clear_older_ckg
 from ..utils.cli_console import CLIConsole
 from ..utils.config import Config, ModelParameters
 from ..utils.llm_basics import LLMMessage, LLMResponse
@@ -49,6 +50,9 @@ class Agent(ABC):
 
         # Trajectory recorder
         self._trajectory_recorder: TrajectoryRecorder | None = None
+
+        # CKG tool-specific: clear the older CKG databases
+        clear_older_ckg()
 
     @classmethod
     def from_config(cls, config: Config) -> "Agent":
