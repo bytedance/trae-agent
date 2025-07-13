@@ -1,4 +1,5 @@
-"""Utility functions for retry logic."""
+# Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+# SPDX-License-Identifier: MIT
 
 import random
 import time
@@ -12,9 +13,10 @@ def retry_with(
     max_retries: int = 3,
 ) -> Callable[..., T]:
     """
-    Decorator that adds retry logic with exponential backoff.
+    Decorator that adds retry logic with randomized backoff.
     
     Args:
+        func: The function to decorate
         max_retries: Maximum number of retry attempts
     
     Returns:
