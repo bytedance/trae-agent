@@ -174,3 +174,7 @@ trae-config-local.json
 
 # Trajectories
 /trajectories/
+
+# VS Code settings
+.vscode/
+!.vscode/launch.template.json
