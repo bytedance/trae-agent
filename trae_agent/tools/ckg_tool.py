@@ -3,10 +3,8 @@
 
 import hashlib
 import sqlite3
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from sqlite3 import Connection
 from typing import Literal, override
 
 from tree_sitter import Node, Parser
@@ -14,6 +12,8 @@ from tree_sitter_languages import get_parser
 
 from trae_agent.tools.run import MAX_RESPONSE_LEN
 
+from ..db.ckg import CKGStorage, ClassEntry, FunctionEntry
+from ..db.db import DB
 from ..utils.constants import CKG_DATABASE_EXPIRY_TIME, CKG_DATABASE_PATH, get_ckg_database_path
 from .base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
 
@@ -31,34 +31,6 @@ extension_to_language = {
 EntryType = Literal["functions", "classes", "class_methods"]
 
 
-@dataclass
-class FunctionEntry:
-    name: str
-    file_path: str
-    body: str
-    start_line: int
-    end_line: int
-    parent_function: "FunctionEntry | None" = None
-    parent_class: "ClassEntry | None" = None
-
-
-@dataclass
-class ClassEntry:
-    name: str
-    file_path: str
-    body: str
-    fields: list[str]
-    methods: list[str]
-    start_line: int
-    end_line: int
-
-
-@dataclass
-class CKGStorage:
-    db_connection: sqlite3.Connection
-    codebase_snapshot_hash: str
-
-
 def get_folder_snapshot_hash(folder_path: Path) -> str:
     """Get the hash of the folder snapshot, to make sure that the CKG is up to date."""
     hash_md5 = hashlib.md5()
@@ -73,108 +45,9 @@ def get_folder_snapshot_hash(folder_path: Path) -> str:
     return hash_md5.hexdigest()
 
 
-def initialise_db(codebase_snapshot_hash: str) -> sqlite3.Connection:
-    """Initialise the code knowledge graph database. The function creates two tables, one for functions and one for classes."""
-
-    if not CKG_DATABASE_PATH.exists():
-        CKG_DATABASE_PATH.mkdir(parents=True, exist_ok=True)
-
-    database_path = get_ckg_database_path(codebase_snapshot_hash)
-    db_connection: Connection = sqlite3.connect(database_path)
-    # TODO: Instead of executing like this, maybe using SQLAlchemy is a better option (improve database independence).
-
-    db_connection.execute("""
-        CREATE TABLE IF NOT EXISTS functions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            file_path TEXT NOT NULL,
-            body TEXT NOT NULL,
-            start_line INTEGER NOT NULL,
-            end_line INTEGER NOT NULL
-        )""")
-
-    db_connection.execute("""
-        CREATE TABLE IF NOT EXISTS classes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            file_path TEXT NOT NULL,
-            body TEXT NOT NULL,
-            fields TEXT NOT NULL,
-            methods TEXT NOT NULL,
-            start_line INTEGER NOT NULL,
-            end_line INTEGER NOT NULL
-        )""")
-
-    db_connection.execute("""
-        CREATE TABLE IF NOT EXISTS class_methods (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            class_name TEXT NOT NULL,
-            file_path TEXT NOT NULL,
-            body TEXT NOT NULL,
-            start_line INTEGER NOT NULL,
-            end_line INTEGER NOT NULL
-        )""")
-    db_connection.commit()
-    return db_connection
-
-
-def insert_entry(
-    db_connection: sqlite3.Connection, entry_type: EntryType, entry: FunctionEntry | ClassEntry
-):
-    """Insert a function, a class or a class method into the code knowledge graph."""
-    match entry:
-        case FunctionEntry():
-            if entry.parent_class:
-                # has a parent class, so we need to insert a class method
-                # TODO: Maybe add a try-catch block to check if the connection is better?
-                db_connection.execute(
-                    """
-                    INSERT INTO class_methods (name, class_name, file_path, body, start_line, end_line)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        entry.name,
-                        entry.parent_class.name,
-                        entry.file_path,
-                        entry.body,
-                        entry.start_line,
-                        entry.end_line,
-                    ),
-                )
-            else:
-                # no parent class, so we need to insert a function
-                db_connection.execute(
-                    """
-                    INSERT INTO functions (name, file_path, body, start_line, end_line)
-                    VALUES (?, ?, ?, ?, ?)
-                """,
-                    (entry.name, entry.file_path, entry.body, entry.start_line, entry.end_line),
-                )
-        case ClassEntry():
-            class_fields: str = "\n".join(entry.fields)
-            class_methods: str = "\n".join(entry.methods)
-            db_connection.execute(
-                """
-                INSERT INTO classes (name, file_path, body, fields, methods, start_line, end_line)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    entry.name,
-                    entry.file_path,
-                    entry.body,
-                    class_fields,
-                    class_methods,
-                    entry.start_line,
-                    entry.end_line,
-                ),
-            )
-    db_connection.commit()
-
-
 def recursive_visit_python(
     root_node: Node,
-    db_connection: sqlite3.Connection,
+    db: DB,
     file_path: str,
     parent_class: ClassEntry | None = None,
     parent_function: FunctionEntry | None = None,
@@ -203,12 +76,7 @@ def recursive_visit_python(
                 function_entry.parent_function = parent_function
             elif parent_class:
                 function_entry.parent_class = parent_class
-
-            if function_entry.parent_class:
-                insert_entry(db_connection, "class_methods", function_entry)
-            else:
-                insert_entry(db_connection, "functions", function_entry)
-
+            db.insert_entry(function_entry)
             parent_function = function_entry
     elif root_node.type == "class_definition":
         class_name_node = root_node.child_by_field_name("name")
@@ -240,14 +108,14 @@ def recursive_visit_python(
                             class_methods.append(class_method_info)
             class_entry.methods = class_methods
             parent_class = class_entry
-            insert_entry(db_connection, "classes", class_entry)
+            db.insert_entry(class_entry)
 
     if len(root_node.children) != 0:
         for child in root_node.children:
-            recursive_visit_python(child, db_connection, file_path, parent_class, parent_function)
+            recursive_visit_python(child, db, file_path, parent_class, parent_function)
 
 
-def construct_ckg(db_connection: sqlite3.Connection, codebase_path: Path) -> None:
+def construct_ckg(db: DB, codebase_path: Path) -> None:
     """Initialise the code knowledge graph."""
 
     # lazy load the parsers for the languages when needed
@@ -275,7 +143,7 @@ def construct_ckg(db_connection: sqlite3.Connection, codebase_path: Path) -> Non
 
             match language:
                 case "python":
-                    recursive_visit_python(root_node, db_connection, file.absolute().as_posix())
+                    recursive_visit_python(root_node, db, file.absolute().as_posix())
                 case _:
                     continue
 
@@ -309,6 +177,9 @@ class CKGTool(Tool):
         #     }
         # }
         self._ckg_path: dict[Path, CKGStorage] = {}
+        # TODO better ways ?
+        self.db = DB()
+        self.db_connection = self.db.db_connection
 
     @override
     def get_model_provider(self) -> str | None:
@@ -420,14 +291,18 @@ class CKGTool(Tool):
         if codebase_path not in self._ckg_path:
             # no previous hash, so we need to check if a previously built ckg exists or otherwise initialise the database and construct the CKG
             if get_ckg_database_path(codebase_snapshot_hash).exists():
-                db_connection = sqlite3.connect(get_ckg_database_path(codebase_snapshot_hash))
-                self._ckg_path[codebase_path] = CKGStorage(db_connection, codebase_snapshot_hash)
-                return db_connection
+                self.db_connection = sqlite3.connect(get_ckg_database_path(codebase_snapshot_hash))
+                self._ckg_path[codebase_path] = CKGStorage(
+                    self.db_connection, codebase_snapshot_hash
+                )
+                return self.db_connection
             else:
-                db_connection = initialise_db(codebase_snapshot_hash)
-                construct_ckg(db_connection, codebase_path)
-                self._ckg_path[codebase_path] = CKGStorage(db_connection, codebase_snapshot_hash)
-                return db_connection
+                self.db_connection = self.db.init_db(codebase_snapshot_hash)
+                construct_ckg(self.db, codebase_path)
+                self._ckg_path[codebase_path] = CKGStorage(
+                    self.db_connection, codebase_snapshot_hash
+                )
+                return self.db_connection
         else:
             # the codebase has a previously built CKG, so we need to check if it has changed
             if self._ckg_path[codebase_path].codebase_snapshot_hash != codebase_snapshot_hash:
@@ -438,9 +313,13 @@ class CKGTool(Tool):
                 )
                 if old_database_path.exists():
                     old_database_path.unlink()
-                db_connection = initialise_db(codebase_snapshot_hash)
-                construct_ckg(db_connection, codebase_path)
-                self._ckg_path[codebase_path] = CKGStorage(db_connection, codebase_snapshot_hash)
+                self.db_connection = self.db.init_db(codebase_snapshot_hash)
+
+                construct_ckg(self.db, codebase_path)
+
+                self._ckg_path[codebase_path] = CKGStorage(
+                    self.db_connection, codebase_snapshot_hash
+                )
             return self._ckg_path[codebase_path].db_connection
 
     def _search_function(
