@@ -120,41 +120,37 @@ class Tool(ABC):
             "description": self.description,
             "parameters": self.get_input_schema(),
         }
-
     def get_input_schema(self) -> dict[str, object]:
-        """Get the input schema for the tool."""
-        schema: dict[str, object] = {
-            "type": "object",
+    """Get the input schema for the tool."""
+    schema: dict[str, object] = {
+        "type": "object",
+    }
+
+    properties: dict[str, dict[str, str | list[str] | dict[str, object]]] = {}
+    required: list[str] = []
+
+    for param in self.parameters:
+        properties[param.name] = {
+            "type": param.type,
+            "description": param.description,
         }
+        if param.enum:
+            properties[param.name]["enum"] = param.enum
 
-        properties: dict[str, dict[str, str | list[str] | dict[str, object]]] = {}
-        required: list[str] = []
+        if param.items:
+            properties[param.name]["items"] = param.items
 
-        for param in self.parameters:
-            properties[param.name] = {
-                "type": param.type,
-                "description": param.description,
-            }
-            if param.enum:
-                properties[param.name]["enum"] = param.enum
+        if param.required:
+            required.append(param.name)
 
-            if param.items:
-                properties[param.name]["items"] = param.items
+    schema["properties"] = properties
+    if required:
+        schema["required"] = required
 
-            if param.required:
-                required.append(param.name)
+    schema["additionalProperties"] = False  # ✅ Always apply this
 
-        schema["properties"] = properties
-        if len(required) > 0:
-            schema["required"] = required
+    return schema
 
-        # For OpenAI, we need to specify that additional properties are not allowed.
-        # For Gemini, this field is not allowed.
-        if self.model_provider == "openai":
-            # extra properties are not allowed
-            schema["additionalProperties"] = False
-
-        return schema
 
 
 class ToolExecutor:
