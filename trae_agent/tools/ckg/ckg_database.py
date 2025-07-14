@@ -4,6 +4,7 @@
 import hashlib
 import json
 import sqlite3
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -34,16 +35,29 @@ def get_ckg_database_path(codebase_snapshot_hash: str) -> Path:
 
 def get_folder_snapshot_hash(folder_path: Path) -> str:
     """Get the hash of the folder snapshot, to make sure that the CKG is up to date."""
-    hash_md5 = hashlib.md5()
+    # Check if we have any uncommitted changes
+    status_result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=folder_path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
 
-    for file in folder_path.glob("**/*"):
-        if file.is_file() and not file.name.startswith("."):
-            stat = file.stat()
-            hash_md5.update(file.name.encode())
-            hash_md5.update(str(stat.st_mtime).encode())  # modification time
-            hash_md5.update(str(stat.st_size).encode())  # file size
+    # Get the current commit hash
+    commit_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=folder_path, capture_output=True, text=True, timeout=5
+    )
 
-    return hash_md5.hexdigest()
+    base_hash = commit_result.stdout.strip()
+
+    # If no uncommitted changes, just use the commit hash
+    if not status_result.stdout.strip():
+        return f"git-clean-{base_hash}"
+
+    # If there are uncommitted changes, include them in the hash
+    uncommitted_hash = hashlib.md5(status_result.stdout.encode()).hexdigest()[:8]
+    return f"git-dirty-{base_hash}-{uncommitted_hash}"
 
 
 def clear_older_ckg():
