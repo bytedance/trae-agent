@@ -15,7 +15,7 @@
 ## ✨ Features
 
 - 🌊 **Lakeview**: Provides short and concise summarisation for agent steps
-- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure, OpenRouter, Ollama and Google Gemini APIs
+- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure, OpenRouter, Ollama, Llama.cpp and Google Gemini APIs
 - 🛠️ **Rich Tool Ecosystem**: File editing, bash execution, sequential thinking, and more
 - 🎯 **Interactive Mode**: Conversational interface for iterative development
 - 📊 **Trajectory Recording**: Detailed logging of all agent actions for debugging and analysis
@@ -64,6 +64,10 @@ export OPENROUTER_API_KEY="your-openrouter-api-key"
 
 # For Google Gemini
 export GOOGLE_API_KEY="your-google-api-key"
+
+# For Llama.cpp
+export DOUBAO_API_KEY="your-llama-cpp-api-key"
+export LLAMA_CPP_BASE_URL="your-llama-cpp-base-url"
 
 # Optional: For OpenRouter rankings
 export OPENROUTER_SITE_URL="https://your-site.com"

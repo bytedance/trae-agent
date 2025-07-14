@@ -22,6 +22,7 @@ class LLMProvider(Enum):
     OPENROUTER = "openrouter"
     DOUBAO = "doubao"
     GOOGLE = "google"
+    LLAMA_CPP = "llama_cpp"
 
 
 class LLMClient:
@@ -66,6 +67,10 @@ class LLMClient:
                 from .google_client import GoogleClient
 
                 self.client = GoogleClient(model_parameters)
+            case LLMProvider.LLAMA_CPP:
+                from .llama_cpp_client import LlamaCppClient
+
+                self.client = LlamaCppClient(model_parameters)
 
     @property
     def model_parameters(self) -> ModelParameters:
