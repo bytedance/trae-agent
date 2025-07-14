@@ -7,8 +7,8 @@ from pathlib import Path
 from .ckg import ClassEntry, FunctionEntry
 
 """
-    Note that this set of constant code is duplicated with constants.py in util folder 
-    yet for current stage keeping both seems a better option 
+    Note that this set of constant code is duplicated with constants.py in util folder
+    yet for current stage keeping both seems a better option
 """
 LOCAL_STORAGE_PATH = Path.home() / ".trae-agent"
 
