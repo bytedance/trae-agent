@@ -56,7 +56,8 @@ def cli():
 
 
 @cli.command()
-@click.argument("task")
+@click.argument("task", required=False)
+@click.option("--file", "-f", "file_path", help="Path to a file containing the task description.")
 @click.option("--provider", "-p", help="LLM provider to use")
 @click.option("--model", "-m", help="Specific model to use")
 @click.option("--model-base-url", help="Base URL for the model API")
@@ -68,7 +69,8 @@ def cli():
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 @click.option("--patch-path", "-pp", help="Path to patch file")
 def run(
-    task: str,
+    task: str | None,
+    file_path: str | None,
     patch_path: str,
     provider: str | None = None,
     model: str | None = None,
@@ -91,19 +93,33 @@ def run(
         None (it is expected to be ended after calling the run function)
     """
 
+    if file_path:
+        if task:
+            console.print(
+                "[red]Error: Cannot use both a task string and the --file argument.[/red]"
+            )
+            sys.exit(1)
+        try:
+            task = Path(file_path).read_text()
+        except FileNotFoundError:
+            console.print(f"[red]Error: File not found: {file_path}[/red]")
+            sys.exit(1)
+    elif not task:
+        console.print(
+            "[red]Error: Must provide either a task string or use the --file argument.[/red]"
+        )
+        sys.exit(1)
+
     # Change working directory if specified
-    if not working_dir:
-        working_dir = os.getcwd()
+    if working_dir:
         try:
             os.chdir(working_dir)
             console.print(f"[blue]Changed working directory to: {working_dir}[/blue]")
         except Exception as e:
             console.print(f"[red]Error changing directory: {e}[/red]")
             sys.exit(1)
-
-    task_path = Path(task)
-    if task_path.exists() and task_path.is_file():
-        task = task_path.read_text()
+    else:
+        working_dir = os.getcwd()
 
     config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
 

@@ -109,6 +109,7 @@ class OpenRouterClient(BaseLLMClient):
             func=self._create_openrouter_response,
             service_name="OpenRouter",
             max_retries=model_parameters.max_retries,
+            provider_name="openrouter",
         )
         response = retry_decorator(model_parameters, tool_schemas, extra_headers)
 
