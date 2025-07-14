@@ -232,13 +232,26 @@ For more details, see [docs/TRAJECTORY_RECORDING.md](docs/TRAJECTORY_RECORDING.m
 For detailed contribution guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
 1. Fork the repository
-2. Set up a development install(`make install-dev pre-commit-install`)
+2. Set up a development install:
+   ```bash
+   make install-dev
+   ```
 3. Create a feature branch (`git checkout -b feature/amazing-feature`)
 4. Make your changes
 5. Add tests for new functionality
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
+6. Pre-commit check
+   ```bash
+    make pre-commit
+   ```
+    if having formatting error,please try:
+   ```
+    ruff format .
+    ruff check --fix
+   ```
+
+7. Commit your changes (`git commit -m 'Add amazing feature'`)
+8. Push to the branch (`git push origin feature/amazing-feature`)
+9. Open a Pull Request
 
 ### Development Guidelines
 
