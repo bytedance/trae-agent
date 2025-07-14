@@ -115,16 +115,21 @@ class Config:
                     else None,
                 )
 
-        if "lakeview_config" in self._config:
+        # Configure lakeview_config - default to using default_provider settings
+        lakeview_config_data = self._config.get("lakeview_config", {})
+        if self.enable_lakeview:
+            model_provider = lakeview_config_data.get("model_provider", None)
+            model_name = lakeview_config_data.get("model_name", None)
+
+            if model_provider is None:
+                model_provider = self.default_provider
+
+            if model_name is None:
+                model_name = self.model_providers[model_provider].model
+
             self.lakeview_config = LakeviewConfig(
-                model_provider=str(
-                    self._config.get("lakeview_config", {}).get("model_provider", "anthropic")
-                ),
-                model_name=str(
-                    self._config.get("lakeview_config", {}).get(
-                        "model_name", "claude-sonnet-4-20250514"
-                    )
-                ),
+                model_provider=str(model_provider),
+                model_name=str(model_name),
             )
 
         return

@@ -7,6 +7,7 @@ from typing import Type
 
 from .base import Tool, ToolCall, ToolExecutor, ToolResult
 from .bash_tool import BashTool
+from .ckg_tool import CKGTool
 from .edit_tool import TextEditorTool
 from .json_edit_tool import JSONEditTool
 from .sequential_thinking_tool import SequentialThinkingTool
@@ -22,6 +23,7 @@ __all__ = [
     "JSONEditTool",
     "SequentialThinkingTool",
     "TaskDoneTool",
+    "CKGTool",
 ]
 
 tools_registry: dict[str, Type[Tool]] = {
@@ -30,4 +32,5 @@ tools_registry: dict[str, Type[Tool]] = {
     "json_edit_tool": JSONEditTool,
     "sequentialthinking": SequentialThinkingTool,
     "task_done": TaskDoneTool,
+    "ckg": CKGTool,
 }

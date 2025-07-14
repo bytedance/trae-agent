@@ -1,15 +1,16 @@
 # Trae Agent
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
- ![Alpha]( https://img.shields.io/badge/Status-Alpha-red)
- [![Pre-commit](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml)
- [![Unit Tests](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml)
+![Alpha](https://img.shields.io/badge/Status-Alpha-red)
+[![Pre-commit](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml)
+[![Unit Tests](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml)
+[![Discord](https://img.shields.io/discord/1320998163615846420?label=Join%20Discord&color=7289DA)](https://discord.gg/VwaQ4ZBHvC)
 
 **Trae Agent** is an LLM-based agent for general purpose software engineering tasks. It provides a powerful CLI interface that can understand natural language instructions and execute complex software engineering workflows using various tools and LLM providers.
 
 **Project Status:** The project is still being actively developed. Please refer to [docs/roadmap.md](docs/roadmap.md) and [CONTRIBUTING](CONTRIBUTING.md) if you are willing to help us improve Trae Agent.
 
-**Difference with Other CLI Agents:** Trae Agent offers a transparent, modular architecture that researchers and developers can easily modify, extend, and analyze, making it an ideal platform for **studying AI agent architectures, conducting ablation studies, and developing novel agent capabilities**. This ***research-friendly design*** enables the academic and open-source communities to contribute to and build upon the foundational agent framework, fostering innovation in the rapidly evolving field of AI agents.
+**Difference with Other CLI Agents:** Trae Agent offers a transparent, modular architecture that researchers and developers can easily modify, extend, and analyze, making it an ideal platform for **studying AI agent architectures, conducting ablation studies, and developing novel agent capabilities**. This **_research-friendly design_** enables the academic and open-source communities to contribute to and build upon the foundational agent framework, fostering innovation in the rapidly evolving field of AI agents.
 
 ## ✨ Features
 
@@ -33,6 +34,7 @@ cd trae-agent
 uv venv
 uv sync --all-extras
 ```
+
 or use make.
 
 ```bash
@@ -151,6 +153,7 @@ Trae Agent uses a JSON configuration file for settings. Please refer to the `tra
 
 **WARNING:**
 For Doubao users, please use the following base_url.
+
 ```
 base_url=https://ark.cn-beijing.volces.com/api/v3/
 ```
@@ -191,9 +194,8 @@ trae-cli run "Comment this code" --provider ollama --model "qwen3"
 
 - `OPENAI_API_KEY` - OpenAI API key
 - `ANTHROPIC_API_KEY` - Anthropic API key
-- `GOOGLE_API_KEY` - Google API key
-- `OPENROUTER_API_KEY` - OpenRouter API key
 - `GOOGLE_API_KEY` - Google Gemini API key
+- `OPENROUTER_API_KEY` - OpenRouter API key
 - `OPENROUTER_SITE_URL` - (Optional) Your site URL for OpenRouter rankings
 - `OPENROUTER_SITE_NAME` - (Optional) Your site name for OpenRouter rankings
 
@@ -210,7 +212,7 @@ Trae Agent automatically records detailed execution trajectories for debugging a
 ```bash
 # Auto-generated trajectory file
 trae-cli run "Debug the authentication module"
-# Saves to: trajectory_20250612_220546.json
+# Saves to: trajectories/trajectory_20250612_220546.json
 
 # Custom trajectory file
 trae-cli run "Optimize the database queries" --trajectory-file optimization_debug.json
@@ -274,7 +276,6 @@ echo $OPENAI_API_KEY
 echo $ANTHROPIC_API_KEY
 echo $GOOGLE_API_KEY
 echo $OPENROUTER_API_KEY
-echo $GOOGLE_API_KEY
 
 # Check configuration
 trae-cli show-config

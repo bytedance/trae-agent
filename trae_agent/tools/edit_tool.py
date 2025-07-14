@@ -151,7 +151,7 @@ Notes for using the `str_replace` command:
                 f"The path {path} is a directory and only the `view` command can be used on directories"
             )
 
-    async def view(self, path: Path, view_range: list[int] | None = None) -> ToolExecResult:
+    async def _view(self, path: Path, view_range: list[int] | None = None) -> ToolExecResult:
         """Implement the view command"""
         if path.is_dir():
             if view_range:
@@ -235,7 +235,7 @@ Notes for using the `str_replace` command:
             output=success_msg,
         )
 
-    def insert(self, path: Path, insert_line: int, new_str: str) -> ToolExecResult:
+    def _insert(self, path: Path, insert_line: int, new_str: str) -> ToolExecResult:
         """Implement the insert command, which inserts new_str at the specified line in the file content."""
         file_text = self.read_file(path).expandtabs()
         new_str = new_str.expandtabs()
@@ -310,14 +310,14 @@ Notes for using the `str_replace` command:
     async def _view_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
         view_range = arguments.get("view_range", None)
         if view_range is None:
-            return await self.view(_path, None)
+            return await self._view(_path, None)
         if not (isinstance(view_range, list) and all(isinstance(i, int) for i in view_range)):
             return ToolExecResult(
                 error="Parameter `view_range` should be a list of integers.",
                 error_code=-1,
             )
         view_range_int: list[int] = [i for i in view_range if isinstance(i, int)]
-        return await self.view(_path, view_range_int)
+        return await self._view(_path, view_range_int)
 
     def _create_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
         file_text = arguments.get("file_text", None)
@@ -357,4 +357,4 @@ Notes for using the `str_replace` command:
                 error="Parameter `new_str` is required for command: insert",
                 error_code=-1,
             )
-        return self.insert(_path, insert_line, new_str_to_insert)
+        return self._insert(_path, insert_line, new_str_to_insert)

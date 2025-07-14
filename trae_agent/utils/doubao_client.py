@@ -4,12 +4,11 @@
 """Doubao client wrapper with tool integrations"""
 
 import json
-import random
-import time
 from typing import override
 
 import openai
 from openai.types.chat import (
+    ChatCompletion,
     ChatCompletionAssistantMessageParam,
     ChatCompletionFunctionMessageParam,
     ChatCompletionMessageParam,
@@ -28,6 +27,7 @@ from ..tools.base import Tool, ToolCall
 from .base_client import BaseLLMClient
 from .config import ModelParameters
 from .llm_basics import LLMMessage, LLMResponse, LLMUsage
+from .retry_utils import retry_with
 
 
 class DoubaoClient(BaseLLMClient):
@@ -42,6 +42,22 @@ class DoubaoClient(BaseLLMClient):
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
         """Set the chat history."""
         self.message_history = self.parse_messages(messages)
+
+    def _create_doubao_response(
+        self,
+        model_parameters: ModelParameters,
+        tool_schemas: list[ChatCompletionToolParam] | None,
+    ) -> ChatCompletion:
+        """Create a response using Doubao API. This method will be decorated with retry logic."""
+        return self.client.chat.completions.create(
+            model=model_parameters.model,
+            messages=self.message_history,
+            tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
+            temperature=model_parameters.temperature,
+            top_p=model_parameters.top_p,
+            max_tokens=model_parameters.max_tokens,
+            n=1,
+        )
 
     @override
     def chat(
@@ -73,34 +89,12 @@ class DoubaoClient(BaseLLMClient):
                 for tool in tools
             ]
 
-        response = None
-        error_message = ""
-        for i in range(model_parameters.max_retries):
-            try:
-                response = self.client.chat.completions.create(
-                    model=model_parameters.model,
-                    messages=self.message_history,
-                    tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
-                    temperature=model_parameters.temperature,
-                    top_p=model_parameters.top_p,
-                    max_tokens=model_parameters.max_tokens,
-                    n=1,
-                )
-                break
-            except Exception as e:
-                this_error_message = str(e)
-                error_message += f"Error {i + 1}: {this_error_message}\n"
-                sleep_time = random.randint(3, 30)
-                print(
-                    f"Doubao API call failed: {this_error_message} will sleep for {sleep_time} seconds and will retry."
-                )
-                # Randomly sleep for 3-30 seconds
-                time.sleep(sleep_time)
-
-        if response is None:
-            raise ValueError(
-                f"Failed to get response from Doubao after max retries: {error_message}"
-            )
+        # Apply retry decorator to the API call
+        retry_decorator = retry_with(
+            func=self._create_doubao_response,
+            max_retries=model_parameters.max_retries,
+        )
+        response = retry_decorator(model_parameters, tool_schemas)
 
         choice = response.choices[0]
 
