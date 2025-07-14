@@ -94,6 +94,7 @@ class GoogleClient(BaseLLMClient):
         # Apply retry decorator to the API call
         retry_decorator = retry_with(
             func=self._create_google_response,
+            service_name="Google Gemini",
             max_retries=model_parameters.max_retries,
         )
         response = retry_decorator(model_parameters, current_chat_contents, generation_config)
