@@ -12,9 +12,8 @@ from tree_sitter_languages import get_parser
 
 from trae_agent.tools.run import MAX_RESPONSE_LEN
 
-from ..db.ckg import CKGStorage, ClassEntry, FunctionEntry
-from ..db.db import DB
-from ..utils.constants import CKG_DATABASE_EXPIRY_TIME, CKG_DATABASE_PATH, get_ckg_database_path
+from ..utils.db.ckg import CKGStorage, ClassEntry, FunctionEntry
+from ..utils.db.db import CKG_DATABASE_EXPIRY_TIME, CKG_DATABASE_PATH, DB, get_ckg_database_path
 from .base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
 
 CKGToolCommands = ["search_function", "search_class", "search_class_method"]
@@ -24,8 +23,18 @@ extension_to_language = {
     ".py": "python",
     ".java": "java",
     ".cpp": "cpp",
+    ".hpp": "cpp",
+    ".c++": "cpp",
+    ".cxx": "cpp",
+    ".cc": "cpp",
     ".c": "c",
     ".h": "c",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".go": "go",
+    ".rs": "rust",
 }
 
 EntryType = Literal["functions", "classes", "class_methods"]
@@ -199,6 +208,7 @@ class CKGTool(Tool):
 * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
 * If multiple entries are found, the tool will return all of them until the truncation is reached.
 * By default, the tool will print function or class bodies as well as the file path and line number of the function or class. You can disable this by setting the `print_body` parameter to `false`.
+* The CKG is not completely accurate, and may not be able to find all functions or classes in the codebase.
 """
 
     @override

@@ -4,13 +4,8 @@
 import sqlite3
 from pathlib import Path
 
+from ..constants import LOCAL_STORAGE_PATH
 from .ckg import ClassEntry, FunctionEntry
-
-"""
-    Note that this set of constant code is duplicated with constants.py in util folder
-    yet for current stage keeping both seems a better option
-"""
-LOCAL_STORAGE_PATH = Path.home() / ".trae-agent"
 
 CKG_DATABASE_PATH = LOCAL_STORAGE_PATH / "ckg"
 CKG_DATABASE_EXPIRY_TIME = 60 * 60 * 24 * 7  # 1 week in seconds
@@ -47,12 +42,17 @@ class DB:
 
         self.db_connection.commit()
 
-        # do we really need to return ?
         return self.db_connection
 
     def insert_entry(self, entry: FunctionEntry | ClassEntry) -> None:
         """
         Insert entry into db.
+
+        Args:
+            entry: the entry to insert
+
+        Returns:
+            None
         #TODO: add try catch block to avoid connection problem.
         """
         match entry:
@@ -62,13 +62,20 @@ class DB:
             case ClassEntry():
                 self._insert_class_handler(entry)
 
-            case _:
-                # TODO error handling
-                pass
         self.db_connection.commit()
 
     def _insert_function_handler(self, entry: FunctionEntry) -> None:
+        """
+        Insert function entry including functions and class methodsinto db.
+
+        Args:
+            entry: the entry to insert
+
+        Returns:
+            None
+        """
         if entry.parent_class:
+            # if the entry has a parent class, we need to insert a class method
             self.db_connection.execute(
                 """
                     INSERT INTO class_methods (name, class_name, file_path, body, start_line, end_line)
