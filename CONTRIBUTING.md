@@ -17,11 +17,14 @@ There are many ways you can contribute to Trae Agent:
 
 1. Fork the repository
 2. Clone your fork:
+
    ```bash
    git clone https://github.com/bytedance/trae-agent.git
    cd trae-agent
    ```
+
 3. Set up your development environment:
+
    ```bash
    make install-dev
    make pre-commit-install
@@ -36,6 +39,7 @@ make test
 ## Development Process
 
 1. Create a new branch:
+
    ```bash
    git checkout -b feature/amazing-feature
    ```
@@ -48,11 +52,13 @@ make test
    - Maintain type hints and add type checking when possible
 
 3. Commit your changes:
+
    ```bash
    git commit -m 'Add some amazing feature'
    ```
 
 4. Push to your fork:
+
    ```bash
    git push origin feature/amazing-feature
    ```
@@ -88,6 +94,7 @@ make test
 ## Need Help?
 
 If you need help with anything:
+
 - Check existing issues and discussions
 - Join our community channels
 - Ask questions in discussions

@@ -27,10 +27,9 @@ jobs:
 
     - name: Create virtual environment and install dependencies
       run: |
-        uv sync --all-extras
-        source .venv/bin/activate
+        make uv-sync
 
     - name: Run pre-commit hooks
       run: |
         source .venv/bin/activate
-        uv run pre-commit run --all-files
+        make uv-pre-commit

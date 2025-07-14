@@ -66,7 +66,7 @@ JSONPath syntax supported:
             ToolParameter(
                 name="file_path",
                 type="string",
-                description="Absolute path to the JSON file to edit.",
+                description="The full, ABSOLUTE path to the JSON file to edit. You MUST combine the [Project root path] with the file's relative path to construct this. Relative paths are NOT allowed.",
                 required=True,
             ),
             ToolParameter(

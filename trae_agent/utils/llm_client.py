@@ -27,11 +27,15 @@ class LLMProvider(Enum):
 class LLMClient:
     """Main LLM client that supports multiple providers."""
 
-    def __init__(self, provider: str | LLMProvider, model_parameters: ModelParameters):
+    def __init__(
+        self, provider: str | LLMProvider, model_parameters: ModelParameters, max_steps: int
+    ):
         if isinstance(provider, str):
             provider = LLMProvider(provider)
 
         self.provider: LLMProvider = provider
+        self._model_parameters: ModelParameters = model_parameters
+        self._max_steps: int = max_steps
 
         match provider:
             case LLMProvider.OPENAI:
@@ -62,6 +66,16 @@ class LLMClient:
                 from .google_client import GoogleClient
 
                 self.client = GoogleClient(model_parameters)
+
+    @property
+    def model_parameters(self) -> ModelParameters:
+        """Get the model parameters used by this client."""
+        return self._model_parameters
+
+    @property
+    def max_steps(self) -> int:
+        """Get the max steps used by this client."""
+        return self._max_steps
 
     def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for the underlying client."""

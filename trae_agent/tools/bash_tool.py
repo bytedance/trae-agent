@@ -100,10 +100,10 @@ class _BashSession:
                     await asyncio.sleep(self._output_delay)
                     # if we read directly from stdout/stderr, it will wait forever for
                     # EOF. use the StreamReader buffer directly instead.
-                    output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined]
+                    output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
                     if self._sentinel in output:
                         # strip the sentinel and break
-                        output = output[: output.index(self._sentinel)]
+                        output = output[: output.index(self._sentinel)]  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
                         break
         except asyncio.TimeoutError:
             self._timed_out = True
@@ -111,20 +111,20 @@ class _BashSession:
                 f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
             ) from None
 
-        if output.endswith("\n"):
-            output = output[:-1]
+        if output.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
+            output = output[:-1]  # pyright: ignore[reportUnknownVariableType]
 
-        error: str = self._process.stderr._buffer.decode()  # type: ignore[attr-defined]
-        if error.endswith("\n"):
-            error = error[:-1]
+        error: str = self._process.stderr._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
+        if error.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
+            error = error[:-1]  # pyright: ignore[reportUnknownVariableType]
 
         error_code = self._process.returncode if self._process.returncode is not None else 0
 
         # clear the buffers so that the next output can be read correctly
-        self._process.stdout._buffer.clear()  # type: ignore[attr-defined]
-        self._process.stderr._buffer.clear()  # type: ignore[attr-defined]
+        self._process.stdout._buffer.clear()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+        self._process.stderr._buffer.clear()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
 
-        return ToolExecResult(output=output, error=error, error_code=error_code)
+        return ToolExecResult(output=output, error=error, error_code=error_code)  # pyright: ignore[reportUnknownArgumentType]
 
 
 class BashTool(Tool):

@@ -4,13 +4,11 @@
 """Azure client wrapper with tool integrations"""
 
 import json
-import os
-import random
-import time
 from typing import override
 
 import openai
 from openai.types.chat import (
+    ChatCompletion,
     ChatCompletionAssistantMessageParam,
     ChatCompletionFunctionMessageParam,
     ChatCompletionMessageParam,
@@ -29,6 +27,7 @@ from ..tools.base import Tool, ToolCall
 from .base_client import BaseLLMClient
 from .config import ModelParameters
 from .llm_basics import LLMMessage, LLMResponse, LLMUsage
+from .retry_utils import retry_with
 
 
 class AzureClient(BaseLLMClient):
@@ -37,27 +36,8 @@ class AzureClient(BaseLLMClient):
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
 
-        if self.api_key == "":
-            self.api_key: str = os.getenv("AZURE_API_KEY", "")
-
-        if self.api_key == "":
-            raise ValueError(
-                "Azure API key not provided. Set AZURE_API_KEY in environment variables or config file."
-            )
-
-        if self.base_url is None or self.base_url == "":
-            self.base_url: str | None = os.getenv("AZURE_API_BASE_URL")
-
-        if self.base_url is None:
-            raise ValueError(
-                "Azure API base url not provided. Set AZURE_API_BASE_URL in environment variables or config file."
-            )
-
-        if self.api_version is None or self.api_version == "":
-            self.api_version: str | None = os.getenv("AZURE_API_VERSION")
-
-        if self.api_version is None:
-            raise ValueError("Azure API version not provided. ")
+        if not self.base_url:
+            raise ValueError("base_url is required for AzureClient")
 
         self.client: openai.AzureOpenAI = openai.AzureOpenAI(
             azure_endpoint=self.base_url,
@@ -70,6 +50,22 @@ class AzureClient(BaseLLMClient):
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
         """Set the chat history."""
         self.message_history = self.parse_messages(messages)
+
+    def _create_azure_response(
+        self,
+        model_parameters: ModelParameters,
+        tool_schemas: list[ChatCompletionToolParam] | None,
+    ) -> ChatCompletion:
+        """Create a response using Azure OpenAI API. This method will be decorated with retry logic."""
+        return self.client.chat.completions.create(
+            model=model_parameters.model,
+            messages=self.message_history,
+            tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
+            temperature=model_parameters.temperature,
+            top_p=model_parameters.top_p,
+            max_tokens=model_parameters.max_tokens,
+            n=1,
+        )
 
     @override
     def chat(
@@ -101,30 +97,12 @@ class AzureClient(BaseLLMClient):
                 for tool in tools
             ]
 
-        response = None
-        error_message = ""
-        for i in range(model_parameters.max_retries):
-            try:
-                response = self.client.chat.completions.create(
-                    model=model_parameters.model,
-                    messages=self.message_history,
-                    tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
-                    temperature=model_parameters.temperature,
-                    top_p=model_parameters.top_p,
-                    max_tokens=model_parameters.max_tokens,
-                    n=1,
-                )
-                break
-            except Exception as e:
-                error_message += f"Error {i + 1}: {str(e)}\n"
-                # Randomly sleep for 3-30 seconds
-                time.sleep(random.randint(3, 30))
-                continue
-
-        if response is None:
-            raise ValueError(
-                f"Failed to get response from Azure after max retries: {error_message}"
-            )
+        # Apply retry decorator to the API call
+        retry_decorator = retry_with(
+            func=self._create_azure_response,
+            max_retries=model_parameters.max_retries,
+        )
+        response = retry_decorator(model_parameters, tool_schemas)
 
         choice = response.choices[0]
 
@@ -148,8 +126,8 @@ class AzureClient(BaseLLMClient):
             finish_reason=choice.finish_reason,
             model=response.model,
             usage=LLMUsage(
-                input_tokens=response.usage.prompt_tokens,
-                output_tokens=response.usage.completion_tokens,
+                input_tokens=response.usage.prompt_tokens or 0,
+                output_tokens=response.usage.completion_tokens or 0,
             )
             if response.usage
             else None,

@@ -4,13 +4,11 @@
 """Doubao client wrapper with tool integrations"""
 
 import json
-import os
-import random
-import time
 from typing import override
 
 import openai
 from openai.types.chat import (
+    ChatCompletion,
     ChatCompletionAssistantMessageParam,
     ChatCompletionFunctionMessageParam,
     ChatCompletionMessageParam,
@@ -29,6 +27,7 @@ from ..tools.base import Tool, ToolCall
 from .base_client import BaseLLMClient
 from .config import ModelParameters
 from .llm_basics import LLMMessage, LLMResponse, LLMUsage
+from .retry_utils import retry_with
 
 
 class DoubaoClient(BaseLLMClient):
@@ -36,29 +35,6 @@ class DoubaoClient(BaseLLMClient):
 
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
-
-        if self.api_key == "":
-            self.api_key: str = os.getenv("DOUBAO_API_KEY", "")
-
-        if self.api_key == "":
-            raise ValueError(
-                "Doubao API key not provided. Set DOUBAO_API_KEY in environment variables or config file."
-            )
-
-        if self.base_url is None or self.base_url == "":
-            self.base_url: str | None = os.getenv("DOUBAO_API_BASE_URL")
-
-        if self.base_url is None:
-            raise ValueError(
-                "Doubao API base url not provided. Set DOUBAO_API_BASE_URL in environment variables or config file."
-            )
-
-        # if self.api_version is None or self.api_version == "":
-        #     self.api_version: str | None = os.getenv("DOUBAO_API_VERSION")
-
-        # if self.api_version is None:
-        #     raise ValueError("Doubao API version not provided. ")
-
         self.client: openai.OpenAI = openai.OpenAI(base_url=self.base_url, api_key=self.api_key)
         self.message_history: list[ChatCompletionMessageParam] = []
 
@@ -66,6 +42,22 @@ class DoubaoClient(BaseLLMClient):
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
         """Set the chat history."""
         self.message_history = self.parse_messages(messages)
+
+    def _create_doubao_response(
+        self,
+        model_parameters: ModelParameters,
+        tool_schemas: list[ChatCompletionToolParam] | None,
+    ) -> ChatCompletion:
+        """Create a response using Doubao API. This method will be decorated with retry logic."""
+        return self.client.chat.completions.create(
+            model=model_parameters.model,
+            messages=self.message_history,
+            tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
+            temperature=model_parameters.temperature,
+            top_p=model_parameters.top_p,
+            max_tokens=model_parameters.max_tokens,
+            n=1,
+        )
 
     @override
     def chat(
@@ -97,30 +89,12 @@ class DoubaoClient(BaseLLMClient):
                 for tool in tools
             ]
 
-        response = None
-        error_message = ""
-        for i in range(model_parameters.max_retries):
-            try:
-                response = self.client.chat.completions.create(
-                    model=model_parameters.model,
-                    messages=self.message_history,
-                    tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
-                    temperature=model_parameters.temperature,
-                    top_p=model_parameters.top_p,
-                    max_tokens=model_parameters.max_tokens,
-                    n=1,
-                )
-                break
-            except Exception as e:
-                error_message += f"Error {i + 1}: {str(e)}\n"
-                # Randomly sleep for 3-30 seconds
-                time.sleep(random.randint(3, 30))
-                continue
-
-        if response is None:
-            raise ValueError(
-                f"Failed to get response from Doubao after max retries: {error_message}"
-            )
+        # Apply retry decorator to the API call
+        retry_decorator = retry_with(
+            func=self._create_doubao_response,
+            max_retries=model_parameters.max_retries,
+        )
+        response = retry_decorator(model_parameters, tool_schemas)
 
         choice = response.choices[0]
 
@@ -144,8 +118,8 @@ class DoubaoClient(BaseLLMClient):
             finish_reason=choice.finish_reason,
             model=response.model,
             usage=LLMUsage(
-                input_tokens=response.usage.prompt_tokens,
-                output_tokens=response.usage.completion_tokens,
+                input_tokens=response.usage.prompt_tokens or 0,
+                output_tokens=response.usage.completion_tokens or 0,
             )
             if response.usage
             else None,

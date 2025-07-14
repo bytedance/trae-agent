@@ -95,7 +95,7 @@ class LakeView:
             api_version=model_parameters.api_version,
         )
         self.lakeview_llm_client: LLMClient = LLMClient(
-            config.lakeview_config.model_provider, self.model_parameters
+            config.lakeview_config.model_provider, self.model_parameters, config.max_steps
         )
 
         self.steps: list[str] = []

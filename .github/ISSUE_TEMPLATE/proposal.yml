@@ -1,0 +1,32 @@
+name: Feature Proposal
+description: Propose a new feature or enhancement for the trae-agent project
+labels: ['type/feature', 'status/need-triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for contributing your ideas! Please check existing issues at https://github.com/bytedance/trae-agent/issues to avoid duplicates before submitting your proposal.
+
+  - type: textarea
+    id: feature
+    attributes:
+      label: Describe the feature you want to propose
+      description: Provide a detailed explanation of the feature or improvement you suggest.
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: What problem does this feature solve or what benefit does it bring?
+      description: Explain why this feature is important or how it will improve the project.
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation-details
+    attributes:
+      label: Implementation details or suggestions (optional)
+      description: Share any ideas or approaches for how this feature might be implemented.
+    validations:
+      required: false

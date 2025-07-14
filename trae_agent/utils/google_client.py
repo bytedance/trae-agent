@@ -4,9 +4,6 @@
 """Google Gemini API client wrapper with tool integration."""
 
 import json
-import os
-import random
-import time
 import traceback
 import uuid
 from typing import override
@@ -18,6 +15,7 @@ from ..tools.base import Tool, ToolCall, ToolResult
 from .base_client import BaseLLMClient
 from .config import ModelParameters
 from .llm_basics import LLMMessage, LLMResponse, LLMUsage
+from .retry_utils import retry_with
 
 
 class GoogleClient(BaseLLMClient):
@@ -25,16 +23,6 @@ class GoogleClient(BaseLLMClient):
 
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
-
-        if self.api_key == "":
-            google_api_key = os.getenv("GOOGLE_API_KEY")
-            if google_api_key:
-                self.api_key = google_api_key
-
-        if self.api_key == "":
-            raise ValueError(
-                "Google API key not provided. Set GOOGLE_API_KEY in environment variables or config file."
-            )
 
         self.client = genai.Client(api_key=self.api_key)
         self.message_history: list[types.Content] = []
@@ -44,6 +32,19 @@ class GoogleClient(BaseLLMClient):
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
         """Set the chat history."""
         self.message_history, self.system_instruction = self.parse_messages(messages)
+
+    def _create_google_response(
+        self,
+        model_parameters: ModelParameters,
+        current_chat_contents: list[types.Content],
+        generation_config: types.GenerateContentConfig,
+    ) -> types.GenerateContentResponse:
+        """Create a response using Google Gemini API. This method will be decorated with retry logic."""
+        return self.client.models.generate_content(
+            model=model_parameters.model,
+            contents=current_chat_contents,
+            config=generation_config,
+        )
 
     @override
     def chat(
@@ -63,53 +64,39 @@ class GoogleClient(BaseLLMClient):
         else:
             current_chat_contents = newly_parsed_messages
 
+        # Set up generation config
         generation_config = types.GenerateContentConfig(
             temperature=model_parameters.temperature,
             top_p=model_parameters.top_p,
             top_k=model_parameters.top_k,
             max_output_tokens=model_parameters.max_tokens,
-            candidate_count=model_parameters.candidate_count or 1,
+            candidate_count=model_parameters.candidate_count,
             stop_sequences=model_parameters.stop_sequences,
             system_instruction=current_system_instruction,
         )
 
+        # Add tools if provided
         if tools:
-            try:
-                declarations = [
-                    types.FunctionDeclaration(
-                        name=tool.name,
-                        description=tool.description,
-                        parameters=tool.get_input_schema(),
-                    )
-                    for tool in tools
-                ]
-                generation_config.tools = [types.Tool(function_declarations=declarations)]
-            except Exception as e:
-                tb = traceback.format_exc()
-                raise ValueError(
-                    f"Failed to convert tools into Gemini FunctionDeclarations: {e}\n{tb}"
-                ) from e
-
-        response = None
-        error_message = ""
-        for i in range(model_parameters.max_retries):
-            try:
-                response = self.client.models.generate_content(
-                    model=model_parameters.model,
-                    contents=current_chat_contents,
-                    config=generation_config,
+            tool_schemas = [
+                types.Tool(
+                    function_declarations=[
+                        types.FunctionDeclaration(
+                            name=tool.get_name(),
+                            description=tool.get_description(),
+                            parameters=tool.get_input_schema(),  # pyright: ignore[reportArgumentType]
+                        )
+                    ]
                 )
-                break
-            except Exception as e:
-                tb = traceback.format_exc()
-                error_message += f"Error {i + 1}: {str(e)}\nTraceback:\n{tb}\n"
-                time.sleep(random.randint(3, 30))
-                continue
+                for tool in tools
+            ]
+            generation_config.tools = tool_schemas
 
-        if response is None:
-            raise ValueError(
-                f"Failed to get response from Gemini after max retries: {error_message}"
-            )
+        # Apply retry decorator to the API call
+        retry_decorator = retry_with(
+            func=self._create_google_response,
+            max_retries=model_parameters.max_retries,
+        )
+        response = retry_decorator(model_parameters, current_chat_contents, generation_config)
 
         content = ""
         tool_calls: list[ToolCall] = []
@@ -248,5 +235,4 @@ class GoogleClient(BaseLLMClient):
             raise AttributeError(
                 "ToolResult must have a 'name' attribute matching the function that was called."
             )
-
         return types.Part.from_function_response(name=tool_result.name, response=result_content)

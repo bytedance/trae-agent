@@ -73,7 +73,7 @@
     }
   },
   "lakeview_config": {
-    "model_provider": "anthropic",
-    "model_name": "claude-sonnet-4-20250514"
+    "model_provider": null,
+    "model_name": null
   }
 }
