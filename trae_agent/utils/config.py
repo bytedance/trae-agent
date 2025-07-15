@@ -92,14 +92,17 @@ class Config:
                 provider_config: dict[str, Any] = self._config.get("model_providers", {}).get(
                     provider, {}
                 )
+		env_api_key = os.getenv(f"{provider.upper()}_API_KEY")
+    		env_base_url = os.getenv(f"{provider.upper()}_BASE_URL")
 
+    		api_key = provider_config.get("api_key") or env_api_key or ""
+    		base_url = provider_config.get("base_url") or env_base_url
+    		
                 candidate_count = provider_config.get("candidate_count")
                 self.model_providers[provider] = ModelParameters(
                     model=str(provider_config.get("model", "")),
-                    api_key=str(provider_config.get("api_key", "")),
-                    base_url=str(provider_config.get("base_url"))
-                    if "base_url" in provider_config
-                    else None,
+                    api_key=str(api_key),
+		    base_url=str(base_url) if base_url else None,
                     max_tokens=int(provider_config.get("max_tokens", 1000)),
                     temperature=float(provider_config.get("temperature", 0.5)),
                     top_p=float(provider_config.get("top_p", 1)),
