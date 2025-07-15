@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 .PHONY: uv-venv uv-sync install-dev uv-pre-commit uv-test test pre-commit fix-format pre-commit-install pre-commit-run clean
+=======
+.PHONY: uv-venv uv-sync install-dev uv-pre-commit uv-test test pre-commit pre-commit-install pre-commit-run clean
+>>>>>>> edccc07eaa11d9ad97f99ff5fa7f774df6257a31
 
 # Default target
 help:
@@ -12,7 +16,10 @@ help:
 	@echo "  pre-commit-install- Install pre-commit hooks"
 	@echo "  pre-commit-run    - Run pre-commit hooks on all files"
 	@echo "  pre-commit        - Install and run pre-commit hooks on all files"
+<<<<<<< HEAD
 	@echo "  fix-format        - Fix formatting errors"
+=======
+>>>>>>> edccc07eaa11d9ad97f99ff5fa7f774df6257a31
 	@echo "  clean             - Clean up build artifacts and cache"
 
 # Installation commands
