@@ -29,7 +29,17 @@ class TestBashTool(unittest.IsolatedAsyncioTestCase):
         result = await self.tool.execute(ToolCallArguments({"command": "invalid_command_123"}))
 
         # Fix assertion: Check if error message contains 'not found' or 'not recognized' (Windows system)
-        self.assertTrue(any(s in result.error.lower() for s in ["not found", "not recognized"]))
+        error_patterns = [
+            "not found",
+            "not recognized",
+            "is not recognized",
+            "command not found",
+            "no such file",
+        ]
+        self.assertTrue(
+            any(pattern in result.error.lower() for pattern in error_patterns),
+            f"Expected error message to contain one of {error_patterns}, but got: '{result.error}'",
+        )
 
     async def test_session_restart(self):
         # Ensure session is initialized
