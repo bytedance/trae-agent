@@ -25,7 +25,7 @@ class _BashSession:
     command: str = "/bin/bash"
     _output_delay: float = 0.2  # seconds
     _timeout: float = 120.0  # seconds
-    _sentinel: str = "((((bash-command-exit-__ERROR_CODE__-banner))))"
+    _sentinel: str = ",,,,bash-command-exit-__ERROR_CODE__-banner,,,," # `__ERROR_CODE__` will be replaced by `$?` or `!errorlevel!` later
 
     def __init__(self) -> None:
         self._started = False
@@ -50,7 +50,7 @@ class _BashSession:
             )
         else:
             self._process = await asyncio.create_subprocess_shell(
-                "cmd.exe",
+                "cmd.exe /v:on", # enable delayed expansion to allow `echo !errorlevel!`
                 shell=True,
                 bufsize=0,
                 stdin=asyncio.subprocess.PIPE,
@@ -94,10 +94,11 @@ class _BashSession:
         sentinel_before, pivot, sentinel_after = self._sentinel.partition("__ERROR_CODE__")
         assert pivot == "__ERROR_CODE__"
 
-        errcode_retriever = "%errorlevel%" if os.name == "nt" else "$?"
+        errcode_retriever = "!errorlevel!" if os.name == "nt" else "$?"
+        command_sep = "&" if os.name == "nt" else ";"
 
         # send command to the process
-        self._process.stdin.write(command.encode() + f'; echo "{self._sentinel.replace("__ERROR_CODE__", errcode_retriever)}"\n'.encode())
+        self._process.stdin.write(command.encode() + f'{command_sep} echo {self._sentinel.replace("__ERROR_CODE__", errcode_retriever)}\n'.encode())
         await self._process.stdin.drain()
 
         # read output from the process, until the sentinel is found
