@@ -9,6 +9,7 @@ from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
 from trae_agent.utils.config import Config
 from trae_agent.utils.llm_basics import LLMResponse
+from trae_agent.utils.llm_client import LLMClient
 
 
 class TestTraeAgentExtended(unittest.TestCase):
@@ -42,6 +43,24 @@ class TestTraeAgentExtended(unittest.TestCase):
 
     def tearDown(self):
         self.llm_client_patcher.stop()
+
+    def test_init_with_mock_client(self):
+        """Test initializing TraeAgent with a mock client"""
+        # Create a mock LLMClient
+        mock_client = MagicMock(spec=LLMClient)
+        mock_client.model_parameters = self.config.model_providers["anthropic"]
+        mock_client._max_steps = 20
+
+        # Initialize TraeAgent with mock client
+        agent = TraeAgent(llm_client=mock_client)
+
+        # Verify agent initialization
+        self.assertIsNotNone(agent)
+        self.assertEqual(agent.llm_client, mock_client)
+        self.assertEqual(agent.model_parameters, mock_client.model_parameters)
+        self.assertEqual(agent.max_steps, mock_client.max_steps)
+        self.assertEqual(len(agent.initial_messages), 0)
+        self.assertEqual(len(agent.tools), 0)
 
     @patch("trae_agent.utils.trajectory_recorder.TrajectoryRecorder")
     def test_trajectory_setup(self, mock_recorder):
@@ -92,7 +111,7 @@ class TestTraeAgentExtended(unittest.TestCase):
     @patch("asyncio.create_task")
     @patch("trae_agent.utils.cli_console.CLIConsole")
     def test_task_execution_flow(self, mock_console, mock_task):
-        self.agent.cli_console = mock_console
+        self.agent.set_cli_console(mock_console)
         asyncio.run(self.agent.execute_task())
         mock_console.start.assert_called_once()
 
@@ -101,11 +120,11 @@ class TestTraeAgentExtended(unittest.TestCase):
 
         # Test empty patch scenario
         self.agent.must_patch = "true"
-        self.assertFalse(self.agent.is_task_completed(mock_response))
+        self.assertFalse(self.agent._is_task_completed(mock_response))
 
         # Test valid patch scenario
         with patch.object(self.agent, "get_git_diff", return_value="valid patch"):
-            self.assertTrue(self.agent.is_task_completed(mock_response))
+            self.assertTrue(self.agent._is_task_completed(mock_response))
 
     def test_tool_initialization(self):
         tools = [
@@ -122,6 +141,39 @@ class TestTraeAgentExtended(unittest.TestCase):
         self.assertIn("str_replace_based_edit_tool", tool_names)
         self.assertIn("sequentialthinking", tool_names)
         self.assertIn("task_done", tool_names)
+
+    def test_protected_attributes_access_restrictions(self):
+        """Test that protected attributes cannot be accessed directly from outside the class."""
+
+        # Test that accessing protected attributes raises AttributeError
+        with self.assertRaises(AttributeError):
+            self.agent.llm_client = 5
+
+        with self.assertRaises(AttributeError):
+            self.agent.max_steps = None
+
+        with self.assertRaises(AttributeError):
+            self.agent.model_parameters = False
+
+        with self.assertRaises(AttributeError):
+            self.agent.initial_messages = "random"
+
+        with self.assertRaises(AttributeError):
+            _ = self.agent.tool_caller
+
+    def test_public_property_access_allowed(self):
+        """Test that public properties can be accessed properly."""
+
+        # Test that public properties work correctly
+        self.assertIsNotNone(self.agent.llm_client)
+        self.assertIsNone(self.agent.cli_console)
+
+        # Test that public property setters work
+        from trae_agent.utils.cli_console import CLIConsole
+
+        mock_console = MagicMock(spec=CLIConsole)
+        self.agent.set_cli_console(mock_console)
+        self.assertEqual(self.agent.cli_console, mock_console)
 
 
 if __name__ == "__main__":

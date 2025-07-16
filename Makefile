@@ -13,14 +13,17 @@ help:
 	@echo "  clean           - Clean up build artifacts and cache"
 
 # Installation commands
-install:
-	uv pip install -e .
+uv-venv:
+	uv venv
 
-install-test:
-	uv pip install -e ".[test]"
+uv-sync:
+	uv sync --all-extras
 
-install-dev:
-	uv pip install -e ".[test,evaluation]"
+uv-pre-commit:
+	uv run pre-commit run --all-files
+
+uv-test:
+	SKIP_OLLAMA_TEST=true SKIP_OPENROUTER_TEST=true SKIP_GOOGLE_TEST=true uv run pytest tests/ -v --tb=short --continue-on-collection-errors
 
 # Testing commands
 test:

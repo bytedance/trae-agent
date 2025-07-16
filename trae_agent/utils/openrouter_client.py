@@ -5,12 +5,11 @@
 
 import json
 import os
-import random
-import time
 from typing import override
 
 import openai
 from openai.types.chat import (
+    ChatCompletion,
     ChatCompletionAssistantMessageParam,
     ChatCompletionFunctionMessageParam,
     ChatCompletionMessageParam,
@@ -29,6 +28,7 @@ from ..tools.base import Tool, ToolCall
 from ..utils.config import ModelParameters
 from .base_client import BaseLLMClient
 from .llm_basics import LLMMessage, LLMResponse, LLMUsage
+from .retry_utils import retry_with
 
 
 class OpenRouterClient(BaseLLMClient):
@@ -36,14 +36,6 @@ class OpenRouterClient(BaseLLMClient):
 
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
-
-        if self.api_key == "":
-            self.api_key: str = os.getenv("OPENROUTER_API_KEY", "")
-
-        if self.api_key == "":
-            raise ValueError(
-                "OpenRouter API key not provided. Set OPENROUTER_API_KEY in environment variables or config file."
-            )
 
         # Use OpenAI SDK with OpenRouter's base URL
         self.client: openai.OpenAI = openai.OpenAI(api_key=self.api_key, base_url=self.base_url)
@@ -53,6 +45,24 @@ class OpenRouterClient(BaseLLMClient):
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
         """Set the chat history."""
         self.message_history = self.parse_messages(messages)
+
+    def _create_openrouter_response(
+        self,
+        model_parameters: ModelParameters,
+        tool_schemas: list[ChatCompletionToolParam] | None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> ChatCompletion:
+        """Create a response using OpenRouter API. This method will be decorated with retry logic."""
+        return self.client.chat.completions.create(
+            model=model_parameters.model,
+            messages=self.message_history,
+            tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
+            temperature=model_parameters.temperature,
+            top_p=model_parameters.top_p,
+            max_tokens=model_parameters.max_tokens,
+            extra_headers=extra_headers if extra_headers else None,
+            n=1,
+        )
 
     @override
     def chat(
@@ -85,37 +95,21 @@ class OpenRouterClient(BaseLLMClient):
             ]
 
         # Set up extra headers for OpenRouter
-        extra_headers = {}
-        if os.getenv("OPENROUTER_SITE_URL"):
-            extra_headers["HTTP-Referer"] = os.getenv("OPENROUTER_SITE_URL")
-        if os.getenv("OPENROUTER_SITE_NAME"):
-            extra_headers["X-Title"] = os.getenv("OPENROUTER_SITE_NAME")
+        extra_headers: dict[str, str] = {}
 
-        response = None
-        error_message = ""
-        for i in range(model_parameters.max_retries):
-            try:
-                response = self.client.chat.completions.create(
-                    model=model_parameters.model,
-                    messages=self.message_history,
-                    tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
-                    temperature=model_parameters.temperature,
-                    top_p=model_parameters.top_p,
-                    max_tokens=model_parameters.max_tokens,
-                    extra_headers=extra_headers if extra_headers else openai.NOT_GIVEN,
-                    n=1,
-                )
-                break
-            except Exception as e:
-                error_message += f"Error {i + 1}: {str(e)}\n"
-                # Randomly sleep for 3-30 seconds
-                time.sleep(random.randint(3, 30))
-                continue
+        openrouter_site_url = os.getenv("OPENROUTER_SITE_URL")
+        if openrouter_site_url:
+            extra_headers["HTTP-Referer"] = openrouter_site_url
+        openrouter_size_name = os.getenv("OPENROUTER_SITE_NAME")
+        if openrouter_size_name:
+            extra_headers["X-Title"] = openrouter_size_name
 
-        if response is None:
-            raise ValueError(
-                f"Failed to get response from OpenRouter after max retries: {error_message}"
-            )
+        # Apply retry decorator to the API call
+        retry_decorator = retry_with(
+            func=self._create_openrouter_response,
+            max_retries=model_parameters.max_retries,
+        )
+        response = retry_decorator(model_parameters, tool_schemas, extra_headers)
 
         choice = response.choices[0]
 
@@ -142,8 +136,8 @@ class OpenRouterClient(BaseLLMClient):
             model=response.model,
             usage=(
                 LLMUsage(
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
+                    input_tokens=response.usage.prompt_tokens or 0,
+                    output_tokens=response.usage.completion_tokens or 0,
                 )
                 if response.usage
                 else None
@@ -205,53 +199,71 @@ class OpenRouterClient(BaseLLMClient):
     def parse_messages(self, messages: list[LLMMessage]) -> list[ChatCompletionMessageParam]:
         openrouter_messages: list[ChatCompletionMessageParam] = []
         for msg in messages:
-            if msg.tool_call:
-                openrouter_messages.append(
-                    ChatCompletionFunctionMessageParam(
-                        content=json.dumps(
-                            {
-                                "name": msg.tool_call.name,
-                                "arguments": msg.tool_call.arguments,
-                            }
-                        ),
-                        role="function",
-                        name=msg.tool_call.name,
-                    )
-                )
-            elif msg.tool_result:
-                result: str = ""
-                if msg.tool_result.result:
-                    result = result + msg.tool_result.result + "\n"
-                if msg.tool_result.error:
-                    result += "Tool call failed with error:\n"
-                    result += msg.tool_result.error
-                result = result.strip()
+            match msg:
+                case msg if msg.tool_call is not None:
+                    _msg_tool_call_handler(openrouter_messages, msg)
+                case msg if msg.tool_result is not None:
+                    _msg_tool_result_handler(openrouter_messages, msg)
+                case msg if msg.role is not None:
+                    _msg_role_handler(openrouter_messages, msg)
+                case _:
+                    raise ValueError(f"Invalid message: {msg}")
 
-                openrouter_messages.append(
-                    ChatCompletionToolMessageParam(
-                        content=result,
-                        role="tool",
-                        tool_call_id=msg.tool_result.call_id,
-                    )
-                )
-            elif msg.role == "system":
+        return openrouter_messages
+
+
+def _msg_tool_call_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
+    if msg.tool_call:
+        messages.append(
+            ChatCompletionFunctionMessageParam(
+                content=json.dumps(
+                    {
+                        "name": msg.tool_call.name,
+                        "arguments": msg.tool_call.arguments,
+                    }
+                ),
+                role="function",
+                name=msg.tool_call.name,
+            )
+        )
+
+
+def _msg_tool_result_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
+    if msg.tool_result:
+        result: str = ""
+        if msg.tool_result.result:
+            result = result + msg.tool_result.result + "\n"
+        if msg.tool_result.error:
+            result += "Tool call failed with error:\n"
+            result += msg.tool_result.error
+        result = result.strip()
+        messages.append(
+            ChatCompletionToolMessageParam(
+                content=result,
+                role="tool",
+                tool_call_id=msg.tool_result.call_id,
+            )
+        )
+
+
+def _msg_role_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
+    if msg.role:
+        match msg.role:
+            case "system":
                 if not msg.content:
                     raise ValueError("System message content is required")
-                openrouter_messages.append(
+                messages.append(
                     ChatCompletionSystemMessageParam(content=msg.content, role="system")
                 )
-            elif msg.role == "user":
+            case "user":
                 if not msg.content:
                     raise ValueError("User message content is required")
-                openrouter_messages.append(
-                    ChatCompletionUserMessageParam(content=msg.content, role="user")
-                )
-            elif msg.role == "assistant":
+                messages.append(ChatCompletionUserMessageParam(content=msg.content, role="user"))
+            case "assistant":
                 if not msg.content:
                     raise ValueError("Assistant message content is required")
-                openrouter_messages.append(
+                messages.append(
                     ChatCompletionAssistantMessageParam(content=msg.content, role="assistant")
                 )
-            else:
+            case _:
                 raise ValueError(f"Invalid message role: {msg.role}")
-        return openrouter_messages

@@ -28,7 +28,7 @@ class TrajectoryRecorder:
         """
         if trajectory_path is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            trajectory_path = f"trajectory_{timestamp}.json"
+            trajectory_path = f"trajectories/trajectory_{timestamp}.json"
 
         self.trajectory_path: Path = Path(trajectory_path)
         self.trajectory_data: dict[str, Any] = {
@@ -96,8 +96,8 @@ class TrajectoryRecorder:
                 "model": response.model,
                 "finish_reason": response.finish_reason,
                 "usage": {
-                    "input_tokens": response.usage.input_tokens if response.usage else None,
-                    "output_tokens": response.usage.output_tokens if response.usage else None,
+                    "input_tokens": response.usage.input_tokens if response.usage else 0,
+                    "output_tokens": response.usage.output_tokens if response.usage else 0,
                     "cache_creation_input_tokens": getattr(
                         response.usage, "cache_creation_input_tokens", None
                     )

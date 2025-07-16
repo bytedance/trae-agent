@@ -15,6 +15,9 @@ dependencies = [
     "rich>=13.0.0",
     "typing-extensions>=4.0.0",
     "ollama>=0.5.1",
+    "socksio>=1.0.0",
+    "tree-sitter-languages==1.10.2",
+    "tree-sitter==0.21.3",
 ]
 
 [project.optional-dependencies]

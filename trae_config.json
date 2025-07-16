@@ -151,10 +151,5 @@
   "lakeview_config": {
     "model_provider": "anthropic",
     "model_name": "claude-sonnet-4-20250514"
-  },
-  "vector_database": {
-    "type": "chromadb",
-    "path": "./vector_db/",
-    "collection": "default"
   }
 }

@@ -1,17 +1,16 @@
 # Trae Agent
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
- ![Alpha]( https://img.shields.io/badge/Status-Alpha-red)
- [![Pre-commit](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml)
- [![Unit Tests](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml)
-
+![Alpha](https://img.shields.io/badge/Status-Alpha-red)
+[![Pre-commit](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml)
+[![Unit Tests](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml)
+[![Discord](https://img.shields.io/discord/1320998163615846420?label=Join%20Discord&color=7289DA)](https://discord.gg/VwaQ4ZBHvC)
 
 **Trae Agent** is an LLM-based agent for general purpose software engineering tasks. It provides a powerful CLI interface that can understand natural language instructions and execute complex software engineering workflows using various tools and LLM providers.
 
 **Project Status:** The project is still being actively developed. Please refer to [docs/roadmap.md](docs/roadmap.md) and [CONTRIBUTING](CONTRIBUTING.md) if you are willing to help us improve Trae Agent.
 
-**Difference with Other CLI Agents:** Trae Agent offers a transparent, modular architecture that researchers and developers can easily modify, extend, and analyze, making it an ideal platform for **studying AI agent architectures, conducting ablation studies, and developing novel agent capabilities**. This ***research-friendly design*** enables the academic and open-source communities to contribute to and build upon the foundational agent framework, fostering innovation in the rapidly evolving field of AI agents.
-
+**Difference with Other CLI Agents:** Trae Agent offers a transparent, modular architecture that researchers and developers can easily modify, extend, and analyze, making it an ideal platform for **studying AI agent architectures, conducting ablation studies, and developing novel agent capabilities**. This **_research-friendly design_** enables the academic and open-source communities to contribute to and build upon the foundational agent framework, fostering innovation in the rapidly evolving field of AI agents.
 
 ## ✨ Features
 
@@ -32,7 +31,15 @@ We strongly recommend using [uv](https://docs.astral.sh/uv/) to setup the projec
 ```bash
 git clone https://github.com/bytedance/trae-agent.git
 cd trae-agent
-make install
+uv venv
+uv sync --all-extras
+```
+
+or use make.
+
+```bash
+make uv-venv
+make uv-sync
 ```
 
 ### Setup API Keys
@@ -50,7 +57,7 @@ export ANTHROPIC_API_KEY="your-anthropic-api-key"
 
 # For Doubao (also works with other OpenAI-compatible model providers)
 export DOUBAO_API_KEY="your-doubao-api-key"
-export DOUBAO_API_BASE_URL="your-model-provider-base-url"
+export DOUBAO_BASE_URL="your-model-provider-base-url"
 
 # For OpenRouter
 export OPENROUTER_API_KEY="your-openrouter-api-key"
@@ -124,6 +131,7 @@ trae-cli interactive --provider openai --model gpt-4o --max-steps 30
 ```
 
 In interactive mode, you can:
+
 - Type any task description to execute it
 - Use `status` to see agent information
 - Use `help` for available commands
@@ -141,93 +149,17 @@ trae-cli show-config --config-file my_config.json
 
 ### Configuration
 
-Trae Agent uses a JSON configuration file (`trae_config.json`) for settings:
+Trae Agent uses a JSON configuration file for settings. Please refer to the `trae_config.json` file in the root directory for the detailed configuration structure.
 
-```json
-{
-  "default_provider": "anthropic",
-  "max_steps": 20,
-  "enable_lakeview": true,
-  "model_providers": {
-    "openai": {
-      "api_key": "your_openai_api_key",
-      "model": "gpt-4o",
-      "max_tokens": 128000,
-      "temperature": 0.5,
-      "top_p": 1,
-      "max_retries": 10
-    },
-    "anthropic": {
-      "api_key": "your_anthropic_api_key",
-      "model": "claude-sonnet-4-20250514",
-      "max_tokens": 4096,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "google": {
-      "api_key": "your_google_api_key",
-      "model": "gemini-2.5-pro",
-      "max_tokens": 128000,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "azure": {
-      "api_key": "you_azure_api_key",
-      "base_url": "your_azure_base_url",
-      "api_version": "2024-03-01-preview",
-      "model": "model_name",
-      "max_tokens": 4096,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "ollama": {
-      "api_key": "ollama",
-      "base_url": "http://localhost:11434",
-      "model": "model_name",
-      "max_tokens": 4096,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "openrouter": {
-      "api_key": "your_openrouter_api_key",
-      "model": "openai/gpt-4o",
-      "max_tokens": 4096,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "doubao": {
-      "api_key": "you_doubao_api_key",
-      "model": "model_name",
-      "base_url": "your_doubao_base_url",
-      "max_tokens": 8192,
-      "temperature": 0.5,
-      "top_p": 1,
-      "max_retries": 20
-    }
-  },
-  "lakeview_config": {
-    "model_provider": "anthropic",
-    "model_name": "claude-sonnet-4-20250514"
-  }
-}
-```
 **WARNING:**
 For Doubao users, please use the following base_url.
+
 ```
 base_url=https://ark.cn-beijing.volces.com/api/v3/
 ```
 
 **Configuration Priority:**
+
 1. Command-line arguments (highest)
 2. Configuration file values
 3. Environment variables
@@ -251,6 +183,7 @@ trae-cli run "Comment this code" --provider ollama --model "qwen3"
 ```
 
 **Popular OpenRouter Models:**
+
 - `openai/gpt-4o` - Latest GPT-4 model
 - `anthropic/claude-3-5-sonnet` - Excellent for coding tasks
 - `google/gemini-pro` - Strong reasoning capabilities
@@ -261,41 +194,16 @@ trae-cli run "Comment this code" --provider ollama --model "qwen3"
 
 - `OPENAI_API_KEY` - OpenAI API key
 - `ANTHROPIC_API_KEY` - Anthropic API key
-- `GOOGLE_API_KEY` - Google API key
-- `OPENROUTER_API_KEY` - OpenRouter API key
 - `GOOGLE_API_KEY` - Google Gemini API key
+- `OPENROUTER_API_KEY` - OpenRouter API key
 - `OPENROUTER_SITE_URL` - (Optional) Your site URL for OpenRouter rankings
 - `OPENROUTER_SITE_NAME` - (Optional) Your site name for OpenRouter rankings
 
 ## 🛠️ Available Tools
 
-Trae Agent comes with several built-in tools:
+Trae Agent provides a comprehensive toolkit for file editing, bash execution, structured thinking, task completion, and JSON manipulation, with new tools actively being developed and existing ones continuously enhanced.
 
-- **str_replace_based_edit_tool**: Create, edit, view, and manipulate files
-  - `view` - Display file contents or directory listings
-  - `create` - Create new files
-  - `str_replace` - Replace text in files
-  - `insert` - Insert text at specific lines
-
-- **bash**: Execute shell commands and scripts
-  - Run commands with persistent state
-  - Handle long-running processes
-  - Capture output and errors
-
-- **sequential_thinking**: Structured problem-solving and analysis
-  - Break down complex problems
-  - Iterative thinking with revision capabilities
-  - Hypothesis generation and verification
-
-- **task_done**: Signal task completion
-  - Mark tasks as successfully completed
-  - Provide final results and summaries
-
-- **json_edit_tool**: Edit and manipulate JSON files
-  - `view` - Display the entire JSON file or content at specific JSONPaths
-  - `set` - Update existing values at specified JSONPaths
-  - `add` - Add new key-value pairs to objects or append elements to arrays at a given JSONPath
-  - `remove` - Delete elements at specified JSONPaths
+For detailed information about all available tools and their capabilities, see [docs/tools.md](docs/tools.md).
 
 ## 📊 Trajectory Recording
 
@@ -304,13 +212,14 @@ Trae Agent automatically records detailed execution trajectories for debugging a
 ```bash
 # Auto-generated trajectory file
 trae-cli run "Debug the authentication module"
-# Saves to: trajectory_20250612_220546.json
+# Saves to: trajectories/trajectory_20250612_220546.json
 
 # Custom trajectory file
 trae-cli run "Optimize the database queries" --trajectory-file optimization_debug.json
 ```
 
 Trajectory files contain:
+
 - **LLM Interactions**: All messages, responses, and tool calls
 - **Agent Steps**: State transitions and decision points
 - **Tool Usage**: Which tools were called and their results
@@ -353,28 +262,37 @@ For detailed contribution guidelines, please refer to [CONTRIBUTING.md](CONTRIBU
 ### Common Issues
 
 **Import Errors:**
+
 ```bash
 # Try setting PYTHONPATH
 PYTHONPATH=. trae-cli run "your task"
 ```
 
 **API Key Issues:**
+
 ```bash
 # Verify your API keys are set
 echo $OPENAI_API_KEY
 echo $ANTHROPIC_API_KEY
 echo $GOOGLE_API_KEY
 echo $OPENROUTER_API_KEY
-echo $GOOGLE_API_KEY
 
 # Check configuration
 trae-cli show-config
 ```
 
 **Permission Errors:**
+
 ```bash
 # Ensure proper permissions for file operations
 chmod +x /path/to/your/project
+```
+
+**Command not found Errors:**
+
+```bash
+# you can try
+uv run trae-cli `xxxxx`
 ```
 
 ## 📄 License

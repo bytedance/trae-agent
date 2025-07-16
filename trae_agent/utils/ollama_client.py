@@ -6,8 +6,6 @@ Ollama API client wrapper with tool integration
 """
 
 import json
-import random
-import time
 from typing import override
 
 import openai
@@ -24,14 +22,12 @@ from ..tools.base import Tool, ToolCall, ToolResult
 from ..utils.config import ModelParameters
 from .base_client import BaseLLMClient
 from .llm_basics import LLMMessage, LLMResponse
+from .retry_utils import retry_with
 
 
 class OllamaClient(BaseLLMClient):
     def __init__(self, model_parameters: ModelParameters):
         super().__init__(model_parameters)
-
-        # ollama default api key is ollama
-        self.api_key = "ollama"
 
         self.client: openai.OpenAI = openai.OpenAI(
             # by default ollama doesn't require any api key. It should set to be "ollama".
@@ -47,6 +43,34 @@ class OllamaClient(BaseLLMClient):
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
         self.message_history = self.parse_messages(messages)
 
+    def _create_ollama_response(
+        self,
+        model_parameters: ModelParameters,
+        tool_schemas: list[FunctionToolParam] | None,
+    ):
+        """Create a response using Ollama API. This method will be decorated with retry logic."""
+        tools_param = None
+        if tool_schemas:
+            tools_param = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "parameters": tool["parameters"],
+                    },
+                }
+                for tool in tool_schemas
+            ]
+        return ollama_chat(
+            messages=self.message_history,
+            model=model_parameters.model,
+            tools=tools_param,
+            # temperature=model_parameters.temperature,
+            # top_p=model_parameters.top_p,
+            # max_output_tokens=model_parameters.max_tokens,
+        )
+
     @override
     def chat(
         self,
@@ -55,7 +79,7 @@ class OllamaClient(BaseLLMClient):
         tools: list[Tool] | None = None,
         reuse_history: bool = True,
     ) -> LLMResponse:
-        """Send chat messages to OpenAI with optional tool support."""
+        """Send chat messages to Ollama with optional tool support."""
         openai_messages: ResponseInputParam = self.parse_messages(messages)
 
         tool_schemas = None
@@ -76,31 +100,14 @@ class OllamaClient(BaseLLMClient):
         else:
             self.message_history = openai_messages
 
-        response = None
-        error_message = ""
-        for i in range(model_parameters.max_retries):
-            try:
-                response = ollama_chat(
-                    messages=self.message_history,
-                    model=model_parameters.model,
-                    tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
-                    # temperature=model_parameters.temperature,
-                    # top_p=model_parameters.top_p,
-                    # max_output_tokens=model_parameters.max_tokens,
-                )
-                break
-            except Exception as e:
-                error_message += f"Error {i + 1}: {str(e)}\n"
-                # Randomly sleep for 3-30 seconds
-                time.sleep(random.randint(3, 30))
-                continue
+        # Apply retry decorator to the API call
+        retry_decorator = retry_with(
+            func=self._create_ollama_response,
+            max_retries=model_parameters.max_retries,
+        )
+        response = retry_decorator(model_parameters, tool_schemas)
 
-        if response is None:
-            raise ValueError(
-                f"Failed to get response from OpenAI after max retries: {error_message}"
-            )
-
-        content = ""
+        content = response.message.content
         tool_calls: list[ToolCall] = []
         if response.message.tool_calls:
             for output_block in response.message.tool_calls:
@@ -160,7 +167,7 @@ class OllamaClient(BaseLLMClient):
             self.trajectory_recorder.record_llm_interaction(
                 messages=messages,
                 response=llm_response,
-                provider="openai",
+                provider="ollama",
                 model=model_parameters.model,
                 tools=tools,
             )
