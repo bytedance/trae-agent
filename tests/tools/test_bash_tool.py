@@ -62,6 +62,9 @@ class TestBashTool(unittest.IsolatedAsyncioTestCase):
         self.assertIn("no command provided", result.error.lower())
         self.assertEqual(result.error_code, -1)
 
+    async def test_exit_code(self):
+        result = await self.tool.execute(ToolCallArguments({"command": "zzzzzz_not_found"}))
+        self.assertNotEqual(result.error_code, 0)
 
 if __name__ == "__main__":
     unittest.main()
