@@ -121,6 +121,13 @@ def run(
     else:
         working_dir = os.getcwd()
 
+    # Ensure working directory is an absolute path
+    if not Path(working_dir).is_absolute():
+        console.print(
+            f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
+        )
+        sys.exit(1)
+
     config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
 
     # Create agent
