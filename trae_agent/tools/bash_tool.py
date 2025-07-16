@@ -114,11 +114,11 @@ class _BashSession:
                         assert pivot
 
                         # get error code inside banner
-                        error_code, pivot, _ = exit_banner.partition(sentinel_after)
-                        if not pivot or not error_code.isdecimal():
+                        error_code_str, pivot, _ = exit_banner.partition(sentinel_after)
+                        if not pivot or not error_code_str.isdecimal():
                             continue
 
-                        error_code = int(error_code)
+                        error_code = int(error_code_str)
                         break
         except asyncio.TimeoutError:
             self._timed_out = True
