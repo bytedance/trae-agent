@@ -4,6 +4,7 @@
 import hashlib
 import json
 import sqlite3
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -32,8 +33,55 @@ def get_ckg_database_path(codebase_snapshot_hash: str) -> Path:
     return CKG_DATABASE_PATH / f"{codebase_snapshot_hash}.db"
 
 
-def get_folder_snapshot_hash(folder_path: Path) -> str:
-    """Get the hash of the folder snapshot, to make sure that the CKG is up to date."""
+def is_git_repository(folder_path: Path) -> bool:
+    """Check if the folder is a git repository."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=folder_path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0 and result.stdout.strip() == "true"
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def get_git_status_hash(folder_path: Path) -> str:
+    """Get hash for git repository (clean or dirty)."""
+    try:
+        # Check if we have any uncommitted changes
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=folder_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        # Get the current commit hash
+        commit_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=folder_path, capture_output=True, text=True, timeout=5
+        )
+
+        base_hash = commit_result.stdout.strip()
+
+        # If no uncommitted changes, just use the commit hash
+        if not status_result.stdout.strip():
+            return f"git-clean-{base_hash}"
+
+        # If there are uncommitted changes, include them in the hash
+        uncommitted_hash = hashlib.md5(status_result.stdout.encode()).hexdigest()[:8]
+        return f"git-dirty-{base_hash}-{uncommitted_hash}"
+
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        # Fallback to file metadata hash if git commands fail
+        return get_file_metadata_hash(folder_path)
+
+
+def get_file_metadata_hash(folder_path: Path) -> str:
+    """Get hash based on file metadata (name, mtime, size) for non-git repositories."""
     hash_md5 = hashlib.md5()
 
     for file in folder_path.glob("**/*"):
@@ -43,7 +91,17 @@ def get_folder_snapshot_hash(folder_path: Path) -> str:
             hash_md5.update(str(stat.st_mtime).encode())  # modification time
             hash_md5.update(str(stat.st_size).encode())  # file size
 
-    return hash_md5.hexdigest()
+    return f"metadata-{hash_md5.hexdigest()}"
+
+
+def get_folder_snapshot_hash(folder_path: Path) -> str:
+    """Get the hash of the folder snapshot, to make sure that the CKG is up to date."""
+    # Strategy 1: Git repository
+    if is_git_repository(folder_path):
+        return get_git_status_hash(folder_path)
+
+    # Strategy 2: Non-git repository - file metadata
+    return get_file_metadata_hash(folder_path)
 
 
 def clear_older_ckg():
