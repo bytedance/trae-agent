@@ -25,7 +25,7 @@ class _BashSession:
     command: str = "/bin/bash"
     _output_delay: float = 0.2  # seconds
     _timeout: float = 120.0  # seconds
-    _sentinel: str = "<<bash-command-exit:[$?]>>"
+    _sentinel: str = "((((bash-command-exit-__ERROR_CODE__-banner))))"
 
     def __init__(self) -> None:
         self._started = False
@@ -91,11 +91,13 @@ class _BashSession:
 
         error_code = 0
 
-        sentinel_before, pivot, sentinel_after = self._sentinel.partition('$?')
-        assert pivot == '$?'
+        sentinel_before, pivot, sentinel_after = self._sentinel.partition("__ERROR_CODE__")
+        assert pivot == "__ERROR_CODE__"
+
+        errcode_retriever = "%errorlevel%" if os.name == "nt" else "$?"
 
         # send command to the process
-        self._process.stdin.write(command.encode() + f'; echo "{self._sentinel}"\n'.encode())
+        self._process.stdin.write(command.encode() + f'; echo "{self._sentinel.replace("__ERROR_CODE__", errcode_retriever)}"\n'.encode())
         await self._process.stdin.drain()
 
         # read output from the process, until the sentinel is found
