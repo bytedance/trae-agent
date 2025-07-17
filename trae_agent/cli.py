@@ -110,6 +110,18 @@ def run(
         )
         sys.exit(1)
 
+    config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
+    print(config)
+    # Create agent
+    agent: TraeAgent = create_agent(config)
+
+    # Set up trajectory recording
+    trajectory_path = None
+    if trajectory_file:
+        trajectory_path = agent.setup_trajectory_recording(trajectory_file)
+    else:
+        trajectory_path = agent.setup_trajectory_recording()
+
     # Change working directory if specified
     if working_dir:
         try:
@@ -127,19 +139,6 @@ def run(
             f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
         )
         sys.exit(1)
-
-    config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
-
-    # Create agent
-    agent: TraeAgent = create_agent(config)
-
-    # Set up trajectory recording
-    trajectory_path = None
-    if trajectory_file:
-        trajectory_path = agent.setup_trajectory_recording(trajectory_file)
-    else:
-        trajectory_path = agent.setup_trajectory_recording()
-
     # Create CLI Console
     cli_console = CLIConsole(config)
     cli_console.print_task_details(
