@@ -1,5 +1,5 @@
 {
-  "default_provider": "anthropic",
+  "default_provider": "minimax",
   "max_steps": 20,
   "enable_lakeview": true,
   "model_providers": {
@@ -43,11 +43,11 @@
       "max_retries": 10
     },
     "ollama": {
-      "api_key": "ollama",
-      "base_url": "http://localhost:11434/v1",
-      "model": "model_name",
+      "provider": "ollama",
+      "model": "llama3",
+      "base_url": "http://localhost:11434",
       "max_tokens": 4096,
-      "temperature": 0.5,
+      "temperature": 0.9,
       "top_p": 1,
       "top_k": 0,
       "max_retries": 10
@@ -70,10 +70,86 @@
       "temperature": 0.5,
       "top_p": 1,
       "max_retries": 20
+    },
+    "local_transformers": {
+      "provider": "local_transformers",
+      "model": "TheBloke/Llama-2-7B-GGUF",
+      "model_path": "./models/llama-2-7b.gguf",
+      "framework": "transformers",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "minimax": {
+      "provider": "minimax",
+      "api_key": "your_minimax_api_key",
+      "base_url": "https://api.minimax.chat/v1",
+      "model": "abab5.5-chat",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "max_retries": 10
+    },
+    "llama2": {
+      "provider": "local_transformers",
+      "model": "meta-llama/Llama-2-7b-hf",
+      "model_path": "./models/llama-2-7b-hf",
+      "framework": "transformers",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "llama3": {
+      "provider": "local_transformers",
+      "model": "meta-llama/Meta-Llama-3-8B",
+      "model_path": "./models/llama-3-8b",
+      "framework": "transformers",
+      "max_tokens": 8192,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "mistral": {
+      "provider": "local_transformers",
+      "model": "mistralai/Mistral-7B-v0.1",
+      "model_path": "./models/mistral-7b-v0.1",
+      "framework": "transformers",
+      "max_tokens": 8192,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "falcon": {
+      "provider": "local_transformers",
+      "model": "tiiuae/falcon-7b",
+      "model_path": "./models/falcon-7b",
+      "framework": "transformers",
+      "max_tokens": 8192,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "vicuna": {
+      "provider": "local_transformers",
+      "model": "lmsys/vicuna-7b-v1.5",
+      "model_path": "./models/vicuna-7b-v1.5",
+      "framework": "transformers",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
     }
   },
   "lakeview_config": {
-    "model_provider": null,
-    "model_name": null
+    "model_provider": "anthropic",
+    "model_name": "claude-sonnet-4-20250514"
   }
 }
