@@ -96,6 +96,7 @@ class AnthropicClient(BaseLLMClient):
         # Apply retry decorator to the API call
         retry_decorator = retry_with(
             func=self._create_anthropic_response,
+            service_name="Anthropic",
             max_retries=model_parameters.max_retries,
         )
         response = retry_decorator(model_parameters, tool_schemas)

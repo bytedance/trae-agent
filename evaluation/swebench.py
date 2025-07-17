@@ -273,7 +273,7 @@ class SWEBenchEvaluation:
         problem_statement_path = instance_dir + "/problem_statement.txt"
         patch_file_path = instance_dir + f"/{instance['instance_id']}.patch"
         traj_path = instance_dir + f"/{instance['instance_id']}.json"
-        command = f'source trae-agent/.venv/bin/activate && trae-cli run {problem_statement_path} --working-dir="/testbed/" --config-file trae_config_local.json --max-steps 200 --must-patch --patch-path {patch_file_path} --trajectory-file {traj_path}'
+        command = f'source trae-agent/.venv/bin/activate && trae-cli run --file {problem_statement_path} --working-dir="/testbed/" --config-file trae_config_local.json --max-steps 200 --must-patch --patch-path {patch_file_path} --trajectory-file {traj_path}'
         new_command = f"/bin/bash -c '{command}'"
 
         try:

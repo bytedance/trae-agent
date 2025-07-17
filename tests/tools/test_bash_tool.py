@@ -30,6 +30,7 @@ class TestBashTool(unittest.IsolatedAsyncioTestCase):
 
         # Fix assertion: Check if error message contains 'not found' or 'not recognized' (Windows system)
         self.assertTrue(any(s in result.error.lower() for s in ["not found", "not recognized"]))
+        self.assertNotEqual(result.error_code, 0)
 
     async def test_session_restart(self):
         # Ensure session is initialized
