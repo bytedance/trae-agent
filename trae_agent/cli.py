@@ -56,7 +56,8 @@ def cli():
 
 
 @cli.command()
-@click.argument("task")
+@click.argument("task", required=False)
+@click.option("--file", "-f", "file_path", help="Path to a file containing the task description.")
 @click.option("--provider", "-p", help="LLM provider to use")
 @click.option("--model", "-m", help="Specific model to use")
 @click.option("--model-base-url", help="Base URL for the model API")
@@ -68,7 +69,8 @@ def cli():
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 @click.option("--patch-path", "-pp", help="Path to patch file")
 def run(
-    task: str,
+    task: str | None,
+    file_path: str | None,
     patch_path: str,
     provider: str | None = None,
     model: str | None = None,
@@ -91,19 +93,40 @@ def run(
         None (it is expected to be ended after calling the run function)
     """
 
+    if file_path:
+        if task:
+            console.print(
+                "[red]Error: Cannot use both a task string and the --file argument.[/red]"
+            )
+            sys.exit(1)
+        try:
+            task = Path(file_path).read_text()
+        except FileNotFoundError:
+            console.print(f"[red]Error: File not found: {file_path}[/red]")
+            sys.exit(1)
+    elif not task:
+        console.print(
+            "[red]Error: Must provide either a task string or use the --file argument.[/red]"
+        )
+        sys.exit(1)
+
     # Change working directory if specified
-    if not working_dir:
-        working_dir = os.getcwd()
+    if working_dir:
         try:
             os.chdir(working_dir)
             console.print(f"[blue]Changed working directory to: {working_dir}[/blue]")
         except Exception as e:
             console.print(f"[red]Error changing directory: {e}[/red]")
             sys.exit(1)
+    else:
+        working_dir = os.getcwd()
 
-    task_path = Path(task)
-    if task_path.exists() and task_path.is_file():
-        task = task_path.read_text()
+    # Ensure working directory is an absolute path
+    if not Path(working_dir).is_absolute():
+        console.print(
+            f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
+        )
+        sys.exit(1)
 
     config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
 
@@ -271,7 +294,19 @@ def interactive(
 
 @cli.command()
 @click.option("--config-file", help="Path to configuration file", default="trae_config.json")
-def show_config(config_file: str):
+@click.option("--provider", "-p", help="LLM provider to use")
+@click.option("--model", "-m", help="Specific model to use")
+@click.option("--model-base-url", help="Base URL for the model API")
+@click.option("--api-key", "-k", help="API key (or set via environment variable)")
+@click.option("--max-steps", help="Maximum number of execution steps", type=int)
+def show_config(
+    config_file: str,
+    provider: str | None = None,
+    model: str | None = None,
+    model_base_url: str | None = None,
+    api_key: str | None = None,
+    max_steps: int | None = None,
+):
     """Show current configuration settings."""
     config_path = Path(config_file)
     if not config_path.exists():
@@ -285,7 +320,7 @@ Using default settings and environment variables.""",
             )
         )
 
-    config = Config(config_file)
+    config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
 
     # Display general settings
     general_table = Table(title="General Settings")
@@ -298,21 +333,28 @@ Using default settings and environment variables.""",
     console.print(general_table)
 
     # Display provider settings
-    for provider_name, provider_config in config.model_providers.items():
-        provider_table = Table(title=f"{provider_name.title()} Configuration")
-        provider_table.add_column("Setting", style="cyan")
-        provider_table.add_column("Value", style="green")
+    provider_config = config.model_providers[config.default_provider]
+    provider_table = Table(title=f"{config.default_provider.title()} Configuration")
+    provider_table.add_column("Setting", style="cyan")
+    provider_table.add_column("Value", style="green")
 
-        provider_table.add_row("Model", provider_config.model or "Not set")
-        provider_table.add_row("API Key", "Set" if provider_config.api_key else "Not set")
-        provider_table.add_row("Max Tokens", str(provider_config.max_tokens))
-        provider_table.add_row("Temperature", str(provider_config.temperature))
-        provider_table.add_row("Top P", str(provider_config.top_p))
+    provider_table.add_row("Model", provider_config.model or "Not set")
+    provider_table.add_row("Base URL", provider_config.base_url or "Not set")
+    provider_table.add_row("API Version", provider_config.api_version or "Not set")
+    provider_table.add_row(
+        "API Key",
+        f"Set ({provider_config.api_key[:4]}...{provider_config.api_key[-4:]})"
+        if provider_config.api_key
+        else "Not set",
+    )
+    provider_table.add_row("Max Tokens", str(provider_config.max_tokens))
+    provider_table.add_row("Temperature", str(provider_config.temperature))
+    provider_table.add_row("Top P", str(provider_config.top_p))
 
-        if provider_name == "anthropic":
-            provider_table.add_row("Top K", str(provider_config.top_k))
+    if config.default_provider == "anthropic":
+        provider_table.add_row("Top K", str(provider_config.top_k))
 
-        console.print(provider_table)
+    console.print(provider_table)
 
 
 @cli.command()

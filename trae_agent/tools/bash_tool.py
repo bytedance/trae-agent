@@ -25,7 +25,7 @@ class _BashSession:
     command: str = "/bin/bash"
     _output_delay: float = 0.2  # seconds
     _timeout: float = 120.0  # seconds
-    _sentinel: str = "<<exit>>"
+    _sentinel: str = ",,,,bash-command-exit-__ERROR_CODE__-banner,,,,"  # `__ERROR_CODE__` will be replaced by `$?` or `!errorlevel!` later
 
     def __init__(self) -> None:
         self._started = False
@@ -50,7 +50,7 @@ class _BashSession:
             )
         else:
             self._process = await asyncio.create_subprocess_shell(
-                "cmd.exe",
+                "cmd.exe /v:on",  # enable delayed expansion to allow `echo !errorlevel!`
                 shell=True,
                 bufsize=0,
                 stdin=asyncio.subprocess.PIPE,
@@ -89,8 +89,19 @@ class _BashSession:
         assert self._process.stdout
         assert self._process.stderr
 
+        error_code = 0
+
+        sentinel_before, pivot, sentinel_after = self._sentinel.partition("__ERROR_CODE__")
+        assert pivot == "__ERROR_CODE__"
+
+        errcode_retriever = "!errorlevel!" if os.name == "nt" else "$?"
+        command_sep = "&" if os.name == "nt" else ";"
+
         # send command to the process
-        self._process.stdin.write(command.encode() + f"; echo '{self._sentinel}'\n".encode())
+        self._process.stdin.write(
+            command.encode()
+            + f"{command_sep} echo {self._sentinel.replace('__ERROR_CODE__', errcode_retriever)}\n".encode()
+        )
         await self._process.stdin.drain()
 
         # read output from the process, until the sentinel is found
@@ -101,9 +112,17 @@ class _BashSession:
                     # if we read directly from stdout/stderr, it will wait forever for
                     # EOF. use the StreamReader buffer directly instead.
                     output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-                    if self._sentinel in output:
-                        # strip the sentinel and break
-                        output = output[: output.index(self._sentinel)]  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                    if sentinel_before in output:
+                        # strip the sentinel from output
+                        output, pivot, exit_banner = output.rpartition(sentinel_before)
+                        assert pivot
+
+                        # get error code inside banner
+                        error_code_str, pivot, _ = exit_banner.partition(sentinel_after)
+                        if not pivot or not error_code_str.isdecimal():
+                            continue
+
+                        error_code = int(error_code_str)
                         break
         except asyncio.TimeoutError:
             self._timed_out = True
@@ -117,8 +136,6 @@ class _BashSession:
         error: str = self._process.stderr._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
         if error.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
             error = error[:-1]  # pyright: ignore[reportUnknownVariableType]
-
-        error_code = self._process.returncode if self._process.returncode is not None else 0
 
         # clear the buffers so that the next output can be read correctly
         self._process.stdout._buffer.clear()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
