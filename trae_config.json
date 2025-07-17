@@ -70,6 +70,16 @@
       "temperature": 0.5,
       "top_p": 1,
       "max_retries": 20
+    },
+    "llama_cpp": {
+      "api_key": "sk-12345",
+      "base_url": "http://127.0.0.1:8080",
+      "model": "gguf-model-name",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 40,
+      "max_retries": 3
     }
   },
   "lakeview_config": {
