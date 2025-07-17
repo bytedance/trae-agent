@@ -287,7 +287,19 @@ def interactive(
 
 @cli.command()
 @click.option("--config-file", help="Path to configuration file", default="trae_config.json")
-def show_config(config_file: str):
+@click.option("--provider", "-p", help="LLM provider to use")
+@click.option("--model", "-m", help="Specific model to use")
+@click.option("--model-base-url", help="Base URL for the model API")
+@click.option("--api-key", "-k", help="API key (or set via environment variable)")
+@click.option("--max-steps", help="Maximum number of execution steps", type=int)
+def show_config(
+    config_file: str,
+    provider: str | None = None,
+    model: str | None = None,
+    model_base_url: str | None = None,
+    api_key: str | None = None,
+    max_steps: int | None = None,
+):
     """Show current configuration settings."""
     config_path = Path(config_file)
     if not config_path.exists():
@@ -301,7 +313,7 @@ Using default settings and environment variables.""",
             )
         )
 
-    config = Config(config_file)
+    config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
 
     # Display general settings
     general_table = Table(title="General Settings")
@@ -314,21 +326,28 @@ Using default settings and environment variables.""",
     console.print(general_table)
 
     # Display provider settings
-    for provider_name, provider_config in config.model_providers.items():
-        provider_table = Table(title=f"{provider_name.title()} Configuration")
-        provider_table.add_column("Setting", style="cyan")
-        provider_table.add_column("Value", style="green")
+    provider_config = config.model_providers[config.default_provider]
+    provider_table = Table(title=f"{config.default_provider.title()} Configuration")
+    provider_table.add_column("Setting", style="cyan")
+    provider_table.add_column("Value", style="green")
 
-        provider_table.add_row("Model", provider_config.model or "Not set")
-        provider_table.add_row("API Key", "Set" if provider_config.api_key else "Not set")
-        provider_table.add_row("Max Tokens", str(provider_config.max_tokens))
-        provider_table.add_row("Temperature", str(provider_config.temperature))
-        provider_table.add_row("Top P", str(provider_config.top_p))
+    provider_table.add_row("Model", provider_config.model or "Not set")
+    provider_table.add_row("Base URL", provider_config.base_url or "Not set")
+    provider_table.add_row("API Version", provider_config.api_version or "Not set")
+    provider_table.add_row(
+        "API Key",
+        f"Set ({provider_config.api_key[:4]}...{provider_config.api_key[-4:]})"
+        if provider_config.api_key
+        else "Not set",
+    )
+    provider_table.add_row("Max Tokens", str(provider_config.max_tokens))
+    provider_table.add_row("Temperature", str(provider_config.temperature))
+    provider_table.add_row("Top P", str(provider_config.top_p))
 
-        if provider_name == "anthropic":
-            provider_table.add_row("Top K", str(provider_config.top_k))
+    if config.default_provider == "anthropic":
+        provider_table.add_row("Top K", str(provider_config.top_k))
 
-        console.print(provider_table)
+    console.print(provider_table)
 
 
 @cli.command()
