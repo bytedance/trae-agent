@@ -149,6 +149,9 @@ class SWEBenchEvaluation:
         except Exception:
             image = self.docker_client.images.pull("ubuntu:22.04")
 
+        repo_root_path = Path(__file__).parent.parent
+        assert (repo_root_path / 'trae_agent' / '__init__.py').is_file()
+
         container = self.docker_client.containers.run(
             image=image,
             command="bash",
@@ -156,16 +159,18 @@ class SWEBenchEvaluation:
             tty=True,
             stdin_open=True,
             volumes={
-                self.working_dir.absolute().as_posix(): {"bind": "/trae-workspace", "mode": "rw"}
+                self.working_dir.absolute().as_posix(): {"bind": "/trae-workspace", "mode": "rw"},
+                repo_root_path.absolute().as_posix(): {"bind": "/trae-src", "mode": "ro"},
             },
             environment=self.docker_env_config.get("preparation_env", None),  # pyright: ignore[reportUnknownMemberType]
         )
 
         commands = [
             "apt-get update",
-            "apt-get install -y curl git",
+            "apt-get install -y curl",
             "curl -LsSf https://astral.sh/uv/install.sh | sh",
-            "git clone https://github.com/bytedance/trae-agent.git /trae-workspace/trae-agent",
+            "rm -rf /trae-workspace/trae-agent && mkdir /trae-workspace/trae-agent",
+            "cp -r -t /trae-workspace/trae-agent/ /trae-src/trae_agent /trae-src/.python-version /trae-src/pyproject.toml /trae-src/uv.lock /trae-src/README.md",
             "cd /trae-workspace/trae-agent && source $HOME/.local/bin/env && uv sync",
         ]
 
