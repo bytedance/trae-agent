@@ -112,7 +112,7 @@ class OllamaClient(BaseLLMClient):
         tool_calls: list[ToolCall] = []
         if response.message.tool_calls:
             for output_block in response.message.tool_calls:
-                if output_block.type == "function_call":
+                if hasattr(output_block, "name") and hasattr(output_block, "arguments"):
                     tool_calls.append(
                         ToolCall(
                             call_id=output_block.call_id,
@@ -134,10 +134,11 @@ class OllamaClient(BaseLLMClient):
                     if output_block.id:
                         tool_call_param["id"] = output_block.id
                     self.message_history.append(tool_call_param)
-                elif output_block.type == "message":
-                    for content_block in output_block.content:
-                        if content_block.type == "output_text":
-                            content += content_block.text
+                elif hasattr(output_block, "type") and output_block.type == "message":
+                    if hasattr(output_block, "content"):
+                        for content_block in output_block.content:
+                            if hasattr(content_block, "type") and content_block.type == "output_text":
+                                content += content_block.text
 
         if content != "":
             self.message_history.append(
