@@ -99,8 +99,9 @@ class _BashSession:
 
         # send command to the process
         self._process.stdin.write(
-            command.encode()
-            + f"\n{command_sep} echo {self._sentinel.replace('__ERROR_CODE__', errcode_retriever)}\n".encode()
+            b"(\n"
+            + command.encode()
+            + f"\n){command_sep} echo {self._sentinel.replace('__ERROR_CODE__', errcode_retriever)}\n".encode()
         )
         await self._process.stdin.drain()
 
