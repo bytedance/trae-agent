@@ -171,6 +171,7 @@ cython_debug/
 #.idea/
 
 trae-config-local.json
+trae_config.json
 
 # Trajectories
 /trajectories/
