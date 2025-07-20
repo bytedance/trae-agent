@@ -32,7 +32,7 @@ class TestOllamaClient(unittest.TestCase):
         """
         model_parameters = ModelParameters(
             TEST_MODEL,
-            "api-key",
+            "ollama",
             1000,
             0.8,
             7.0,
