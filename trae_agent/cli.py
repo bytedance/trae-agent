@@ -111,7 +111,6 @@ def run(
         sys.exit(1)
 
     config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
-    print(config)
     # Create agent
     agent: TraeAgent = create_agent(config)
 
