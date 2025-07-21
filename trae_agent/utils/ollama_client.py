@@ -137,7 +137,10 @@ class OllamaClient(BaseLLMClient):
                 elif hasattr(output_block, "type") and output_block.type == "message":
                     if hasattr(output_block, "content"):
                         for content_block in output_block.content:
-                            if hasattr(content_block, "type") and content_block.type == "output_text":
+                            if (
+                                hasattr(content_block, "type")
+                                and content_block.type == "output_text"
+                            ):
                                 content += content_block.text
 
         if content != "":
