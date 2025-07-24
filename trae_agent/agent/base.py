@@ -138,9 +138,7 @@ class Agent(ABC):
         import time
 
         start_time = time.time()
-
         execution = AgentExecution(task=self._task, steps=[])
-
         step: AgentStep | None = None
 
         try:
@@ -148,59 +146,15 @@ class Agent(ABC):
             step_number = 1
 
             while step_number <= self._max_steps:
-                step = AgentStep(step_number=step_number, state=AgentState.THINKING)
-
+                step = self._create_new_step(step_number)
                 try:
-                    step.state = AgentState.THINKING
-                    # Display thinking state
-                    self._update_cli_console(step)
-
-                    # Get LLM response
-                    llm_response = self._llm_client.chat(
-                        messages, self._model_parameters, self._tools
-                    )
-                    step.llm_response = llm_response
-
-                    # Display step with LLM response
-                    self._update_cli_console(step)
-
-                    # Update token usage
-                    self._update_llm_usage(llm_response, execution)
-
-                    if self.llm_indicates_task_completed(llm_response):
-                        if self._is_task_completed(llm_response):
-                            self._llm_complete_response_task_handler(
-                                llm_response, step, execution, messages
-                            )
-                            break
-                        else:
-                            step.state = AgentState.THINKING
-                            messages = [
-                                LLMMessage(role="user", content=self.task_incomplete_message())
-                            ]
-                    else:
-                        # Check if the response contains a tool call
-                        tool_calls = llm_response.tool_calls
-                        messages = await self._tool_call_handler(tool_calls, step)
-
-                    # Record agent step
-                    self._record_handler(step, messages)
-                    self._update_cli_console(step)
-
-                    execution.steps.append(step)
+                    messages = await self._run_llm_step(step, messages, execution)
+                    self._finalize_step(step, messages, execution)
+                    if step.state == AgentState.COMPLETED:
+                        break
                     step_number += 1
-
                 except Exception as e:
-                    step.state = AgentState.ERROR
-                    step.error = str(e)
-
-                    # Display error
-                    self._update_cli_console(step)
-                    # Record agent step
-                    self._record_handler(step, messages)
-                    self._update_cli_console(step)
-
-                    execution.steps.append(step)
+                    self._handle_step_error(step, e, messages, execution)
                     break
 
             if step_number > self._max_steps and not execution.success:
@@ -210,12 +164,54 @@ class Agent(ABC):
             execution.final_result = f"Agent execution failed: {str(e)}"
 
         execution.execution_time = time.time() - start_time
-
-        # Display final summary
         if step:
             self._update_cli_console(step)
-
         return execution
+
+    def _create_new_step(self, step_number: int) -> AgentStep:
+        return AgentStep(step_number=step_number, state=AgentState.THINKING)
+
+    async def _run_llm_step(
+        self, step: "AgentStep", messages: list["LLMMessage"], execution: "AgentExecution"
+    ) -> list["LLMMessage"]:
+        step.state = AgentState.THINKING
+        self._update_cli_console(step)
+        llm_response = self._llm_client.chat(messages, self._model_parameters, self._tools)
+        step.llm_response = llm_response
+        self._update_cli_console(step)
+        self._update_llm_usage(llm_response, execution)
+
+        if self.llm_indicates_task_completed(llm_response):
+            if self._is_task_completed(llm_response):
+                self._llm_complete_response_task_handler(llm_response, step, execution, messages)
+                return messages
+            else:
+                step.state = AgentState.THINKING
+                return [LLMMessage(role="user", content=self.task_incomplete_message())]
+        else:
+            tool_calls = llm_response.tool_calls
+            return await self._tool_call_handler(tool_calls, step)
+
+    def _finalize_step(
+        self, step: "AgentStep", messages: list["LLMMessage"], execution: "AgentExecution"
+    ) -> None:
+        self._record_handler(step, messages)
+        self._update_cli_console(step)
+        execution.steps.append(step)
+
+    def _handle_step_error(
+        self,
+        step: "AgentStep",
+        error: Exception,
+        messages: list["LLMMessage"],
+        execution: "AgentExecution",
+    ) -> None:
+        step.state = AgentState.ERROR
+        step.error = str(error)
+        self._update_cli_console(step)
+        self._record_handler(step, messages)
+        self._update_cli_console(step)
+        execution.steps.append(step)
 
     def reflect_on_result(self, tool_results: list[ToolResult]) -> str | None:
         """Reflect on tool execution result. Override for custom reflection logic."""
