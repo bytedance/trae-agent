@@ -206,6 +206,7 @@ class OllamaClient(BaseLLMClient):
             "granite3.3",
             "devstral",
             "mistral-small3.1",
+            "qwen3:4b.",
         ]
 
         return any(model in model_parameters.model for model in tool_support_model)

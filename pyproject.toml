@@ -18,6 +18,7 @@ dependencies = [
     "socksio>=1.0.0",
     "tree-sitter-languages==1.10.2",
     "tree-sitter==0.21.3",
+    "ruff>=0.12.4",
 ]
 
 [project.optional-dependencies]
