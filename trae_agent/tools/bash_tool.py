@@ -115,7 +115,7 @@ class _BashSession:
                     # output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
                     line = await self._process.stdout.readline()
                     if not line:
-                        continue  # 没有新输出，继续等待
+                        continue  # No new output, keep waiting
 
                     decoded = line.decode(errors="ignore")
                     output += decoded  # 手动拼接 output 缓冲
