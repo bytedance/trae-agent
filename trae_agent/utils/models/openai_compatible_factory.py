@@ -6,8 +6,10 @@
 from enum import Enum
 
 from ..config import ModelParameters
-from .base import OpenAICompatibleClient
-from .providers import AzureProvider, DoubaoProvider, OpenRouterProvider
+from .azure import AzureProvider
+from .doubao import DoubaoProvider
+from .openai_compatible_base import OpenAICompatibleClient
+from .openrouter import OpenRouterProvider
 
 
 class OpenAICompatibleProvider(Enum):

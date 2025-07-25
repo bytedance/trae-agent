@@ -7,7 +7,7 @@ import os
 
 import openai
 
-from ..base import ProviderConfig
+from .openai_compatible_base import ProviderConfig
 
 
 class OpenRouterProvider(ProviderConfig):

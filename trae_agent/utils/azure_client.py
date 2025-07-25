@@ -4,7 +4,7 @@
 """Azure client wrapper with tool integrations"""
 
 from .config import ModelParameters
-from .openai_compatible import create_openai_compatible_client
+from .models.openai_compatible_factory import create_openai_compatible_client
 
 
 def AzureClient(model_parameters: ModelParameters):
