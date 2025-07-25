@@ -112,7 +112,13 @@ class _BashSession:
                     await asyncio.sleep(self._output_delay)
                     # if we read directly from stdout/stderr, it will wait forever for
                     # EOF. use the StreamReader buffer directly instead.
-                    output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+                    # output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+                    line = await self._process.stdout.readline()
+                    if not line:
+                        continue  # 没有新输出，继续等待
+
+                    decoded = line.decode(errors="ignore")
+                    output += decoded  # 手动拼接 output 缓冲
                     if sentinel_before in output:
                         # strip the sentinel from output
                         output, pivot, exit_banner = output.rpartition(sentinel_before)
