@@ -5,6 +5,10 @@
 
 from typing import Type
 
+from trae_agent.tools.sandbox.sb_bash_tool import SandboxBashTool
+from trae_agent.tools.sandbox.sb_edit_tool import SandboxTextEditorTool
+from trae_agent.tools.sandbox.sb_json_edit_tool import SandboxJSONEditTool
+
 from .base import Tool, ToolCall, ToolExecutor, ToolResult
 from .bash_tool import BashTool
 from .ckg_tool import CKGTool
@@ -33,4 +37,7 @@ tools_registry: dict[str, Type[Tool]] = {
     "sequentialthinking": SequentialThinkingTool,
     "task_done": TaskDoneTool,
     "ckg": CKGTool,
+    "sandbox_bash": SandboxBashTool,
+    "sandbox_json_edit_tool": SandboxJSONEditTool,
+    "sandbox_str_replace_based_edit_tool": SandboxTextEditorTool,
 }
