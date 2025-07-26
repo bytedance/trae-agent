@@ -50,6 +50,7 @@ class Agent(ABC):
         self._tool_caller: ToolExecutor = ToolExecutor([])
         self._cli_console: CLIConsole | None = None
         self._sandbox_client: Daytona = None
+        self._sandbox: Sandbox | None = None
 
         # init sandbox
         if config is not None:

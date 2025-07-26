@@ -92,6 +92,20 @@ export OPENAI_BASE_URL="your-openai-compatible-api-base-url"
 
 Although you can pass your API key directly using the `api_key` argument, we suggest utilizing [python-dotenv](https://pypi.org/project/python-dotenv/) to add `MODEL_API_KEY="My API Key"` to your `.env` file. This approach helps prevent your API key from being exposed in source control.
 
+
+if you want to use in sandbox mode, you can set up those settings in config file `trae_config.json`
+```
+"enable_sandbox": false,
+"sandbox_providers": {
+   "daytona": {
+   "api_key": "",
+   "api_url": "https://app.daytona.io/api"
+   }
+},
+```
+and the sandbox support by [daytona](https://www.daytona.io)
+
+
 ### Basic Usage
 
 ```bash

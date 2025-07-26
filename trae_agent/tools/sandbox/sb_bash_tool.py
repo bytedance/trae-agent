@@ -1,5 +1,5 @@
-from typing import override
 import uuid
+from typing import override
 
 from daytona import Sandbox, SessionExecuteRequest
 from daytona_api_client import Session
@@ -36,7 +36,7 @@ class SandboxBashTool(SandboxToolBase):
     @override
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
         if arguments.get("restart"):
-            # update sesssion id
+            # update session id
             self._session_id = "sd-bash" + str(uuid.uuid4())
             # create new session
             self._sandbox.process.create_session(self._session_id)

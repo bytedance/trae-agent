@@ -75,5 +75,12 @@
   "lakeview_config": {
     "model_provider": null,
     "model_name": null
-  }
+  },
+  "enable_sandbox": false,
+  "sandbox_providers": {
+    "daytona": {
+      "api_key": "",
+      "api_url": "https://app.daytona.io/api"
+    }
+  },
 }
