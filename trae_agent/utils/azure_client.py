@@ -4,9 +4,12 @@
 """Azure client wrapper with tool integrations"""
 
 from .config import ModelParameters
-from .models.openai_compatible_factory import create_openai_compatible_client
+from .models.azure import AzureProvider
+from .models.openai_compatible_base import OpenAICompatibleClient
 
 
-def AzureClient(model_parameters: ModelParameters):
-    """Factory function to create Azure client using the new architecture."""
-    return create_openai_compatible_client("azure", model_parameters)
+class AzureClient(OpenAICompatibleClient):
+    """Azure client wrapper that maintains compatibility while using the new architecture."""
+
+    def __init__(self, model_parameters: ModelParameters):
+        super().__init__(model_parameters, AzureProvider())
