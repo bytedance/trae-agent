@@ -1,4 +1,5 @@
 from typing import override
+import uuid
 
 from daytona import Sandbox, SessionExecuteRequest
 from daytona_api_client import Session
@@ -18,6 +19,7 @@ class SandboxBashTool(SandboxToolBase):
         # composition bash tool, do not use multi extend
         self._bash_tool = BashTool(model_provider)
         self._session: Session | None = None
+        self._session_id = "sd-bash"
 
     @override
     def get_name(self) -> str:
@@ -33,19 +35,18 @@ class SandboxBashTool(SandboxToolBase):
 
     @override
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
-        session_id = "sd-session"
         if arguments.get("restart"):
-            if self._session:
-                self._session.process.delete_session(session_id)
-            self._sandbox.process.create_session(session_id)
-            self._session = self._sandbox.process.get_session(session_id)
-
+            # update sesssion id
+            self._session_id = "sd-bash" + str(uuid.uuid4())
+            # create new session
+            self._sandbox.process.create_session(self._session_id)
+            self._session = self._sandbox.process.get_session(self._session_id)
             return ToolExecResult(output="tool has been restarted.")
 
         if self._session is None:
             try:
-                self._sandbox.process.create_session(session_id)
-                self.session = self._sandbox.process.get_session(session_id)
+                self._sandbox.process.create_session(self._session_id)
+                self._session = self._sandbox.process.get_session(self._session_id)
             except Exception as e:
                 return ToolExecResult(error=f"Error starting bash session: {e}", error_code=-1)
 
@@ -58,7 +59,7 @@ class SandboxBashTool(SandboxToolBase):
         try:
             # return await self._session.run(command)
             ret = self._sandbox.process.execute_session_command(
-                session_id, SessionExecuteRequest(command=command)
+                self._session_id, SessionExecuteRequest(command=command)
             )
             if ret.exit_code == 0:
                 return ToolExecResult(output=ret.output)

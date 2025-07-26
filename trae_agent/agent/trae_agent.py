@@ -163,7 +163,7 @@ class TraeAgent(Agent):
         execution = await super().execute_task()
 
         # delete sandbox
-        if self._enable_sandbox:
+        if self._enable_sandbox and self._sandbox:
             self._sandbox_client.delete(self._sandbox)
 
         if self._cli_console and console_task and not console_task.done():
