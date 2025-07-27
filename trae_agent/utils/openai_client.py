@@ -88,7 +88,6 @@ class OpenAIClient(BaseLLMClient):
             func=self._create_openai_response,
             service_name="OpenAI",
             max_retries=model_parameters.max_retries,
-            provider_name="openai",
         )
         response = retry_decorator(api_call_input, model_parameters, tool_schemas)
 
