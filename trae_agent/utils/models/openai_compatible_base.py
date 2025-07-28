@@ -131,7 +131,6 @@ class OpenAICompatibleClient(BaseLLMClient):
             func=self._create_response,
             service_name=self.provider_config.get_service_name(),
             max_retries=model_parameters.max_retries,
-            provider_name=self.provider_config.get_provider_name(),
         )
         response = retry_decorator(model_parameters, tool_schemas, extra_headers)
 
