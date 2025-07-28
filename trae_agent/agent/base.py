@@ -5,6 +5,8 @@
 
 from abc import ABC, abstractmethod
 
+from daytona import Daytona, DaytonaConfig, Sandbox
+
 from ..tools.base import Tool, ToolCall, ToolExecutor, ToolResult
 from ..tools.ckg.ckg_database import clear_older_ckg
 from ..utils.cli_console import CLIConsole
@@ -47,6 +49,18 @@ class Agent(ABC):
         self._tools: list[Tool] = []
         self._tool_caller: ToolExecutor = ToolExecutor([])
         self._cli_console: CLIConsole | None = None
+        self._sandbox_client: Daytona = None
+        self._sandbox: Sandbox | None = None
+
+        # init sandbox
+        if config is not None:
+            self._enable_sandbox = config.enable_sandbox
+            if config.enable_sandbox:
+                daytona_config = config.sandbox_providers["daytona"]
+                config = DaytonaConfig(
+                    api_key=daytona_config.api_key, api_url=daytona_config.api_url
+                )
+                self._sandbox_client = Daytona(daytona_config)
 
         # Trajectory recorder
         self._trajectory_recorder: TrajectoryRecorder | None = None

@@ -19,6 +19,7 @@ dependencies = [
     "tree-sitter-languages==1.10.2",
     "tree-sitter==0.21.3",
     "ruff>=0.12.4",
+    "daytona>=0.24.2",
 ]
 
 [project.optional-dependencies]

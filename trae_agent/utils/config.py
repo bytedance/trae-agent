@@ -35,6 +35,17 @@ class ModelParameters:
 
 
 @dataclass
+class SandboxParameters:
+    """Sandbox parameters for a sandbox provider."""
+
+    api_key: str
+    api_url: str
+    target: str
+    jwt_token: str
+    organization_id: str
+
+
+@dataclass
 class LakeviewConfig:
     """Configuration for Lakeview."""
 
@@ -49,8 +60,10 @@ class Config:
     default_provider: str
     max_steps: int
     model_providers: dict[str, ModelParameters]
+    sandbox_providers: dict[str, SandboxParameters]
     lakeview_config: LakeviewConfig | None = None
     enable_lakeview: bool = True
+    enable_sandbox: bool = False
 
     def __init__(self, config_or_config_file: str | dict = "trae_config.json"):  # pyright: ignore[reportMissingTypeArgument, reportUnknownParameterType]
         # Accept either file path or direct config dict
@@ -72,6 +85,22 @@ class Config:
         self.max_steps = self._config.get("max_steps", 20)
         self.model_providers = {}
         self.enable_lakeview = self._config.get("enable_lakeview", True)
+        self.enable_sandbox = self._config.get("enable_sandbox", False)
+        self.sandbox_providers = {}
+
+        # check sandbox providers
+        if self.enable_sandbox:
+            sd_provider = self._config.get("sandbox_providers", {})
+            if (not sd_provider) or "daytona" not in sd_provider:
+                raise ValueError("sandbox_providers must contain daytona")
+            for provider in sd_provider:
+                self.sandbox_providers[provider] = SandboxParameters(
+                    api_key=sd_provider[provider]["api_key"],
+                    api_url=sd_provider[provider]["api_url"],
+                    target=sd_provider[provider].get("target", "us"),
+                    jwt_token=sd_provider[provider].get("jwt_token", None),
+                    organization_id=sd_provider[provider].get("organization_id", None),
+                )
 
         if len(self._config.get("model_providers", [])) == 0:
             self.model_providers = {

@@ -6,11 +6,14 @@
 import asyncio
 import os
 import subprocess
-from typing import override
+from typing import cast, override
+
+from daytona import CreateSandboxFromSnapshotParams
 
 from ..prompt.agent_prompt import TRAE_AGENT_SYSTEM_PROMPT
 from ..tools import tools_registry
 from ..tools.base import Tool, ToolExecutor, ToolResult
+from ..tools.sandbox_base import SandboxToolBase
 from ..utils.config import Config
 from ..utils.llm_basics import LLMMessage, LLMResponse
 from ..utils.llm_client import LLMClient
@@ -23,6 +26,14 @@ TraeAgentToolNames = [
     "json_edit_tool",
     "task_done",
     "bash",
+]
+
+TraeAgentSandBoxToolNames = [
+    "sandbox_str_replace_based_edit_tool",
+    "sequentialthinking",
+    "sandbox_json_edit_tool",
+    "task_done",
+    "sandbox_bash",
 ]
 
 
@@ -87,13 +98,29 @@ class TraeAgent(Agent):
         self._task: str = task
 
         if tool_names is None:
-            tool_names = TraeAgentToolNames
+            tool_names = TraeAgentSandBoxToolNames if self._enable_sandbox else TraeAgentToolNames
+
+        sandbox = None
+        if self._enable_sandbox:
+            # one task one sandbox
+            sandbox = self._sandbox_client.create(
+                CreateSandboxFromSnapshotParams(language="python")
+            )
 
         # Get the model provider from the LLM client
         provider = self._llm_client.provider.value
-        self._tools: list[Tool] = [
-            tools_registry[tool_name](model_provider=provider) for tool_name in tool_names
-        ]
+
+        # create tool instances
+        self._tools: list[Tool] = []
+        for tool_name in tool_names:
+            tool_class = tools_registry[tool_name]
+            if issubclass(tool_class, (SandboxToolBase)):
+                sandbox_tool_class = cast(type[SandboxToolBase], tool_class)
+                self._tools.append(sandbox_tool_class(model_provider=provider, sandbox=sandbox))
+            else:
+                self._tools.append(tools_registry[tool_name](model_provider=provider))
+
+        # create tool caller
         self._tool_caller: ToolExecutor = ToolExecutor(self._tools)
 
         self._initial_messages: list[LLMMessage] = []
@@ -106,6 +133,9 @@ class TraeAgent(Agent):
             raise AgentError("Project path is required")
 
         self.project_path = extra_args.get("project_path", "")
+        if self._enable_sandbox:
+            self.project_path = SandboxToolBase.workspace_path
+
         user_message += f"[Project root path]:\n{self.project_path}\n\n"
 
         if "issue" in extra_args:
@@ -131,6 +161,11 @@ class TraeAgent(Agent):
         """Execute the task and finalize trajectory recording."""
         console_task = asyncio.create_task(self._cli_console.start()) if self._cli_console else None
         execution = await super().execute_task()
+
+        # delete sandbox
+        if self._enable_sandbox and self._sandbox:
+            self._sandbox_client.delete(self._sandbox)
+
         if self._cli_console and console_task and not console_task.done():
             await console_task
 
