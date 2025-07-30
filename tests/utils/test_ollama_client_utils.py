@@ -12,9 +12,9 @@ WARNING: This Ollama test should not be used in the GitHub Actions workflow, as 
 import os
 import unittest
 
-from trae_agent.utils.config import ModelParameters
-from trae_agent.utils.llm_basics import LLMMessage
-from trae_agent.utils.ollama_client import OllamaClient
+from trae_agent.utils.config import ModelConfig, ModelProvider
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage
+from trae_agent.utils.llm_clients.ollama_client import OllamaClient
 
 TEST_MODEL = "qwen3:4b"
 
@@ -30,19 +30,22 @@ class TestOllamaClient(unittest.TestCase):
         It should not be used to check any configiguration based on BaseLLMClient instead we should just check the parameters
         that will change during the init process.
         """
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             TEST_MODEL,
-            "ollama",
-            1000,
-            0.8,
-            7.0,
-            8,
-            False,
-            1,
-            "http://localhost:11434/v1",
-            None,
+            model_provider=ModelProvider(
+                provider="ollama",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                api_version=None,
+            ),
+            max_tokens=1000,
+            temperature=0.8,
+            top_p=7.0,
+            top_k=8,
+            parallel_tool_calls=False,
+            max_retries=1,
         )
-        ollama_client = OllamaClient(model_parameters)
+        ollama_client = OllamaClient(model_config)
         self.assertEqual(ollama_client.api_key, "ollama")
         self.assertEqual(ollama_client.base_url, "http://localhost:11434/v1")
 
@@ -50,19 +53,22 @@ class TestOllamaClient(unittest.TestCase):
         """
         There is nothing we have to assert for this test case just see if it can run
         """
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             TEST_MODEL,
-            "ollama",
-            1000,
-            0.8,
-            7.0,
-            8,
-            False,
-            1,
-            "http://localhost:11434/v1",
-            None,
+            model_provider=ModelProvider(
+                provider="ollama",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                api_version=None,
+            ),
+            max_tokens=1000,
+            temperature=0.8,
+            top_p=7.0,
+            top_k=8,
+            parallel_tool_calls=False,
+            max_retries=1,
         )
-        ollama_client = OllamaClient(model_parameters)
+        ollama_client = OllamaClient(model_config)
         message = LLMMessage("user", "this is a test message")
         ollama_client.set_chat_history(messages=[message])
         self.assertTrue(True)  # runnable
@@ -71,25 +77,49 @@ class TestOllamaClient(unittest.TestCase):
         """
         There is nothing we have to assert for this test case just see if it can run
         """
-        model_parameters = ModelParameters(
-            TEST_MODEL, "ollama", 1000, 0.8, 7.0, 8, False, 1, None, None
+        model_config = ModelConfig(
+            TEST_MODEL,
+            model_provider=ModelProvider(
+                provider="ollama",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                api_version=None,
+            ),
+            max_tokens=1000,
+            temperature=0.8,
+            top_p=7.0,
+            top_k=8,
+            parallel_tool_calls=False,
+            max_retries=1,
         )
-        ollama_client = OllamaClient(model_parameters)
+        ollama_client = OllamaClient(model_config)
         message = LLMMessage("user", "this is a test message")
-        ollama_client.chat(messages=[message], model_parameters=model_parameters)
+        ollama_client.chat(messages=[message], model_config=model_config)
         self.assertTrue(True)  # runnable
 
     def test_supports_tool_calling(self):
         """
         A test case to check the support tool calling function
         """
-        model_parameters = ModelParameters(
-            TEST_MODEL, "ollama", 1000, 0.8, 7.0, 8, False, 1, None, None
+        model_config = ModelConfig(
+            TEST_MODEL,
+            model_provider=ModelProvider(
+                provider="ollama",
+                api_key="ollama",
+                base_url="http://localhost:11434/v1",
+                api_version=None,
+            ),
+            max_tokens=1000,
+            temperature=0.8,
+            top_p=7.0,
+            top_k=8,
+            parallel_tool_calls=False,
+            max_retries=1,
         )
-        ollama_client = OllamaClient(model_parameters)
-        self.assertEqual(ollama_client.supports_tool_calling(model_parameters), True)
-        model_parameters.model = "no such model"
-        self.assertEqual(ollama_client.supports_tool_calling(model_parameters), False)
+        ollama_client = OllamaClient(model_config)
+        self.assertEqual(ollama_client.supports_tool_calling(model_config), True)
+        model_config.model = "no such model"
+        self.assertEqual(ollama_client.supports_tool_calling(model_config), False)
 
 
 if __name__ == "__main__":

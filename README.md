@@ -33,6 +33,9 @@ git clone https://github.com/bytedance/trae-agent.git
 cd trae-agent
 uv venv
 uv sync --all-extras
+
+# Activate the virtual environment
+source .venv/bin/activate
 ```
 
 or use make.
@@ -40,6 +43,9 @@ or use make.
 ```bash
 make uv-venv
 make uv-sync
+
+# Activate the virtual environment
+source .venv/bin/activate
 ```
 
 ### Setup API Keys

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..tools.base import ToolCall, ToolResult
-from .llm_basics import LLMMessage, LLMResponse
+from .llm_clients.llm_basics import LLMMessage, LLMResponse
 
 
 class TrajectoryRecorder:

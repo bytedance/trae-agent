@@ -13,9 +13,9 @@ setting: to avoid
 import os
 import unittest
 
-from trae_agent.utils.config import ModelParameters
-from trae_agent.utils.llm_basics import LLMMessage
-from trae_agent.utils.openrouter_client import OpenRouterClient
+from trae_agent.utils.config import ModelConfig, ModelProvider
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage
+from trae_agent.utils.llm_clients.openrouter_client import OpenRouterClient
 
 TEST_MODEL = "mistralai/mistral-small-3.2-24b-instruct:free"
 
@@ -30,35 +30,41 @@ class TestOpenRouterClient(unittest.TestCase):
     """
 
     def test_OpenRouterClient_init(self):
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             TEST_MODEL,
-            os.getenv("OPENROUTER_API_KEY"),
-            1000,
-            0.8,
-            0.7,
-            8,
-            False,
-            1,
-            "https://openrouter.ai/api/v1",
-            None,
+            model_provider=ModelProvider(
+                provider="openrouter",
+                api_key=os.getenv("OPENROUTER_API_KEY", ""),
+                base_url="https://openrouter.ai/api/v1",
+                api_version=None,
+            ),
+            max_tokens=1000,
+            temperature=0.8,
+            top_p=0.7,
+            top_k=8,
+            parallel_tool_calls=False,
+            max_retries=1,
         )
-        openrouter_client = OpenRouterClient(model_parameters)
+        openrouter_client = OpenRouterClient(model_config)
         self.assertEqual(openrouter_client.base_url, "https://openrouter.ai/api/v1")
 
     def test_set_chat_history(self):
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             TEST_MODEL,
-            os.getenv("OPENROUTER_API_KEY"),
-            1000,
-            0.8,
-            0.7,
-            8,
-            False,
-            1,
-            "https://openrouter.ai/api/v1",
-            None,
+            model_provider=ModelProvider(
+                provider="openrouter",
+                api_key=os.getenv("OPENROUTER_API_KEY", ""),
+                base_url="https://openrouter.ai/api/v1",
+                api_version=None,
+            ),
+            max_tokens=1000,
+            temperature=0.8,
+            top_p=0.7,
+            top_k=8,
+            parallel_tool_calls=False,
+            max_retries=1,
         )
-        openrouter_client = OpenRouterClient(model_parameters)
+        openrouter_client = OpenRouterClient(model_config)
         message = LLMMessage("user", "this is a test message")
         openrouter_client.set_chat_history(messages=[message])
         self.assertTrue(True)  # runnable
@@ -67,43 +73,49 @@ class TestOpenRouterClient(unittest.TestCase):
         """
         There is nothing we have to assert for this test case just see if it can run
         """
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             TEST_MODEL,
-            os.getenv("OPENROUTER_API_KEY"),
-            1000,
-            0.8,
-            0.7,
-            8,
-            False,
-            1,
-            "https://openrouter.ai/api/v1",
-            None,
+            model_provider=ModelProvider(
+                provider="openrouter",
+                api_key=os.getenv("OPENROUTER_API_KEY", ""),
+                base_url="https://openrouter.ai/api/v1",
+                api_version=None,
+            ),
+            max_tokens=1000,
+            temperature=0.8,
+            top_p=0.7,
+            top_k=8,
+            parallel_tool_calls=False,
+            max_retries=1,
         )
-        openrouter_client = OpenRouterClient(model_parameters)
+        openrouter_client = OpenRouterClient(model_config)
         message = LLMMessage("user", "this is a test message")
-        openrouter_client.chat(messages=[message], model_parameters=model_parameters)
+        openrouter_client.chat(messages=[message], model_config=model_config)
         self.assertTrue(True)  # runnable
 
     def test_supports_tool_calling(self):
         """
         A test case to check the support tool calling function
         """
-        model_parameters = ModelParameters(
-            TEST_MODEL,
-            os.getenv("OPENROUTER_API_KEY"),
-            1000,
-            0.8,
-            0.7,
-            8,
-            False,
-            1,
-            "https://openrouter.ai/api/v1",
-            None,
+        model_config = ModelConfig(
+            model=TEST_MODEL,
+            model_provider=ModelProvider(
+                provider="openrouter",
+                api_key=os.getenv("OPENROUTER_API_KEY", ""),
+                base_url="https://openrouter.ai/api/v1",
+                api_version=None,
+            ),
+            max_tokens=1000,
+            temperature=0.8,
+            top_p=0.7,
+            top_k=8,
+            parallel_tool_calls=False,
+            max_retries=1,
         )
-        openrouter_client = OpenRouterClient(model_parameters)
-        self.assertEqual(openrouter_client.supports_tool_calling(model_parameters), True)
-        model_parameters.model = "no such model"
-        self.assertEqual(openrouter_client.supports_tool_calling(model_parameters), False)
+        openrouter_client = OpenRouterClient(model_config)
+        self.assertEqual(openrouter_client.supports_tool_calling(model_config), True)
+        model_config.model = "no such model"
+        self.assertEqual(openrouter_client.supports_tool_calling(model_config), False)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,12 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-"""Azure OpenAI provider configuration."""
+"""Azure client wrapper with tool integrations"""
 
 import openai
 
-from .openai_compatible_base import ProviderConfig
+from ..config import ModelConfig
+from .openai_compatible_base import OpenAICompatibleClient, ProviderConfig
 
 
 class AzureProvider(ProviderConfig):
@@ -40,3 +41,10 @@ class AzureProvider(ProviderConfig):
         """Check if the model supports tool calling."""
         # Azure OpenAI models generally support tool calling
         return True
+
+
+class AzureClient(OpenAICompatibleClient):
+    """Azure client wrapper that maintains compatibility while using the new architecture."""
+
+    def __init__(self, model_config: ModelConfig):
+        super().__init__(model_config, AzureProvider())

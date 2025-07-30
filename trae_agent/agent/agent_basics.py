@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from ..tools.base import ToolCall, ToolResult
-from ..utils.llm_basics import LLMResponse, LLMUsage
+from ..utils.llm_clients.llm_basics import LLMResponse, LLMUsage
 
 __all__ = [
     "AgentState",

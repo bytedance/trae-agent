@@ -25,3 +25,5 @@ repos:
   rev: v1.16.1
   hooks:
     - id: mypy
+      additional_dependencies:
+        - types-PyYAML

@@ -8,6 +8,6 @@ __version__ = "0.1.0"
 from .agent.base import Agent
 from .agent.trae_agent import TraeAgent
 from .tools.base import Tool, ToolExecutor
-from .utils.llm_client import LLMClient
+from .utils.llm_clients.llm_client import LLMClient
 
 __all__ = ["Agent", "TraeAgent", "LLMClient", "Tool", "ToolExecutor"]

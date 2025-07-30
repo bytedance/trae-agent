@@ -18,7 +18,8 @@ from rich.table import Table
 from trae_agent.utils.cli_console import CLIConsole
 
 from .agent import TraeAgent
-from .utils.config import Config, load_config
+from .utils.config import TraeAgentConfig
+from .utils.legacy_config import load_legacy_config
 
 # Load environment variables
 _ = load_dotenv()
@@ -26,7 +27,7 @@ _ = load_dotenv()
 console = Console()
 
 
-def create_agent(config: Config) -> TraeAgent:
+def create_agent(trae_agent_config: TraeAgentConfig) -> TraeAgent:
     """
     create_agent creates a Trae Agent with the specified configuration.
     Args:
@@ -36,7 +37,7 @@ def create_agent(config: Config) -> TraeAgent:
     """
     try:
         # Create agent
-        agent = TraeAgent(config)
+        agent = TraeAgent(trae_agent_config)
         return agent
 
     except Exception as e:
@@ -110,9 +111,16 @@ def run(
         )
         sys.exit(1)
 
-    config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
+    config = load_legacy_config(
+        config_file, provider, model, model_base_url, api_key, max_steps
+    ).to_new_config()
+    trae_agent_config = config.trae_agent
     # Create agent
-    agent: TraeAgent = create_agent(config)
+    if trae_agent_config:
+        agent: TraeAgent = create_agent(trae_agent_config)
+    else:
+        console.print("[red]Error: trae_agent configuration is required in the config file.[/red]")
+        sys.exit(1)
 
     # Set up trajectory recording
     trajectory_path = None
@@ -143,9 +151,9 @@ def run(
     cli_console.print_task_details(
         task,
         working_dir,
-        config.default_provider,
-        config.model_providers[config.default_provider].model,
-        config.max_steps,
+        trae_agent_config.model.model_provider.provider,
+        trae_agent_config.model.model,
+        trae_agent_config.max_steps,
         config_file,
         trajectory_path,
     )
@@ -199,14 +207,22 @@ def interactive(
     Args:
         tasks: the task that you want your agent to solve. This is required to be in the input
     """
-    config = load_config(config_file, provider, model, model_base_url, api_key, max_steps=max_steps)
+    config = load_legacy_config(
+        config_file, provider, model, model_base_url, api_key, max_steps=max_steps
+    ).to_new_config()
+
+    if config.trae_agent:
+        trae_agent_config = config.trae_agent
+    else:
+        console.print("[red]Error: trae_agent configuration is required in the config file.[/red]")
+        sys.exit(1)
 
     console.print(
         Panel(
             f"""[bold]Welcome to Trae Agent Interactive Mode![/bold]
-    [bold]Provider:[/bold] {config.default_provider}
-    [bold]Model:[/bold] {config.model_providers[config.default_provider].model}
-    [bold]Max Steps:[/bold] {config.max_steps}
+    [bold]Provider:[/bold] {trae_agent_config.model.model_provider.provider}
+    [bold]Model:[/bold] {trae_agent_config.model.model}
+    [bold]Max Steps:[/bold] {trae_agent_config.max_steps}
     [bold]Config File:[/bold] {config_file}""",
             title="Interactive Mode",
             border_style="green",
@@ -214,7 +230,7 @@ def interactive(
     )
 
     # Create agent
-    agent = create_agent(config)
+    agent = create_agent(trae_agent_config)
 
     while True:
         try:
@@ -247,7 +263,7 @@ def interactive(
                 console.print(
                     Panel(
                         f"""[bold]Provider:[/bold] {agent.llm_client.provider.value}
-    [bold]Model:[/bold] {config.model_providers[config.default_provider].model}
+    [bold]Model:[/bold] {trae_agent_config.model.model}
     [bold]Available Tools:[/bold] {len(agent.tools)}
     [bold]Config File:[/bold] {config_file}
     [bold]Working Directory:[/bold] {os.getcwd()}""",
@@ -318,25 +334,34 @@ Using default settings and environment variables.""",
             )
         )
 
-    config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
+    config = load_legacy_config(
+        config_file, provider, model, model_base_url, api_key, max_steps
+    ).to_new_config()
+    if config.trae_agent:
+        trae_agent_config = config.trae_agent
+    else:
+        console.print("[red]Error: trae_agent configuration is required in the config file.[/red]")
+        sys.exit(1)
 
     # Display general settings
     general_table = Table(title="General Settings")
     general_table.add_column("Setting", style="cyan")
     general_table.add_column("Value", style="green")
 
-    general_table.add_row("Default Provider", str(config.default_provider or "Not set"))
-    general_table.add_row("Max Steps", str(config.max_steps or "Not set"))
+    general_table.add_row(
+        "Default Provider", str(trae_agent_config.model.model_provider.provider or "Not set")
+    )
+    general_table.add_row("Max Steps", str(trae_agent_config.max_steps or "Not set"))
 
     console.print(general_table)
 
     # Display provider settings
-    provider_config = config.model_providers[config.default_provider]
-    provider_table = Table(title=f"{config.default_provider.title()} Configuration")
+    provider_config = trae_agent_config.model.model_provider
+    provider_table = Table(title=f"{provider_config.provider.title()} Configuration")
     provider_table.add_column("Setting", style="cyan")
     provider_table.add_column("Value", style="green")
 
-    provider_table.add_row("Model", provider_config.model or "Not set")
+    provider_table.add_row("Model", trae_agent_config.model.model or "Not set")
     provider_table.add_row("Base URL", provider_config.base_url or "Not set")
     provider_table.add_row("API Version", provider_config.api_version or "Not set")
     provider_table.add_row(
@@ -345,12 +370,12 @@ Using default settings and environment variables.""",
         if provider_config.api_key
         else "Not set",
     )
-    provider_table.add_row("Max Tokens", str(provider_config.max_tokens))
-    provider_table.add_row("Temperature", str(provider_config.temperature))
-    provider_table.add_row("Top P", str(provider_config.top_p))
+    provider_table.add_row("Max Tokens", str(trae_agent_config.model.max_tokens))
+    provider_table.add_row("Temperature", str(trae_agent_config.model.temperature))
+    provider_table.add_row("Top P", str(trae_agent_config.model.top_p))
 
-    if config.default_provider == "anthropic":
-        provider_table.add_row("Top K", str(provider_config.top_k))
+    if trae_agent_config.model.model_provider.provider == "anthropic":
+        provider_table.add_row("Top K", str(trae_agent_config.model.top_k))
 
     console.print(provider_table)
 

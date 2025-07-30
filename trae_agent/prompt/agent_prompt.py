@@ -1,3 +1,6 @@
+# Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+# SPDX-License-Identifier: MIT
+
 TRAE_AGENT_SYSTEM_PROMPT = """You are an expert AI software engineering agent.
 
 File Path Rule: All tools that take a `file_path` as an argument require an **absolute path**. You MUST construct the full, absolute path by combining the `[Project root path]` provided in the user's message with the file's path inside the project.

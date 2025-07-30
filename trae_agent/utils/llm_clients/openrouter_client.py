@@ -7,8 +7,8 @@ import os
 
 import openai
 
-from .openai_compatible_base import ProviderConfig
-
+from .openai_compatible_base import ProviderConfig, OpenAICompatibleClient
+from ..config import ModelConfig
 
 class OpenRouterProvider(ProviderConfig):
     """OpenRouter provider configuration."""
@@ -56,3 +56,10 @@ class OpenRouterProvider(ProviderConfig):
             "command-r",
         ]
         return any(pattern in model_name.lower() for pattern in tool_capable_patterns)
+
+
+class OpenRouterClient(OpenAICompatibleClient):
+    """OpenRouter client wrapper that maintains compatibility while using the new architecture."""
+
+    def __init__(self, model_config: ModelConfig):
+        super().__init__(model_config, OpenRouterProvider())

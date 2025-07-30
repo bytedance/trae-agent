@@ -16,7 +16,8 @@ from rich.console import Console
 from trae_agent.agent import TraeAgent
 from trae_agent.agent.agent_basics import AgentExecution
 from trae_agent.utils.cli_console import CLIConsole
-from trae_agent.utils.config import Config, load_config
+from trae_agent.utils.config import Config, TraeAgentConfig
+from trae_agent.utils.legacy_config import load_legacy_config
 
 # Load environment variables
 _ = load_dotenv()
@@ -47,7 +48,7 @@ class TraeAgentSDK:
         self.agent = None
         self.cli_console = None
 
-    def create_agent(self, config: Config) -> TraeAgent:
+    def create_agent(self, trae_agent_config: TraeAgentConfig) -> TraeAgent:
         """
         Create a Trae Agent with the specified configuration.
 
@@ -61,7 +62,7 @@ class TraeAgentSDK:
             Exception: If agent creation fails
         """
         try:
-            agent = TraeAgent(config)
+            agent = TraeAgent(trae_agent_config)
             return agent
         except Exception as e:
             console.print(f"[red]Error creating agent: {e}[/red]")
@@ -122,9 +123,16 @@ class TraeAgentSDK:
 
         # Load or use existing configuration
         if self.config is None:
-            config = load_config(config_file, provider, model, model_base_url, api_key, max_steps)
+            config = load_legacy_config(
+                config_file, provider, model, model_base_url, api_key, max_steps
+            ).to_new_config()
         else:
             config = self.config
+
+        if config.trae_agent is None:
+            raise ValueError("TraeAgentConfig is required to create a TraeAgent")
+        else:
+            trae_agent_config = config.trae_agent
         try:
             # Load task from file if it's a file path
             task_path = Path(task)
@@ -132,7 +140,7 @@ class TraeAgentSDK:
                 task = task_path.read_text()
 
             # Create agent
-            agent = self.create_agent(config)
+            agent = self.create_agent(trae_agent_config)
 
             # Set up trajectory recording
             if trajectory_file:
@@ -146,9 +154,9 @@ class TraeAgentSDK:
                 cli_console.print_task_details(
                     task,
                     working_dir,
-                    config.default_provider,
-                    config.model_providers[config.default_provider].model,
-                    config.max_steps,
+                    trae_agent_config.model.model_provider.provider,
+                    trae_agent_config.model.model,
+                    trae_agent_config.max_steps,
                     config_file,
                     trajectory_path,
                 )

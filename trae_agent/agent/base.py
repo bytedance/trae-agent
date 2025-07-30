@@ -5,12 +5,14 @@
 
 from abc import ABC, abstractmethod
 
+from trae_agent.tools import tools_registry
+
 from ..tools.base import Tool, ToolCall, ToolExecutor, ToolResult
 from ..tools.ckg.ckg_database import clear_older_ckg
 from ..utils.cli_console import CLIConsole
-from ..utils.config import Config, ModelParameters
-from ..utils.llm_basics import LLMMessage, LLMResponse
-from ..utils.llm_client import LLMClient
+from ..utils.config import AgentConfig, ModelConfig
+from ..utils.llm_clients.llm_basics import LLMMessage, LLMResponse
+from ..utils.llm_clients.llm_client import LLMClient
 from ..utils.trajectory_recorder import TrajectoryRecorder
 from .agent_basics import AgentExecution, AgentState, AgentStep
 
@@ -18,33 +20,22 @@ from .agent_basics import AgentExecution, AgentState, AgentStep
 class Agent(ABC):
     """Base class for LLM-based agents."""
 
-    def __init__(self, config: Config | None = None, llm_client: LLMClient | None = None):
+    def __init__(self, agent_config: AgentConfig):
         """Initialize the agent.
 
         Args:
-            config: Configuration object containing model parameters and other settings.
-                   Required if llm_client is not provided.
-            llm_client: Optional pre-configured LLMClient instance.
-                       If provided, it will be used instead of creating a new one from config.
+            agent_config: Configuration object containing model parameters and other settings.
         """
-        if llm_client is None:
-            if config is None:
-                raise ValueError("Either config or llm_client must be provided")
-            self._llm_client = LLMClient(
-                config.default_provider,
-                config.model_providers[config.default_provider],
-                config.max_steps,
-            )
-            self._model_parameters = config.model_providers[config.default_provider]
-            self._max_steps = config.max_steps
-        else:
-            self._llm_client = llm_client
-            self._model_parameters = llm_client.model_parameters
-            self._max_steps = llm_client.max_steps
+        self._llm_client = LLMClient(agent_config.model)
+        self._model_config = agent_config.model
+        self._max_steps = agent_config.max_steps
 
         self._initial_messages: list[LLMMessage] = []
         self._task: str = ""
-        self._tools: list[Tool] = []
+        self._tools: list[Tool] = [
+            tools_registry[tool_name](model_provider=self._model_config.model_provider.provider)
+            for tool_name in agent_config.tools
+        ]
         self._tool_caller: ToolExecutor = ToolExecutor([])
         self._cli_console: CLIConsole | None = None
 
@@ -53,21 +44,6 @@ class Agent(ABC):
 
         # CKG tool-specific: clear the older CKG databases
         clear_older_ckg()
-
-    @classmethod
-    def from_config(cls, config: Config) -> "Agent":
-        """Create an agent instance from a configuration object.
-
-        This factory method provides the traditional config-based initialization
-        while allowing subclasses to customize the instantiation process.
-
-        Args:
-            config: Configuration object containing model parameters and other settings.
-
-        Returns:
-            An instance of the agent.
-        """
-        return cls(config=config)
 
     @property
     def llm_client(self) -> LLMClient:
@@ -114,9 +90,9 @@ class Agent(ABC):
         return self._initial_messages
 
     @property
-    def model_parameters(self) -> ModelParameters:
-        """Get the model parameters for the agent."""
-        return self._model_parameters
+    def model_config(self) -> ModelConfig:
+        """Get the model config for the agent."""
+        return self._model_config
 
     @property
     def max_steps(self) -> int:
@@ -176,7 +152,7 @@ class Agent(ABC):
     ) -> list["LLMMessage"]:
         step.state = AgentState.THINKING
         self._update_cli_console(step)
-        llm_response = self._llm_client.chat(messages, self._model_parameters, self._tools)
+        llm_response = self._llm_client.chat(messages, self._model_config, self._tools)
         step.llm_response = llm_response
         self._update_cli_console(step)
         self._update_llm_usage(llm_response, execution)
@@ -310,7 +286,7 @@ class Agent(ABC):
         step.tool_calls = tool_calls
         self._update_cli_console(step)
 
-        if self.model_parameters.parallel_tool_calls:
+        if self._model_config.parallel_tool_calls:
             tool_results = await self._tool_caller.parallel_tool_call(tool_calls)
         else:
             tool_results = await self._tool_caller.sequential_tool_call(tool_calls)
