@@ -3,6 +3,7 @@
 
 import random
 import time
+import traceback
 from functools import wraps
 from typing import Any, Callable, TypeVar
 
@@ -43,7 +44,7 @@ def retry_with(
                 sleep_time = random.randint(3, 30)
                 this_error_message = str(e)
                 print(
-                    f"{provider_name} API call failed: {this_error_message} will sleep for {sleep_time} seconds and will retry."
+                    f"{provider_name} API call failed: {this_error_message}. Will sleep for {sleep_time} seconds and will retry.\n{traceback.format_exc()}"
                 )
                 # Randomly sleep for 3-30 seconds
                 time.sleep(sleep_time)

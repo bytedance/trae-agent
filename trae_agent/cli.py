@@ -19,7 +19,6 @@ from trae_agent.utils.cli_console import CLIConsole
 
 from .agent import TraeAgent
 from .utils.config import Config, TraeAgentConfig
-from .utils.legacy_config import load_legacy_config
 
 # Load environment variables
 _ = load_dotenv()
@@ -44,9 +43,6 @@ def create_agent(trae_agent_config: TraeAgentConfig) -> TraeAgent:
         console.print(f"[red]Error creating agent: {e}[/red]")
         console.print(traceback.format_exc())
         sys.exit(1)
-
-
-# Display functions moved to agent/base.py for real-time progress display
 
 
 @click.group()
@@ -111,9 +107,16 @@ def run(
         )
         sys.exit(1)
 
-    config = Config.from_legacy_config(
-        load_legacy_config(config_file, provider, model, model_base_url, api_key, max_steps)
+    config = Config.create(
+        config_file=config_file,
+    ).resolve_config_values(
+        provider=provider,
+        model=model,
+        model_base_url=model_base_url,
+        api_key=api_key,
+        max_steps=max_steps,
     )
+
     trae_agent_config = config.trae_agent
     # Create agent
     if trae_agent_config:
@@ -207,10 +210,14 @@ def interactive(
     Args:
         tasks: the task that you want your agent to solve. This is required to be in the input
     """
-    config = Config.from_legacy_config(
-        load_legacy_config(
-            config_file, provider, model, model_base_url, api_key, max_steps=max_steps
-        )
+    config = Config.create(
+        config_file=config_file,
+    ).resolve_config_values(
+        provider=provider,
+        model=model,
+        model_base_url=model_base_url,
+        api_key=api_key,
+        max_steps=max_steps,
     )
 
     if config.trae_agent:
@@ -336,9 +343,16 @@ Using default settings and environment variables.""",
             )
         )
 
-    config = Config.from_legacy_config(
-        load_legacy_config(config_file, provider, model, model_base_url, api_key, max_steps)
+    config = Config.create(
+        config_file=config_file,
+    ).resolve_config_values(
+        provider=provider,
+        model=model,
+        model_base_url=model_base_url,
+        api_key=api_key,
+        max_steps=max_steps,
     )
+
     if config.trae_agent:
         trae_agent_config = config.trae_agent
     else:

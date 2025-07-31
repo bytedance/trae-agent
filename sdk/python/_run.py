@@ -17,7 +17,6 @@ from trae_agent.agent import TraeAgent
 from trae_agent.agent.agent_basics import AgentExecution
 from trae_agent.utils.cli_console import CLIConsole
 from trae_agent.utils.config import Config, TraeAgentConfig
-from trae_agent.utils.legacy_config import load_legacy_config
 
 # Load environment variables
 _ = load_dotenv()
@@ -123,8 +122,12 @@ class TraeAgentSDK:
 
         # Load or use existing configuration
         if self.config is None:
-            config = Config.from_legacy_config(
-                load_legacy_config(config_file, provider, model, model_base_url, api_key, max_steps)
+            config = Config.create(config_file=config_file).resolve_config_values(
+                provider=provider,
+                model=model,
+                model_base_url=model_base_url,
+                api_key=api_key,
+                max_steps=max_steps,
             )
         else:
             config = self.config

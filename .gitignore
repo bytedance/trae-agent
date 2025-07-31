@@ -172,6 +172,7 @@ cython_debug/
 
 trae-config-local.json
 trae_config.json
+trae_config.yaml
 
 # Trajectories
 /trajectories/

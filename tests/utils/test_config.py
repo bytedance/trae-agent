@@ -23,7 +23,7 @@ class TestConfigBaseURL(unittest.TestCase):
             },
         }
 
-        config = Config.from_legacy_config(LegacyConfig(test_config))
+        config = Config.create_from_legacy_config(legacy_config=LegacyConfig(test_config))
 
         if config.trae_agent:
             trae_agent_config = config.trae_agent
@@ -46,7 +46,7 @@ class TestConfigBaseURL(unittest.TestCase):
             },
         }
 
-        config = Config.from_legacy_config(LegacyConfig(test_config))
+        config = Config.create_from_legacy_config(legacy_config=LegacyConfig(test_config))
 
         if config.trae_agent:
             trae_agent_config = config.trae_agent
@@ -56,7 +56,7 @@ class TestConfigBaseURL(unittest.TestCase):
         self.assertIsNone(trae_agent_config.model.model_provider.base_url)
 
     def test_default_anthropic_base_url(self):
-        config = Config.from_legacy_config(LegacyConfig({}))
+        config = Config.create_from_legacy_config(legacy_config=LegacyConfig({}))
 
         if config.trae_agent:
             trae_agent_config = config.trae_agent
@@ -168,7 +168,7 @@ class TestLakeviewConfig(unittest.TestCase):
     def test_lakeview_defaults_to_main_provider(self):
         config_data = self.get_base_config()
 
-        config = Config.from_legacy_config(LegacyConfig(config_data))
+        config = Config.create_from_legacy_config(legacy_config=LegacyConfig(config_data))
         assert config.lakeview is not None
         self.assertEqual(config.lakeview.model.model_provider.provider, "anthropic")
         self.assertEqual(config.lakeview.model.model, "claude-model")
@@ -177,7 +177,7 @@ class TestLakeviewConfig(unittest.TestCase):
         config_data = self.get_base_config()
         config_data["lakeview_config"] = {"model_provider": None, "model_name": None}
 
-        config = Config.from_legacy_config(LegacyConfig(config_data))
+        config = Config.create_from_legacy_config(legacy_config=LegacyConfig(config_data))
         assert config.lakeview is not None
         self.assertEqual(config.lakeview.model.model_provider.provider, "anthropic")
         self.assertEqual(config.lakeview.model.model, "claude-model")
@@ -187,7 +187,7 @@ class TestLakeviewConfig(unittest.TestCase):
         config_data["enable_lakeview"] = False
         config_data["lakeview_config"] = {"model_provider": "doubao", "model_name": "some-model"}
 
-        config = Config.from_legacy_config(LegacyConfig(config_data))
+        config = Config.create_from_legacy_config(legacy_config=LegacyConfig(config_data))
         self.assertIsNone(config.lakeview)
 
 

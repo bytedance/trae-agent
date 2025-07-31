@@ -30,7 +30,7 @@ class TestTraeAgentExtended(unittest.TestCase):
                 }
             },
         }
-        self.config = Config.from_legacy_config(LegacyConfig(test_config))
+        self.config = Config.create_from_legacy_config(legacy_config=LegacyConfig(test_config))
 
         # Avoid create real LLMClient instance to avoid actual API calls
         self.llm_client_patcher = patch("trae_agent.agent.base.LLMClient")
