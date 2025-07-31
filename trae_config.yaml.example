@@ -14,9 +14,9 @@ lakeview:
 
 model_providers:
     anthropic:
-        api_key: your_anthropic_api_key # you can also use ${ANTHROPIC_API_KEY} refering to an environment variable
+        api_key: your_anthropic_api_key
         provider: anthropic
-    
+
 models:
     default_model:
         model_provider: anthropic
