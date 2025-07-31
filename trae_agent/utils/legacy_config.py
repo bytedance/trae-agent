@@ -15,10 +15,6 @@ from pathlib import Path
 from typing import Any, override
 
 
-from .config import Config, ModelConfig, ModelProvider, TraeAgentConfig
-from .config import LakeviewConfig as NewLakeviewConfig
-
-
 # data class for model parameters
 @dataclass
 class ModelParameters:
@@ -141,51 +137,6 @@ class LegacyConfig:
     @override
     def __str__(self) -> str:
         return f"Config(default_provider={self.default_provider}, max_steps={self.max_steps}, model_providers={self.model_providers})"
-
-    def to_new_config(self) -> Config:
-        model_provider = ModelProvider(
-            api_key=self.model_providers[self.default_provider].api_key,
-            base_url=self.model_providers[self.default_provider].base_url,
-            api_version=self.model_providers[self.default_provider].api_version,
-            provider=self.default_provider
-        )
-
-        model_config = ModelConfig(
-            model=self.model_providers[self.default_provider].model,
-            model_provider=model_provider,
-            max_tokens=self.model_providers[self.default_provider].max_tokens,
-            temperature=self.model_providers[self.default_provider].temperature,
-            top_p=self.model_providers[self.default_provider].top_p,
-            top_k=self.model_providers[self.default_provider].top_k,
-            parallel_tool_calls=self.model_providers[self.default_provider].parallel_tool_calls,
-            max_retries=self.model_providers[self.default_provider].max_retries,
-            candidate_count=self.model_providers[self.default_provider].candidate_count,
-            stop_sequences=self.model_providers[self.default_provider].stop_sequences,
-        )
-
-        trae_agent_config = TraeAgentConfig(
-            max_steps=self.max_steps,
-            enable_lakeview=self.enable_lakeview,
-            model=model_config
-        )
-
-        if trae_agent_config.enable_lakeview:
-            lakeview_config = NewLakeviewConfig(
-                model=model_config,
-            )
-        else:
-            lakeview_config = None
-
-        return Config(
-            trae_agent=trae_agent_config,
-            lakeview=lakeview_config,
-            model_providers={
-                self.default_provider: model_provider,
-            },
-            models={
-                "default_model": model_config,
-            }
-        )
 
 
 def load_legacy_config(

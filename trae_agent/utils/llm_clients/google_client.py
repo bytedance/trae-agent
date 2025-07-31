@@ -12,8 +12,8 @@ from google import genai
 from google.genai import types
 
 from ...tools.base import Tool, ToolCall, ToolResult
-from .base_client import BaseLLMClient
 from ..config import ModelConfig
+from .base_client import BaseLLMClient
 from .llm_basics import LLMMessage, LLMResponse, LLMUsage
 from .retry_utils import retry_with
 
@@ -40,7 +40,7 @@ class GoogleClient(BaseLLMClient):
         generation_config: types.GenerateContentConfig,
     ) -> types.GenerateContentResponse:
         """Create a response using Google Gemini API. This method will be decorated with retry logic."""
-        return self.client.models.generate_content( # pyright: ignore[reportUnknownMemberType]
+        return self.client.models.generate_content(  # pyright: ignore[reportUnknownMemberType]
             model=model_config.model,
             contents=current_chat_contents,
             config=generation_config,
@@ -147,7 +147,11 @@ class GoogleClient(BaseLLMClient):
             content=content,
             usage=usage,
             model=model_config.model,
-            finish_reason=str(response.candidates[0].finish_reason.name if response.candidates[0].finish_reason else "unknown")
+            finish_reason=str(
+                response.candidates[0].finish_reason.name
+                if response.candidates[0].finish_reason
+                else "unknown"
+            )
             if response.candidates
             else "UNKNOWN",
             tool_calls=tool_calls if len(tool_calls) > 0 else None,
@@ -211,7 +215,6 @@ class GoogleClient(BaseLLMClient):
                 else:
                     result_content["error"] = serialization_error
                 result_content["result"] = str(tool_result.result)
-        
 
         if tool_result.error and "error" not in result_content:
             result_content["error"] = tool_result.error

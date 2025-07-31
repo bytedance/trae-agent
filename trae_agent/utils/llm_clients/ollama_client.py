@@ -10,7 +10,7 @@ import uuid
 from typing import override
 
 import openai
-from ollama import chat as ollama_chat # pyright: ignore[reportUnknownVariableType]
+from ollama import chat as ollama_chat  # pyright: ignore[reportUnknownVariableType]
 from openai.types.responses import (
     FunctionToolParam,
     ResponseFunctionToolCallParam,

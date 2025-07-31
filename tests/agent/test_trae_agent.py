@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
+from trae_agent.utils.config import Config
 from trae_agent.utils.legacy_config import LegacyConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMResponse
 
@@ -29,7 +30,7 @@ class TestTraeAgentExtended(unittest.TestCase):
                 }
             },
         }
-        self.config = LegacyConfig(test_config).to_new_config()
+        self.config = Config.from_legacy_config(LegacyConfig(test_config))
 
         # Avoid create real LLMClient instance to avoid actual API calls
         self.llm_client_patcher = patch("trae_agent.agent.base.LLMClient")

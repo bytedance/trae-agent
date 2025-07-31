@@ -25,8 +25,8 @@ from openai.types.chat.chat_completion_tool_message_param import (
 from openai.types.shared_params.function_definition import FunctionDefinition
 
 from ...tools.base import Tool, ToolCall
-from .base_client import BaseLLMClient
 from ..config import ModelConfig
+from .base_client import BaseLLMClient
 from .llm_basics import LLMMessage, LLMResponse, LLMUsage
 from .retry_utils import retry_with
 
@@ -210,7 +210,7 @@ class OpenAICompatibleClient(BaseLLMClient):
                 case msg if msg.tool_call is not None:
                     _msg_tool_call_handler(openai_messages, msg)
                 case msg if msg.tool_result is not None:
-                    _msg_tool_result_handler(openai_messages, msg)                    
+                    _msg_tool_result_handler(openai_messages, msg)
                 case _:
                     _msg_role_handler(openai_messages, msg)
 

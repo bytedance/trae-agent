@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 
 from ...tools.base import Tool
 from ...utils.config import ModelConfig
-from .llm_basics import LLMMessage, LLMResponse
 from ...utils.trajectory_recorder import TrajectoryRecorder
+from .llm_basics import LLMMessage, LLMResponse
 
 
 class BaseLLMClient(ABC):

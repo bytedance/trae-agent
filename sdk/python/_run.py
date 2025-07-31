@@ -123,9 +123,9 @@ class TraeAgentSDK:
 
         # Load or use existing configuration
         if self.config is None:
-            config = load_legacy_config(
-                config_file, provider, model, model_base_url, api_key, max_steps
-            ).to_new_config()
+            config = Config.from_legacy_config(
+                load_legacy_config(config_file, provider, model, model_base_url, api_key, max_steps)
+            )
         else:
             config = self.config
 

@@ -127,11 +127,7 @@ class OpenAIClient(BaseLLMClient):
 
         if content != "":
             self.message_history.append(
-                EasyInputMessageParam(
-                    content=content,
-                    role="assistant",
-                    type="message"
-                )
+                EasyInputMessageParam(content=content, role="assistant", type="message")
             )
 
         usage = None

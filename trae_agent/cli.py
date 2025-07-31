@@ -18,7 +18,7 @@ from rich.table import Table
 from trae_agent.utils.cli_console import CLIConsole
 
 from .agent import TraeAgent
-from .utils.config import TraeAgentConfig
+from .utils.config import Config, TraeAgentConfig
 from .utils.legacy_config import load_legacy_config
 
 # Load environment variables
@@ -111,9 +111,9 @@ def run(
         )
         sys.exit(1)
 
-    config = load_legacy_config(
-        config_file, provider, model, model_base_url, api_key, max_steps
-    ).to_new_config()
+    config = Config.from_legacy_config(
+        load_legacy_config(config_file, provider, model, model_base_url, api_key, max_steps)
+    )
     trae_agent_config = config.trae_agent
     # Create agent
     if trae_agent_config:
@@ -207,9 +207,11 @@ def interactive(
     Args:
         tasks: the task that you want your agent to solve. This is required to be in the input
     """
-    config = load_legacy_config(
-        config_file, provider, model, model_base_url, api_key, max_steps=max_steps
-    ).to_new_config()
+    config = Config.from_legacy_config(
+        load_legacy_config(
+            config_file, provider, model, model_base_url, api_key, max_steps=max_steps
+        )
+    )
 
     if config.trae_agent:
         trae_agent_config = config.trae_agent
@@ -334,9 +336,9 @@ Using default settings and environment variables.""",
             )
         )
 
-    config = load_legacy_config(
-        config_file, provider, model, model_base_url, api_key, max_steps
-    ).to_new_config()
+    config = Config.from_legacy_config(
+        load_legacy_config(config_file, provider, model, model_base_url, api_key, max_steps)
+    )
     if config.trae_agent:
         trae_agent_config = config.trae_agent
     else:

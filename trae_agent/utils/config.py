@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 
 import yaml
 
+from .legacy_config import LegacyConfig
+
 
 class ConfigError(Exception):
     pass
@@ -91,7 +93,8 @@ class Config:
 
     trae_agent: TraeAgentConfig | None = None
 
-    def create_from(self, config_file: str | None = None, config_string: str | None = None):
+    @classmethod
+    def create(cls, config_file: str | None = None, config_string: str | None = None) -> "Config":
         if config_file and config_string:
             raise ConfigError("Only one of config_file or config_string should be provided")
 
@@ -99,67 +102,126 @@ class Config:
         try:
             if config_file is not None:
                 with open(config_file, "r") as f:
-                    config = yaml.safe_load(f)
+                    yaml_config = yaml.safe_load(f)
             elif config_string is not None:
-                config = yaml.safe_load(config_string)
+                yaml_config = yaml.safe_load(config_string)
             else:
                 raise ConfigError("No config file or config string provided")
         except yaml.YAMLError as e:
             raise ConfigError(f"Error parsing YAML config: {e}") from e
 
+        config = cls()
+
         # Parse model providers
-        model_providers = config.get("model_providers", None)
+        model_providers = yaml_config.get("model_providers", None)
         if model_providers is not None and len(model_providers.keys()) > 0:
-            self.model_providers = {}
+            config_model_providers = {}
             for model_provider_name, model_provider_config in model_providers.items():
-                self.model_providers[model_provider_name] = ModelProvider(**model_provider_config)
+                config_model_providers[model_provider_name] = ModelProvider(**model_provider_config)
+            config.model_providers = config_model_providers
         else:
             raise ConfigError("No model providers provided")
 
         # Parse models and populate model_provider fields
-        models = config.get("models", None)
+        models = yaml_config.get("models", None)
         if models is not None and len(models.keys()) > 0:
-            self.models = {}
+            config_models: dict[str, ModelConfig] = {}
             for model_name, model_config in models.items():
-                if model_config["model_provider"] not in self.model_providers:
+                if model_config["model_provider"] not in config_model_providers:
                     raise ConfigError(f"Model provider {model_config['model_provider']} not found")
-                self.models[model_name] = ModelConfig(**model_config)
-                self.models[model_name].model_provider = model_providers[
+                config_models[model_name] = ModelConfig(**model_config)
+                config_models[model_name].model_provider = model_providers[
                     model_config["model_provider"]
                 ]
+            config.models = config_models
         else:
             raise ConfigError("No models provided")
 
         # Parse lakeview config
-        lakeview = config.get("lakeview", None)
+        lakeview = yaml_config.get("lakeview", None)
         if lakeview is not None:
             lakeview_model_name = lakeview.get("model", None)
             if lakeview_model_name is None:
                 raise ConfigError("No model provided for lakeview")
-            lakeview_model = self.models[lakeview_model_name]
-            self.lakeview = LakeviewConfig(
+            lakeview_model = config_models[lakeview_model_name]
+            config.lakeview = LakeviewConfig(
                 model=lakeview_model,
             )
+        else:
+            config.lakeview = None
 
         # Parse agents
-        agents = config.get("agents", None)
+        agents = yaml_config.get("agents", None)
         if agents is not None and len(agents.keys()) > 0:
             for agent_name, agent_config in agents.items():
                 agent_model_name = agent_config.get("model", None)
                 if agent_model_name is None:
                     raise ConfigError(f"No model provided for {agent_name}")
                 try:
-                    agent_model = self.models[agent_model_name]
+                    agent_model = config_models[agent_model_name]
                 except KeyError as e:
                     raise ConfigError(f"Model {agent_model_name} not found") from e
                 match agent_name:
                     case "trae_agent":
                         trae_agent_config = TraeAgentConfig(**agent_config)
                         trae_agent_config.model = agent_model
-                        self.trae_agent = trae_agent_config
-                        if trae_agent_config.enable_lakeview and self.lakeview is None:
+                        if trae_agent_config.enable_lakeview and config.lakeview is None:
                             raise ConfigError("Lakeview is enabled but no lakeview config provided")
+                        config.trae_agent = trae_agent_config
                     case _:
                         raise ConfigError(f"Unknown agent: {agent_name}")
         else:
             raise ConfigError("No agent configs provided")
+        return config
+
+    @classmethod
+    def from_legacy_config(cls, legacy_config: LegacyConfig) -> "Config":
+        model_provider = ModelProvider(
+            api_key=legacy_config.model_providers[legacy_config.default_provider].api_key,
+            base_url=legacy_config.model_providers[legacy_config.default_provider].base_url,
+            api_version=legacy_config.model_providers[legacy_config.default_provider].api_version,
+            provider=legacy_config.default_provider,
+        )
+
+        model_config = ModelConfig(
+            model=legacy_config.model_providers[legacy_config.default_provider].model,
+            model_provider=model_provider,
+            max_tokens=legacy_config.model_providers[legacy_config.default_provider].max_tokens,
+            temperature=legacy_config.model_providers[legacy_config.default_provider].temperature,
+            top_p=legacy_config.model_providers[legacy_config.default_provider].top_p,
+            top_k=legacy_config.model_providers[legacy_config.default_provider].top_k,
+            parallel_tool_calls=legacy_config.model_providers[
+                legacy_config.default_provider
+            ].parallel_tool_calls,
+            max_retries=legacy_config.model_providers[legacy_config.default_provider].max_retries,
+            candidate_count=legacy_config.model_providers[
+                legacy_config.default_provider
+            ].candidate_count,
+            stop_sequences=legacy_config.model_providers[
+                legacy_config.default_provider
+            ].stop_sequences,
+        )
+
+        trae_agent_config = TraeAgentConfig(
+            max_steps=legacy_config.max_steps,
+            enable_lakeview=legacy_config.enable_lakeview,
+            model=model_config,
+        )
+
+        if trae_agent_config.enable_lakeview:
+            lakeview_config = LakeviewConfig(
+                model=model_config,
+            )
+        else:
+            lakeview_config = None
+
+        return cls(
+            trae_agent=trae_agent_config,
+            lakeview=lakeview_config,
+            model_providers={
+                legacy_config.default_provider: model_provider,
+            },
+            models={
+                "default_model": model_config,
+            },
+        )
