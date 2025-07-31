@@ -4,10 +4,10 @@
 
 from abc import ABC, abstractmethod
 
-from ...tools.base import Tool
-from ...utils.config import ModelConfig
-from ...utils.trajectory_recorder import TrajectoryRecorder
-from .llm_basics import LLMMessage, LLMResponse
+from trae_agent.tools.base import Tool
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
+from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 
 
 class BaseLLMClient(ABC):

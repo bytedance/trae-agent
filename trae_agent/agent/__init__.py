@@ -3,7 +3,7 @@
 
 """Agent module for Trae Agent."""
 
-from .base import Agent
-from .trae_agent import TraeAgent
+from trae_agent.agent.base import Agent
+from trae_agent.agent.trae_agent import TraeAgent
 
 __all__ = ["Agent", "TraeAgent"]

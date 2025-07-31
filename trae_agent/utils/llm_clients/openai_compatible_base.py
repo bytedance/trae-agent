@@ -24,11 +24,11 @@ from openai.types.chat.chat_completion_tool_message_param import (
 )
 from openai.types.shared_params.function_definition import FunctionDefinition
 
-from ...tools.base import Tool, ToolCall
-from ..config import ModelConfig
-from .base_client import BaseLLMClient
-from .llm_basics import LLMMessage, LLMResponse, LLMUsage
-from .retry_utils import retry_with
+from trae_agent.tools.base import Tool, ToolCall
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.base_client import BaseLLMClient
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse, LLMUsage
+from trae_agent.utils.llm_clients.retry_utils import retry_with
 
 
 class ProviderConfig(ABC):

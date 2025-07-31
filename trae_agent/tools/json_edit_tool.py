@@ -11,7 +11,7 @@ from jsonpath_ng import Fields, Index
 from jsonpath_ng import parse as jsonpath_parse
 from jsonpath_ng.exceptions import JSONPathError
 
-from .base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
+from trae_agent.tools.base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
 
 
 class JSONEditTool(Tool):

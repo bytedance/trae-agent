@@ -13,7 +13,7 @@ import asyncio
 import os
 from typing import override
 
-from .base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
+from trae_agent.tools.base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
 
 
 class _BashSession:

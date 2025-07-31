@@ -5,11 +5,11 @@
 
 from enum import Enum
 
-from ...tools.base import Tool
-from ..config import ModelConfig
-from ..trajectory_recorder import TrajectoryRecorder
-from .base_client import BaseLLMClient
-from .llm_basics import LLMMessage, LLMResponse
+from trae_agent.tools.base import Tool
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.base_client import BaseLLMClient
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
+from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 
 
 class LLMProvider(Enum):

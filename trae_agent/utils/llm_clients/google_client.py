@@ -11,11 +11,11 @@ from typing import override
 from google import genai
 from google.genai import types
 
-from ...tools.base import Tool, ToolCall, ToolResult
-from ..config import ModelConfig
-from .base_client import BaseLLMClient
-from .llm_basics import LLMMessage, LLMResponse, LLMUsage
-from .retry_utils import retry_with
+from trae_agent.tools.base import Tool, ToolCall, ToolResult
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.base_client import BaseLLMClient
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse, LLMUsage
+from trae_agent.utils.llm_clients.retry_utils import retry_with
 
 
 class GoogleClient(BaseLLMClient):

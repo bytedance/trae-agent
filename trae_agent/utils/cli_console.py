@@ -9,9 +9,9 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
-from ..agent.agent_basics import AgentExecution, AgentState, AgentStep
-from .config import Config, LakeviewConfig, TraeAgentConfig
-from .lake_view import LakeView
+from trae_agent.agent.agent_basics import AgentExecution, AgentState, AgentStep
+from trae_agent.utils.config import Config, LakeviewConfig, TraeAgentConfig
+from trae_agent.utils.lake_view import LakeView
 
 AGENT_STATE_INFO = {
     AgentState.THINKING: ("blue", "🤔"),

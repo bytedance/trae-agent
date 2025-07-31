@@ -5,8 +5,11 @@
 
 import openai
 
-from ..config import ModelConfig
-from .openai_compatible_base import OpenAICompatibleClient, ProviderConfig
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.openai_compatible_base import (
+    OpenAICompatibleClient,
+    ProviderConfig,
+)
 
 
 class DoubaoProvider(ProviderConfig):

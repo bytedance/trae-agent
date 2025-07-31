@@ -8,13 +8,13 @@ import os
 import subprocess
 from typing import override
 
-from ..prompt.agent_prompt import TRAE_AGENT_SYSTEM_PROMPT
-from ..tools import tools_registry
-from ..tools.base import Tool, ToolExecutor, ToolResult
-from ..utils.config import TraeAgentConfig
-from ..utils.llm_clients.llm_basics import LLMMessage, LLMResponse
-from .agent_basics import AgentError, AgentExecution
-from .base import Agent
+from trae_agent.agent.agent_basics import AgentError, AgentExecution
+from trae_agent.agent.base import Agent
+from trae_agent.prompt.agent_prompt import TRAE_AGENT_SYSTEM_PROMPT
+from trae_agent.tools import tools_registry
+from trae_agent.tools.base import Tool, ToolExecutor, ToolResult
+from trae_agent.utils.config import TraeAgentConfig
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 
 TraeAgentToolNames = [
     "str_replace_based_edit_tool",

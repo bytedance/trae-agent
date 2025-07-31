@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from .legacy_config import LegacyConfig
+from trae_agent.utils.legacy_config import LegacyConfig
 
 
 class ConfigError(Exception):

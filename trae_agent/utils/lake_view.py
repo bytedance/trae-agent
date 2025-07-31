@@ -2,10 +2,9 @@ import re
 from dataclasses import dataclass
 
 from trae_agent.agent.agent_basics import AgentStep
-
-from .config import LakeviewConfig
-from .llm_clients.llm_basics import LLMMessage
-from .llm_clients.llm_client import LLMClient
+from trae_agent.utils.config import LakeviewConfig
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage
+from trae_agent.utils.llm_clients.llm_client import LLMClient
 
 StepType = tuple[
     str,  # content for human (will write into result file)

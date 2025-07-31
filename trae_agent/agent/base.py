@@ -5,16 +5,15 @@
 
 from abc import ABC, abstractmethod
 
+from trae_agent.agent.agent_basics import AgentExecution, AgentState, AgentStep
 from trae_agent.tools import tools_registry
-
-from ..tools.base import Tool, ToolCall, ToolExecutor, ToolResult
-from ..tools.ckg.ckg_database import clear_older_ckg
-from ..utils.cli_console import CLIConsole
-from ..utils.config import AgentConfig, ModelConfig
-from ..utils.llm_clients.llm_basics import LLMMessage, LLMResponse
-from ..utils.llm_clients.llm_client import LLMClient
-from ..utils.trajectory_recorder import TrajectoryRecorder
-from .agent_basics import AgentExecution, AgentState, AgentStep
+from trae_agent.tools.base import Tool, ToolCall, ToolExecutor, ToolResult
+from trae_agent.tools.ckg.ckg_database import clear_older_ckg
+from trae_agent.utils.cli_console import CLIConsole
+from trae_agent.utils.config import AgentConfig, ModelConfig
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
+from trae_agent.utils.llm_clients.llm_client import LLMClient
+from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 
 
 class Agent(ABC):

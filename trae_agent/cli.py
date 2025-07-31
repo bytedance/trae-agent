@@ -15,10 +15,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from trae_agent.agent import TraeAgent
 from trae_agent.utils.cli_console import CLIConsole
-
-from .agent import TraeAgent
-from .utils.config import Config, TraeAgentConfig
+from trae_agent.utils.config import Config, TraeAgentConfig
 
 # Load environment variables
 _ = load_dotenv()
