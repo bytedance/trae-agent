@@ -61,6 +61,25 @@ We recommend to configure Trae Agent using the config file.
    - Replace `"your_azure_base_url"` with your actual Azure base URL
    - Replace other placeholder URLs and API keys as needed
 
+3. **(Optional) Add mcp_servers section to enable agent to call MCP services:**
+   You can configure MCP services by adding an mcp_servers section in trae_config.json.
+   Here's an example configuration for integrating Playwright MCP:
+
+   ``` json
+      {
+         "default_provider": "anthropic",
+         "max_steps": 20,
+         "enable_lakeview": true,
+         "mcp_servers": {
+            "playwright": {
+               "command": "npx",
+               "args": [
+               "@playwright/mcp@0.0.27"
+               ]
+            }
+         }
+      }
+   ```
 **Note:** The `trae_config.json` file is ignored by git to prevent accidentally committing your API keys.
 
 You can also set your API keys as environment variables:

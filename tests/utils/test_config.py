@@ -194,6 +194,32 @@ class TestLakeviewConfig(unittest.TestCase):
             },
         }
 
+    def get_config_with_mcp_servers(self):
+        return {
+            "default_provider": "anthropic",
+            "enable_lakeview": True,
+            "model_providers": {
+                "anthropic": {
+                    "api_key": "anthropic-key",
+                    "model": "claude-model",
+                    "max_tokens": 4096,
+                    "temperature": 0.5,
+                    "top_p": 1,
+                    "top_k": 0,
+                    "max_retries": 10,
+                },
+                "doubao": {
+                    "api_key": "doubao-key",
+                    "model": "doubao-model",
+                    "max_tokens": 8192,
+                    "temperature": 0.5,
+                    "top_p": 1,
+                    "max_retries": 20,
+                },
+            },
+            "mcp_servers": {"test_server": {"command": "echo", "args": [], "env": {}, "cwd": "."}},
+        }
+
     def test_lakeview_defaults_to_main_provider(self):
         config_data = self.get_base_config()
 
@@ -239,6 +265,22 @@ class TestLakeviewConfig(unittest.TestCase):
 
         config = Config(config_data)
         self.assertIsNone(config.lakeview_config)
+
+    def test_mcp_servers_config(self):
+        config_data = self.get_config_with_mcp_servers()
+
+        config = Config(config_data)
+        self.assertIn("test_server", config.mcp_servers)
+        self.assertEqual(config.mcp_servers["test_server"].command, "echo")
+        self.assertEqual(config.mcp_servers["test_server"].args, [])
+        self.assertEqual(config.mcp_servers["test_server"].env, {})
+        self.assertEqual(config.mcp_servers["test_server"].cwd, ".")
+
+    def test_mcp_servers_empty_config(self):
+        config_data = self.get_base_config()
+
+        config = Config(config_data)
+        self.assertEqual(config.mcp_servers, {})
 
 
 if __name__ == "__main__":

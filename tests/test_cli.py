@@ -1,21 +1,21 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from click.testing import CliRunner
+from asyncclick.testing import CliRunner
 
 from trae_agent.cli import cli
 
 
-class TestCli(unittest.TestCase):
+class TestCli(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.runner = CliRunner()
 
     @patch("trae_agent.cli.create_agent")
     @patch("trae_agent.cli.asyncio.run")
-    def test_run_with_long_prompt(self, mock_asyncio_run, mock_create_agent):
+    async def test_run_with_long_prompt(self, mock_asyncio_run, mock_create_agent):
         """Test that a long prompt string is handled correctly."""
         long_prompt = "a" * 500  # A string longer than typical filename limits
-        result = self.runner.invoke(cli, ["run", long_prompt])
+        result = await self.runner.invoke(cli, ["run", long_prompt])
         self.assertEqual(result.exit_code, 0)
         mock_create_agent.return_value.new_task.assert_called_once()
         call_args, _ = mock_create_agent.return_value.new_task.call_args
@@ -23,43 +23,43 @@ class TestCli(unittest.TestCase):
 
     @patch("trae_agent.cli.create_agent")
     @patch("trae_agent.cli.asyncio.run")
-    def test_run_with_file_argument(self, mock_asyncio_run, mock_create_agent):
+    async def test_run_with_file_argument(self, mock_asyncio_run, mock_create_agent):
         """Test that the --file argument correctly reads from a file."""
         with self.runner.isolated_filesystem():
             with open("task.txt", "w") as f:
                 f.write("task from file")
 
-            result = self.runner.invoke(cli, ["run", "--file", "task.txt"])
+            result = await self.runner.invoke(cli, ["run", "--file", "task.txt"])
             self.assertEqual(result.exit_code, 0)
             mock_create_agent.return_value.new_task.assert_called_once()
             call_args, _ = mock_create_agent.return_value.new_task.call_args
             self.assertEqual(call_args[0], "task from file")
 
-    def test_run_with_nonexistent_file(self):
+    async def test_run_with_nonexistent_file(self):
         """Test for a clear error when --file points to a non-existent file."""
-        result = self.runner.invoke(cli, ["run", "--file", "nonexistent.txt"])
+        result = await self.runner.invoke(cli, ["run", "--file", "nonexistent.txt"])
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("Error: File not found: nonexistent.txt", result.output)
 
-    def test_run_with_both_task_and_file(self):
+    async def test_run_with_both_task_and_file(self):
         """Test for a clear error when both task string and --file are used."""
-        result = self.runner.invoke(cli, ["run", "some task", "--file", "task.txt"])
+        result = await self.runner.invoke(cli, ["run", "some task", "--file", "task.txt"])
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn(
             "Error: Cannot use both a task string and the --file argument.", result.output
         )
 
-    def test_run_with_no_input(self):
+    async def test_run_with_no_input(self):
         """Test for a clear error when neither task string nor --file is provided."""
-        result = self.runner.invoke(cli, ["run"])
+        result = await self.runner.invoke(cli, ["run"])
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn(
             "Error: Must provide either a task string or use the --file argument.", result.output
         )
 
-    def test_run_with_nonexistent_working_dir(self):
+    async def test_run_with_nonexistent_working_dir(self):
         """Test for a clear error when --working-dir points to a non-existent directory."""
-        result = self.runner.invoke(
+        result = await self.runner.invoke(
             cli, ["run", "some task", "--working-dir", "/path/to/nonexistent/dir"]
         )
         self.assertNotEqual(result.exit_code, 0)
@@ -67,13 +67,15 @@ class TestCli(unittest.TestCase):
 
     @patch("trae_agent.cli.create_agent")
     @patch("trae_agent.cli.asyncio.run")
-    def test_run_with_string_that_is_also_a_filename(self, mock_asyncio_run, mock_create_agent):
+    async def test_run_with_string_that_is_also_a_filename(
+        self, mock_asyncio_run, mock_create_agent
+    ):
         """Test that a task string that looks like a file is treated as a string."""
         with self.runner.isolated_filesystem():
             with open("task.txt", "w") as f:
                 f.write("file content")
 
-            result = self.runner.invoke(cli, ["run", "task.txt"])
+            result = await self.runner.invoke(cli, ["run", "task.txt"])
             self.assertEqual(result.exit_code, 0)
 
             mock_create_agent.return_value.new_task.assert_called_once()
@@ -81,13 +83,14 @@ class TestCli(unittest.TestCase):
             self.assertEqual(call_args[0], "task.txt")
 
     @patch("trae_agent.cli.create_agent")
-    def test_run_handles_agent_exception(self, mock_create_agent):
+    async def test_run_handles_agent_exception(self, mock_create_agent):
         """Test that the CLI handles exceptions raised from the agent gracefully."""
         # deliberately make the mock agent's execute_task raise an error
+        mock_create_agent.return_value.setup_trajectory_recording = Mock(return_value="fake/path")
         mock_agent_instance = mock_create_agent.return_value
         mock_agent_instance.execute_task.side_effect = Exception("Core agent failed")
 
-        result = self.runner.invoke(cli, ["run", "some task"])
+        result = await self.runner.invoke(cli, ["run", "some task"])
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("Unexpected error: Core agent failed", result.output)
 

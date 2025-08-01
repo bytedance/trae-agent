@@ -2,6 +2,14 @@
   "default_provider": "anthropic",
   "max_steps": 20,
   "enable_lakeview": true,
+  "mcp_servers":{
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@0.0.27"
+      ]
+    }
+  },
   "model_providers": {
     "openai": {
       "api_key": "your_openai_api_key",
