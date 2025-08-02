@@ -61,7 +61,7 @@ def cli():
 @click.option("--max-steps", help="Maximum number of execution steps", type=int)
 @click.option("--working-dir", "-w", help="Working directory for the agent")
 @click.option("--must-patch", "-mp", is_flag=True, help="Whether to patch the code")
-@click.option("--config-file", help="Path to configuration file", default="trae_config.json")
+@click.option("--config-file",  help="Path to configuration file", default="trae_config.json", envvar="TRAE_CONFIG_FILE")
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 @click.option("--patch-path", "-pp", help="Path to patch file")
 def run(
@@ -192,7 +192,7 @@ def run(
 @click.option("--model", "-m", help="Specific model to use")
 @click.option("--model-base-url", help="Base URL for the model API")
 @click.option("--api-key", "-k", help="API key (or set via environment variable)")
-@click.option("--config-file", help="Path to configuration file", default="trae_config.json")
+@click.option("--config-file", help="Path to configuration file", default="trae_config.json", envvar="TRAE_CONFIG_FILE")
 @click.option("--max-steps", help="Maximum number of execution steps", type=int, default=20)
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 def interactive(
@@ -315,7 +315,7 @@ def interactive(
 
 
 @cli.command()
-@click.option("--config-file", help="Path to configuration file", default="trae_config.json")
+@click.option("--config-file", help="Path to configuration file", default="trae_config.json", envvar="TRAE_CONFIG_FILE")
 @click.option("--provider", "-p", help="LLM provider to use")
 @click.option("--model", "-m", help="Specific model to use")
 @click.option("--model-base-url", help="Base URL for the model API")
