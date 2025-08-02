@@ -40,7 +40,11 @@ class CLIConsole:
         self.config: Config | None = config
         self.trae_agent_config: TraeAgentConfig | None = config.trae_agent if config else None
         self.console_steps: dict[int, ConsoleStep] = {}
-        self.lakeview_config: LakeviewConfig | None = config.lakeview if config else None
+        self.lakeview_config: LakeviewConfig | None = (
+            config.lakeview
+            if config and self.trae_agent_config and self.trae_agent_config.enable_lakeview
+            else None
+        )
         self.lake_view: LakeView | None = (
             LakeView(self.lakeview_config) if self.lakeview_config else None
         )
@@ -64,14 +68,15 @@ class CLIConsole:
 
     async def start(self):
         while True:
-            if self.agent_execution and (
-                self.lake_view is None
-                or (
-                    len(self.agent_execution.steps) == len(self.console_steps)
-                    and all(step.lake_view_generator_done for step in self.console_steps.values())
-                )
-            ):
-                break
+            if self.agent_execution:
+                if self.lake_view is None:
+                    # Lakeview not enabled, break the loop
+                    break
+                elif len(self.agent_execution.steps) == len(self.console_steps) and all(
+                    step.lake_view_generator_done for step in self.console_steps.values()
+                ):
+                    # If lakeview is enabled, we need to wait until all lakeview panels are generated.
+                    break
             self.print_task_progress()
             await asyncio.sleep(3)
 
