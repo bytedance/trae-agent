@@ -2,11 +2,14 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Alpha](https://img.shields.io/badge/Status-Alpha-red)
+[![arXiv:2507.23370](https://img.shields.io/badge/TechReport-arXiv%3A2507.23370-b31a1b)](https://arxiv.org/abs/2507.23370)
 [![Pre-commit](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml)
 [![Unit Tests](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml)
 [![Discord](https://img.shields.io/discord/1320998163615846420?label=Join%20Discord&color=7289DA)](https://discord.gg/VwaQ4ZBHvC)
 
 **Trae Agent** is an LLM-based agent for general purpose software engineering tasks. It provides a powerful CLI interface that can understand natural language instructions and execute complex software engineering workflows using various tools and LLM providers.
+
+For technical details please refer to [our technical report](https://arxiv.org/abs/2507.23370).
 
 **Project Status:** The project is still being actively developed. Please refer to [docs/roadmap.md](docs/roadmap.md) and [CONTRIBUTING](CONTRIBUTING.md) if you are willing to help us improve Trae Agent.
 
@@ -252,43 +255,7 @@ For more details, see [docs/TRAJECTORY_RECORDING.md](docs/TRAJECTORY_RECORDING.m
 
 ## 🤝 Contributing
 
-For detailed contribution guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
-
-1. Fork the repository
-2. Set up a development install:
-
-   ```bash
-   make install-dev
-   ```
-
-3. Create a feature branch (`git checkout -b feature/amazing-feature`)
-4. Make your changes
-5. Add tests for new functionality
-6. Pre-commit check
-
-   ```bash
-    make pre-commit
-    or:
-    make uv-pre-commit
-   ```
-
-    if having formatting error,please try:
-
-   ```
-    make fix-format
-   ```
-
-7. Commit your changes (`git commit -m 'Add amazing feature'`)
-8. Push to the branch (`git push origin feature/amazing-feature`)
-9. Open a Pull Request
-
-### Development Guidelines
-
-- Follow PEP 8 style guidelines
-- Add tests for new features
-- Update documentation as needed
-- Use type hints where appropriate
-- Ensure all tests pass before submitting
+For contribution guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📋 Requirements
 
@@ -340,6 +307,20 @@ uv run trae-cli `xxxxx`
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## ✍️ Citation
+
+```bibtex
+@article{traeresearchteam2025traeagent,
+      title={Trae Agent: An LLM-based Agent for Software Engineering with Test-time Scaling},
+      author={Trae Research Team and Pengfei Gao and Zhao Tian and Xiangxin Meng and Xinchen Wang and Ruida Hu and Yuanan Xiao and Yizhou Liu and Zhao Zhang and Junjie Chen and Cuiyun Gao and Yun Lin and Yingfei Xiong and Chao Peng and Xia Liu},
+      year={2025},
+      eprint={2507.23370},
+      archivePrefix={arXiv},
+      primaryClass={cs.SE},
+      url={https://arxiv.org/abs/2507.23370},
+}
+```
 
 ## 🙏 Acknowledgments
 
