@@ -65,10 +65,8 @@ class ModelConfig:
         if provider:
             if model_providers and provider in model_providers:
                 self.model_provider = model_providers[provider]
-            elif api_key is None or model_base_url is None:
-                raise ConfigError(
-                    "To register a new model provider, both api_key and model_base_url should be provided"
-                )
+            elif api_key is None:
+                raise ConfigError("To register a new model provider, an api_key should be provided")
             else:
                 self.model_provider = ModelProvider(
                     api_key=api_key,
