@@ -21,7 +21,7 @@ For technical details please refer to [our technical report](https://arxiv.org/a
 - 🛠️ **Rich Tool Ecosystem**: File editing, bash execution, sequential thinking, and more
 - 🎯 **Interactive Mode**: Conversational interface for iterative development
 - 📊 **Trajectory Recording**: Detailed logging of all agent actions for debugging and analysis
-- ⚙️ **Flexible Configuration**: JSON-based configuration with environment variable support
+- ⚙️ **Flexible Configuration**: YAML-based configuration with environment variable support
 - 🚀 **Easy Installation**: Simple pip-based installation
 
 ## 🚀 Quick Start
@@ -59,17 +59,17 @@ We recommend to configure Trae Agent using the config file.
 1. **Copy the example configuration file:**
 
    ```bash
-   cp trae_config.json.example trae_config.json
+   cp trae_config.yaml.example trae_config.yaml
    ```
 
-2. **Edit `trae_config.json` and replace the placeholder values with your actual credentials:**
-   - Replace `"your_openai_api_key"` with your actual OpenAI API key
-   - Replace `"your_anthropic_api_key"` with your actual Anthropic API key
-   - Replace `"your_google_api_key"` with your actual Google API key
-   - Replace `"your_azure_base_url"` with your actual Azure base URL
-   - Replace other placeholder URLs and API keys as needed
+2. **Edit `trae_config.yaml` and replace the placeholder values with your actual credentials:**
+   - Replace `your_anthropic_api_key` with your actual Anthropic API key
+   - Add additional model providers as needed (OpenAI, Google, Azure, etc.)
+   - Configure your preferred models and settings
 
-**Note:** The `trae_config.json` file is ignored by git to prevent accidentally committing your API keys.
+**Note:** The `trae_config.yaml` file is ignored by git to prevent accidentally committing your API keys.
+
+**Legacy JSON Configuration:** If you're using the older JSON configuration format, please refer to [docs/legacy_config.md](docs/legacy_config.md) for instructions. We recommend migrating to the new YAML format.
 
 You can also set your API keys as environment variables:
 
@@ -169,12 +169,54 @@ In interactive mode, you can:
 trae-cli show-config
 
 # With custom config file
-trae-cli show-config --config-file my_config.json
+trae-cli show-config --config-file trae_config.yaml
 ```
 
 ### Configuration
 
-Trae Agent uses a JSON configuration file for settings. Please refer to the `trae_config.json` file in the root directory for the detailed configuration structure.
+Trae Agent uses a YAML configuration file for settings. Please refer to the `trae_config.yaml.example` file in the root directory for the detailed configuration structure.
+
+#### YAML Configuration Structure
+
+The YAML configuration file is organized into several main sections:
+
+- **agents**: Configure agent behavior, tools, and models
+- **lakeview**: Configure the summarization feature
+- **model_providers**: Define API credentials and settings for different LLM providers
+- **models**: Define specific model configurations with parameters
+
+Example YAML configuration:
+
+```yaml
+agents:
+  trae_agent:
+    enable_lakeview: true
+    model: trae_agent_model
+    max_steps: 200
+    tools:
+      - bash
+      - str_replace_based_edit_tool
+      - sequentialthinking
+      - task_done
+
+model_providers:
+  anthropic:
+    api_key: your_anthropic_api_key
+    provider: anthropic
+  openai:
+    api_key: your_openai_api_key
+    provider: openai
+
+models:
+  trae_agent_model:
+    model_provider: anthropic
+    model: claude-sonnet-4-20250514
+    max_tokens: 4096
+    temperature: 0.5
+    top_p: 1
+    max_retries: 10
+    parallel_tool_calls: true
+```
 
 **WARNING:**
 For Doubao users, please use the following base_url.
