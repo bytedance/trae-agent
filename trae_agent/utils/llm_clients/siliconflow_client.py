@@ -6,6 +6,8 @@
 import openai
 
 from .openai_compatible_base import ProviderConfig
+from ..config import ModelConfig
+from .openai_compatible_base import OpenAICompatibleClient
 
 
 class SiliconFlowProvider(ProviderConfig):
@@ -45,3 +47,10 @@ class SiliconFlowProvider(ProviderConfig):
             "gemma",
         ]
         return any(pattern in model_name.lower() for pattern in tool_capable_patterns)
+
+
+class SiliconFlowClient(OpenAICompatibleClient):
+    """SiliconFlow client wrapper that maintains compatibility while using the new architecture."""
+
+    def __init__(self, model_parameters: ModelConfig):
+        super().__init__(model_parameters, SiliconFlowProvider())
