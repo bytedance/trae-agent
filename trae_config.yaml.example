@@ -16,6 +16,16 @@ model_providers:
     anthropic:
         api_key: your_anthropic_api_key
         provider: anthropic
+    siliconflow:
+        api_key: your_siliconflow_api_key
+        model: deepseek-ai/DeepSeek-V3
+        base_url: https://api.siliconflow.cn/v1
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 1
+        top_k: 0
+        parallel_tool_calls: false
+        max_retries: 10
 
 models:
     default_model:
