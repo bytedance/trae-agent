@@ -24,11 +24,11 @@ from openai.types.chat.chat_completion_tool_message_param import (
 )
 from openai.types.shared_params.function_definition import FunctionDefinition
 
-from ...tools.base import Tool, ToolCall
-from ..base_client import BaseLLMClient
-from ..config import ModelParameters
-from ..llm_basics import LLMMessage, LLMResponse, LLMUsage
-from ..retry_utils import retry_with
+from trae_agent.tools.base import Tool, ToolCall
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.base_client import BaseLLMClient
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse, LLMUsage
+from trae_agent.utils.llm_clients.retry_utils import retry_with
 
 
 class ProviderConfig(ABC):
@@ -65,8 +65,8 @@ class ProviderConfig(ABC):
 class OpenAICompatibleClient(BaseLLMClient):
     """Base class for OpenAI-compatible clients with shared logic."""
 
-    def __init__(self, model_parameters: ModelParameters, provider_config: ProviderConfig):
-        super().__init__(model_parameters)
+    def __init__(self, model_config: ModelConfig, provider_config: ProviderConfig):
+        super().__init__(model_config)
         self.provider_config = provider_config
         self.client = provider_config.create_client(self.api_key, self.base_url, self.api_version)
         self.message_history: list[ChatCompletionMessageParam] = []
@@ -78,18 +78,18 @@ class OpenAICompatibleClient(BaseLLMClient):
 
     def _create_response(
         self,
-        model_parameters: ModelParameters,
+        model_config: ModelConfig,
         tool_schemas: list[ChatCompletionToolParam] | None,
         extra_headers: dict[str, str] | None = None,
     ) -> ChatCompletion:
         """Create a response using the provider's API. This method will be decorated with retry logic."""
         return self.client.chat.completions.create(
-            model=model_parameters.model,
+            model=model_config.model,
             messages=self.message_history,
             tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
-            temperature=model_parameters.temperature,
-            top_p=model_parameters.top_p,
-            max_tokens=model_parameters.max_tokens,
+            temperature=model_config.temperature,
+            top_p=model_config.top_p,
+            max_tokens=model_config.max_tokens,
             extra_headers=extra_headers if extra_headers else None,
             n=1,
         )
@@ -98,7 +98,7 @@ class OpenAICompatibleClient(BaseLLMClient):
     def chat(
         self,
         messages: list[LLMMessage],
-        model_parameters: ModelParameters,
+        model_config: ModelConfig,
         tools: list[Tool] | None = None,
         reuse_history: bool = True,
     ) -> LLMResponse:
@@ -129,10 +129,10 @@ class OpenAICompatibleClient(BaseLLMClient):
         # Apply retry decorator to the API call
         retry_decorator = retry_with(
             func=self._create_response,
-            service_name=self.provider_config.get_service_name(),
-            max_retries=model_parameters.max_retries,
+            provider_name=self.provider_config.get_service_name(),
+            max_retries=model_config.max_retries,
         )
-        response = retry_decorator(model_parameters, tool_schemas, extra_headers)
+        response = retry_decorator(model_config, tool_schemas, extra_headers)
 
         choice = response.choices[0]
 
@@ -196,16 +196,11 @@ class OpenAICompatibleClient(BaseLLMClient):
                 messages=messages,
                 response=llm_response,
                 provider=self.provider_config.get_provider_name(),
-                model=model_parameters.model,
+                model=model_config.model,
                 tools=tools,
             )
 
         return llm_response
-
-    @override
-    def supports_tool_calling(self, model_parameters: ModelParameters) -> bool:
-        """Check if the current model supports tool calling."""
-        return self.provider_config.supports_tool_calling(model_parameters.model)
 
     def parse_messages(self, messages: list[LLMMessage]) -> list[ChatCompletionMessageParam]:
         """Parse LLM messages to OpenAI format."""
@@ -216,10 +211,8 @@ class OpenAICompatibleClient(BaseLLMClient):
                     _msg_tool_call_handler(openai_messages, msg)
                 case msg if msg.tool_result is not None:
                     _msg_tool_result_handler(openai_messages, msg)
-                case msg if msg.role is not None:
-                    _msg_role_handler(openai_messages, msg)
                 case _:
-                    raise ValueError(f"Invalid message: {msg}")
+                    _msg_role_handler(openai_messages, msg)
 
         return openai_messages
 

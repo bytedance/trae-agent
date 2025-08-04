@@ -10,7 +10,7 @@ import uuid
 from typing import override
 
 import openai
-from ollama import chat as ollama_chat
+from ollama import chat as ollama_chat  # pyright: ignore[reportUnknownVariableType]
 from openai.types.responses import (
     FunctionToolParam,
     ResponseFunctionToolCallParam,
@@ -18,22 +18,22 @@ from openai.types.responses import (
 )
 from openai.types.responses.response_input_param import FunctionCallOutput
 
-from ..tools.base import Tool, ToolCall, ToolResult
-from ..utils.config import ModelParameters
-from .base_client import BaseLLMClient
-from .llm_basics import LLMMessage, LLMResponse
-from .retry_utils import retry_with
+from trae_agent.tools.base import Tool, ToolCall, ToolResult
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.base_client import BaseLLMClient
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
+from trae_agent.utils.llm_clients.retry_utils import retry_with
 
 
 class OllamaClient(BaseLLMClient):
-    def __init__(self, model_parameters: ModelParameters):
-        super().__init__(model_parameters)
+    def __init__(self, model_config: ModelConfig):
+        super().__init__(model_config)
 
         self.client: openai.OpenAI = openai.OpenAI(
             # by default ollama doesn't require any api key. It should set to be "ollama".
             api_key=self.api_key,
-            base_url=model_parameters.base_url
-            if model_parameters.base_url
+            base_url=model_config.model_provider.base_url
+            if model_config.model_provider.base_url
             else "http://localhost:11434/v1",
         )
 
@@ -45,7 +45,7 @@ class OllamaClient(BaseLLMClient):
 
     def _create_ollama_response(
         self,
-        model_parameters: ModelParameters,
+        model_config: ModelConfig,
         tool_schemas: list[FunctionToolParam] | None,
     ):
         """Create a response using Ollama API. This method will be decorated with retry logic."""
@@ -64,7 +64,7 @@ class OllamaClient(BaseLLMClient):
             ]
         return ollama_chat(
             messages=self.message_history,
-            model=model_parameters.model,
+            model=model_config.model,
             tools=tools_param,
         )
 
@@ -72,7 +72,7 @@ class OllamaClient(BaseLLMClient):
     def chat(
         self,
         messages: list[LLMMessage],
-        model_parameters: ModelParameters,
+        model_config: ModelConfig,
         tools: list[Tool] | None = None,
         reuse_history: bool = True,
     ) -> LLMResponse:
@@ -102,10 +102,10 @@ class OllamaClient(BaseLLMClient):
         # Apply retry decorator to the API call
         retry_decorator = retry_with(
             func=self._create_ollama_response,
-            service_name="ollama",
-            max_retries=model_parameters.max_retries,
+            provider_name="Ollama",
+            max_retries=model_config.max_retries,
         )
-        response = retry_decorator(model_parameters, tool_schemas)
+        response = retry_decorator(model_config, tool_schemas)
 
         content = ""
         tool_calls: list[ToolCall] = []
@@ -127,7 +127,7 @@ class OllamaClient(BaseLLMClient):
         llm_response = LLMResponse(
             content=content,
             usage=None,
-            model=model_parameters.model,
+            model=model_config.model,
             finish_reason=None,  # seems can't get finish reason will check docs soon
             tool_calls=tool_calls if len(tool_calls) > 0 else None,
         )
@@ -137,43 +137,11 @@ class OllamaClient(BaseLLMClient):
                 messages=messages,
                 response=llm_response,
                 provider="ollama",
-                model=model_parameters.model,
+                model=model_config.model,
                 tools=tools,
             )
 
         return llm_response
-
-    @override
-    def supports_tool_calling(self, model_parameters: ModelParameters) -> bool:
-        """
-        Check if the current model supports tool calling.
-        TODO: there should be a more robust way to handle tool_support check or we have to manually type every supported model which is not really that feasible. for example deepseek familay has deepseek:1.5b deepseek:7b ...
-        """
-        tool_support_model = [
-            "deepseek-r1",
-            "qwen3",
-            "llama3.1",
-            "llama3.2",
-            "mistral",
-            "qwen2.5",
-            "qwen2.5-coder",
-            "mistral-nemo",
-            "llama3.3",
-            "qwq",
-            "mistral-small",
-            "mixtral",
-            "smollm2",
-            "llama4",
-            "command-r",
-            "hermes3",
-            "phi4-mini",
-            "granite3.3",
-            "devstral",
-            "mistral-small3.1",
-            "qwen3:4b.",
-        ]
-
-        return any(model in model_parameters.model for model in tool_support_model)
 
     def parse_messages(self, messages: list[LLMMessage]) -> ResponseInputParam:
         """

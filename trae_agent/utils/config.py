@@ -1,210 +1,340 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-# TODO: remove these annotations by defining fine-grained types
-# pyright: reportAny=false
-# pyright: reportUnannotatedClassAttribute=false
-# pyright: reportUnknownMemberType=false
-# pyright: reportUnknownArgumentType=false
-# pyright: reportUnknownVariableType=false
-
-import json
 import os
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, override
+from dataclasses import dataclass, field
+
+import yaml
+
+from trae_agent.utils.legacy_config import LegacyConfig
 
 
-# data class for model parameters
+class ConfigError(Exception):
+    pass
+
+
 @dataclass
-class ModelParameters:
-    """Model parameters for a model provider."""
+class ModelProvider:
+    """
+    Model provider configuration. For official model providers such as OpenAI and Anthropic,
+    the base_url is optional. api_version is required for Azure.
+    """
+
+    api_key: str
+    provider: str
+    base_url: str | None = None
+    api_version: str | None = None
+
+
+@dataclass
+class ModelConfig:
+    """
+    Model configuration.
+    """
 
     model: str
-    api_key: str
+    model_provider: ModelProvider
     max_tokens: int
     temperature: float
     top_p: float
     top_k: int
     parallel_tool_calls: bool
     max_retries: int
-    base_url: str | None = None
-    api_version: str | None = None
+    supports_tool_calling: bool = True
     candidate_count: int | None = None  # Gemini specific field
     stop_sequences: list[str] | None = None
+
+    def resolve_config_values(
+        self,
+        *,
+        model_providers: dict[str, ModelProvider] | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        model_base_url: str | None = None,
+        api_key: str | None = None,
+    ):
+        """
+        When some config values are provided through CLI or environment variables,
+        they will override the values in the config file.
+        """
+        self.model = str(resolve_config_value(cli_value=model, config_value=self.model))
+
+        # If the user wants to change the model provider, they should either:
+        # * Make sure the provider name is available in the model_providers dict;
+        # * If not, base url and api key should be provided to register a new model provider.
+        if provider:
+            if model_providers and provider in model_providers:
+                self.model_provider = model_providers[provider]
+            elif api_key is None:
+                raise ConfigError("To register a new model provider, an api_key should be provided")
+            else:
+                self.model_provider = ModelProvider(
+                    api_key=api_key,
+                    provider=provider,
+                    base_url=model_base_url,
+                )
+
+        if api_key:
+            # Map providers to their environment variable names
+            env_var_api_key = str(self.model_provider.provider).upper() + "_API_KEY"
+            env_var_api_base_url = str(self.model_provider.provider).upper() + "_BASE_URL"
+
+            resolved_api_key = resolve_config_value(
+                cli_value=api_key,
+                config_value=self.model_provider.api_key,
+                env_var=env_var_api_key,
+            )
+
+            resolved_api_base_url = resolve_config_value(
+                cli_value=model_base_url,
+                config_value=self.model_provider.base_url,
+                env_var=env_var_api_base_url,
+            )
+
+            if resolved_api_key:
+                self.model_provider.api_key = str(resolved_api_key)
+
+            if resolved_api_base_url:
+                self.model_provider.base_url = str(resolved_api_base_url)
+
+
+@dataclass
+class AgentConfig:
+    """
+    Base class for agent configurations.
+    """
+
+    max_steps: int
+    model: ModelConfig
+    tools: list[str]
+
+
+@dataclass
+class TraeAgentConfig(AgentConfig):
+    """
+    Trae agent configuration.
+    """
+
+    enable_lakeview: bool = True
+    tools: list[str] = field(
+        default_factory=lambda: [
+            "bash",
+            "str_replace_based_edit_tool",
+            "sequentialthinking",
+            "task_done",
+        ]
+    )
+
+    def resolve_config_values(
+        self,
+        *,
+        max_steps: int | None = None,
+    ):
+        resolved_value = resolve_config_value(cli_value=max_steps, config_value=self.max_steps)
+        if resolved_value:
+            self.max_steps = int(resolved_value)
 
 
 @dataclass
 class LakeviewConfig:
-    """Configuration for Lakeview."""
+    """
+    Lakeview configuration.
+    """
 
-    model_provider: str
-    model_name: str
+    model: ModelConfig
 
 
 @dataclass
 class Config:
-    """Configuration manager for Trae Agent."""
+    """
+    Configuration class for agents, models and model providers.
+    """
 
-    default_provider: str
-    max_steps: int
-    model_providers: dict[str, ModelParameters]
-    lakeview_config: LakeviewConfig | None = None
-    enable_lakeview: bool = True
+    lakeview: LakeviewConfig | None = None
+    model_providers: dict[str, ModelProvider] | None = None
+    models: dict[str, ModelConfig] | None = None
 
-    def __init__(self, config_or_config_file: str | dict = "trae_config.json"):  # pyright: ignore[reportMissingTypeArgument, reportUnknownParameterType]
-        # Accept either file path or direct config dict
-        if isinstance(config_or_config_file, dict):
-            self._config = config_or_config_file
-        else:
-            config_path = Path(config_or_config_file)
-            if config_path.exists():
-                try:
-                    with open(config_path, "r") as f:
-                        self._config = json.load(f)
-                except Exception as e:
-                    print(f"Warning: Could not load config file {config_or_config_file}: {e}")
-                    self._config = {}
+    trae_agent: TraeAgentConfig | None = None
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        config_file: str | None = None,
+        config_string: str | None = None,
+    ) -> "Config":
+        if config_file and config_string:
+            raise ConfigError("Only one of config_file or config_string should be provided")
+
+        # Parse YAML config from file or string
+        try:
+            if config_file is not None:
+                if config_file.endswith(".json"):
+                    return cls.create_from_legacy_config(config_file=config_file)
+                with open(config_file, "r") as f:
+                    yaml_config = yaml.safe_load(f)
+            elif config_string is not None:
+                yaml_config = yaml.safe_load(config_string)
             else:
-                self._config = {}
+                raise ConfigError("No config file or config string provided")
+        except yaml.YAMLError as e:
+            raise ConfigError(f"Error parsing YAML config: {e}") from e
 
-        self.default_provider = self._config.get("default_provider", "anthropic")
-        self.max_steps = self._config.get("max_steps", 20)
-        self.model_providers = {}
-        self.enable_lakeview = self._config.get("enable_lakeview", True)
+        config = cls()
 
-        if len(self._config.get("model_providers", [])) == 0:
-            self.model_providers = {
-                "anthropic": ModelParameters(
-                    model="claude-sonnet-4-20250514",
-                    api_key="",
-                    base_url="https://api.anthropic.com",
-                    max_tokens=4096,
-                    temperature=0.5,
-                    top_p=1,
-                    top_k=0,
-                    parallel_tool_calls=False,
-                    max_retries=10,
-                ),
-            }
+        # Parse model providers
+        model_providers = yaml_config.get("model_providers", None)
+        if model_providers is not None and len(model_providers.keys()) > 0:
+            config_model_providers: dict[str, ModelProvider] = {}
+            for model_provider_name, model_provider_config in model_providers.items():
+                config_model_providers[model_provider_name] = ModelProvider(**model_provider_config)
+            config.model_providers = config_model_providers
         else:
-            for provider in self._config.get("model_providers", {}):
-                provider_config: dict[str, Any] = self._config.get("model_providers", {}).get(
-                    provider, {}
-                )
+            raise ConfigError("No model providers provided")
 
-                candidate_count = provider_config.get("candidate_count")
-                self.model_providers[provider] = ModelParameters(
-                    model=str(provider_config.get("model", "")),
-                    api_key=str(provider_config.get("api_key", "")),
-                    base_url=str(provider_config.get("base_url"))
-                    if "base_url" in provider_config
-                    else None,
-                    max_tokens=int(provider_config.get("max_tokens", 1000)),
-                    temperature=float(provider_config.get("temperature", 0.5)),
-                    top_p=float(provider_config.get("top_p", 1)),
-                    top_k=int(provider_config.get("top_k", 0)),
-                    max_retries=int(provider_config.get("max_retries", 10)),
-                    parallel_tool_calls=bool(provider_config.get("parallel_tool_calls", False)),
-                    api_version=str(provider_config.get("api_version"))
-                    if "api_version" in provider_config
-                    else None,
-                    candidate_count=int(candidate_count) if candidate_count is not None else None,
-                    stop_sequences=provider_config.get("stop_sequences")
-                    if "stop_sequences" in provider_config
-                    else None,
-                )
+        # Parse models and populate model_provider fields
+        models = yaml_config.get("models", None)
+        if models is not None and len(models.keys()) > 0:
+            config_models: dict[str, ModelConfig] = {}
+            for model_name, model_config in models.items():
+                if model_config["model_provider"] not in config_model_providers:
+                    raise ConfigError(f"Model provider {model_config['model_provider']} not found")
+                config_models[model_name] = ModelConfig(**model_config)
+                config_models[model_name].model_provider = config_model_providers[
+                    model_config["model_provider"]
+                ]
+            config.models = config_models
+        else:
+            raise ConfigError("No models provided")
 
-        # Configure lakeview_config - default to using default_provider settings
-        lakeview_config_data = self._config.get("lakeview_config", {})
-        if self.enable_lakeview:
-            model_provider = lakeview_config_data.get("model_provider", None)
-            model_name = lakeview_config_data.get("model_name", None)
-
-            if model_provider is None:
-                model_provider = self.default_provider
-
-            if model_name is None:
-                model_name = self.model_providers[model_provider].model
-
-            self.lakeview_config = LakeviewConfig(
-                model_provider=str(model_provider),
-                model_name=str(model_name),
+        # Parse lakeview config
+        lakeview = yaml_config.get("lakeview", None)
+        if lakeview is not None:
+            lakeview_model_name = lakeview.get("model", None)
+            if lakeview_model_name is None:
+                raise ConfigError("No model provided for lakeview")
+            lakeview_model = config_models[lakeview_model_name]
+            config.lakeview = LakeviewConfig(
+                model=lakeview_model,
             )
+        else:
+            config.lakeview = None
 
-        return
+        # Parse agents
+        agents = yaml_config.get("agents", None)
+        if agents is not None and len(agents.keys()) > 0:
+            for agent_name, agent_config in agents.items():
+                agent_model_name = agent_config.get("model", None)
+                if agent_model_name is None:
+                    raise ConfigError(f"No model provided for {agent_name}")
+                try:
+                    agent_model = config_models[agent_model_name]
+                except KeyError as e:
+                    raise ConfigError(f"Model {agent_model_name} not found") from e
+                match agent_name:
+                    case "trae_agent":
+                        trae_agent_config = TraeAgentConfig(**agent_config)
+                        trae_agent_config.model = agent_model
+                        if trae_agent_config.enable_lakeview and config.lakeview is None:
+                            raise ConfigError("Lakeview is enabled but no lakeview config provided")
+                        config.trae_agent = trae_agent_config
+                    case _:
+                        raise ConfigError(f"Unknown agent: {agent_name}")
+        else:
+            raise ConfigError("No agent configs provided")
+        return config
 
-    @override
-    def __str__(self) -> str:
-        return f"Config(default_provider={self.default_provider}, max_steps={self.max_steps}, model_providers={self.model_providers})"
+    def resolve_config_values(
+        self,
+        *,
+        model_providers: dict[str, ModelProvider] | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        model_base_url: str | None = None,
+        api_key: str | None = None,
+        max_steps: int | None = None,
+    ):
+        if self.trae_agent:
+            self.trae_agent.resolve_config_values(
+                max_steps=max_steps,
+            )
+            self.trae_agent.model.resolve_config_values(
+                model_providers=model_providers,
+                provider=provider,
+                model=model,
+                model_base_url=model_base_url,
+                api_key=api_key,
+            )
+        return self
 
+    @classmethod
+    def create_from_legacy_config(
+        cls,
+        *,
+        legacy_config: LegacyConfig | None = None,
+        config_file: str | None = None,
+    ) -> "Config":
+        if legacy_config and config_file:
+            raise ConfigError("Only one of legacy_config or config_file should be provided")
 
-def load_config(
-    config_file: str = "trae_config.json",
-    provider: str | None = None,
-    model: str | None = None,
-    model_base_url: str | None = None,
-    api_key: str | None = None,
-    max_steps: int | None = 20,
-) -> Config:
-    """
-    load_config loads provider , model , model base url , api key , and maximum steps. By default, the provider is set to be OpenAI.
-    Args:
-        config_file: the relative path of your config file, default setting would be trae_config.json
-        provider: default provider is openai, currently only support openai and claude
-        model: the model that you want to use
-        model_base_url: the base url of the model
-        api_key: your api key
-        maximum_step: maximum number of step of the agent. Default setting is 20
+        if config_file:
+            legacy_config = LegacyConfig(config_file)
+        elif not legacy_config:
+            raise ConfigError("No legacy_config or config_file provided")
 
-    Return:
-        Config Object
-    """
+        model_provider = ModelProvider(
+            api_key=legacy_config.model_providers[legacy_config.default_provider].api_key,
+            base_url=legacy_config.model_providers[legacy_config.default_provider].base_url,
+            api_version=legacy_config.model_providers[legacy_config.default_provider].api_version,
+            provider=legacy_config.default_provider,
+        )
 
-    config: Config = Config(config_file)
+        model_config = ModelConfig(
+            model=legacy_config.model_providers[legacy_config.default_provider].model,
+            model_provider=model_provider,
+            max_tokens=legacy_config.model_providers[legacy_config.default_provider].max_tokens,
+            temperature=legacy_config.model_providers[legacy_config.default_provider].temperature,
+            top_p=legacy_config.model_providers[legacy_config.default_provider].top_p,
+            top_k=legacy_config.model_providers[legacy_config.default_provider].top_k,
+            parallel_tool_calls=legacy_config.model_providers[
+                legacy_config.default_provider
+            ].parallel_tool_calls,
+            max_retries=legacy_config.model_providers[legacy_config.default_provider].max_retries,
+            candidate_count=legacy_config.model_providers[
+                legacy_config.default_provider
+            ].candidate_count,
+            stop_sequences=legacy_config.model_providers[
+                legacy_config.default_provider
+            ].stop_sequences,
+        )
 
-    resolved_provider = resolve_config_value(provider, config.default_provider) or "openai"
-    config.default_provider = str(resolved_provider)
+        trae_agent_config = TraeAgentConfig(
+            max_steps=legacy_config.max_steps,
+            enable_lakeview=legacy_config.enable_lakeview,
+            model=model_config,
+        )
 
-    # Resolve configuration values with CLI overrides
-    resolved_model = resolve_config_value(
-        model, config.model_providers[str(resolved_provider)].model
-    )
+        if trae_agent_config.enable_lakeview:
+            lakeview_config = LakeviewConfig(
+                model=model_config,
+            )
+        else:
+            lakeview_config = None
 
-    model_parameters = config.model_providers[str(resolved_provider)]
-    if resolved_model is not None:
-        model_parameters.model = str(resolved_model)
-
-    # Map providers to their environment variable names
-    env_var_api_key = str(resolved_provider).upper() + "_API_KEY"
-    env_var_api_base_url = str(resolved_provider).upper() + "_BASE_URL"
-
-    resolved_api_key = resolve_config_value(
-        api_key,
-        config.model_providers[str(resolved_provider)].api_key,
-        env_var_api_key,
-    )
-
-    resolved_api_base_url = resolve_config_value(
-        model_base_url,
-        config.model_providers[str(resolved_provider)].base_url,
-        env_var_api_base_url,
-    )
-
-    if resolved_api_key is not None:
-        # If None shall we stop the program ?
-        model_parameters.api_key = str(resolved_api_key)
-
-    if resolved_api_base_url is not None:
-        model_parameters.base_url = str(resolved_api_base_url)
-
-    resolved_max_steps = resolve_config_value(max_steps, config.max_steps)
-    if resolved_max_steps is not None:
-        config.max_steps = int(resolved_max_steps)
-    return config
+        return cls(
+            trae_agent=trae_agent_config,
+            lakeview=lakeview_config,
+            model_providers={
+                legacy_config.default_provider: model_provider,
+            },
+            models={
+                "default_model": model_config,
+            },
+        )
 
 
 def resolve_config_value(
+    *,
     cli_value: int | str | float | None,
     config_value: int | str | float | None,
     env_var: str | None = None,

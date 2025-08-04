@@ -13,9 +13,9 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from trae_agent.tools.base import Tool, ToolCall, ToolResult
-from trae_agent.utils.config import ModelParameters
-from trae_agent.utils.google_client import GoogleClient
-from trae_agent.utils.llm_basics import LLMMessage
+from trae_agent.utils.config import ModelConfig, ModelProvider
+from trae_agent.utils.llm_clients.google_client import GoogleClient
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage
 
 TEST_MODEL = "gemini-2.5-flash"
 
@@ -28,18 +28,17 @@ class TestGoogleClient(unittest.TestCase):
     @patch("trae_agent.utils.google_client.genai.Client")
     def test_google_client_init(self, mock_genai_client):
         """Test the initialization of the GoogleClient."""
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             model=TEST_MODEL,
-            api_key="test-api-key",
+            model_provider=ModelProvider(api_key="test-api-key", provider="google"),
             max_tokens=1000,
             temperature=0.8,
             top_p=7.0,
             top_k=8,
             parallel_tool_calls=False,
             max_retries=1,
-            base_url=None,
         )
-        google_client = GoogleClient(model_parameters)
+        google_client = GoogleClient(model_config)
         mock_genai_client.assert_called_once_with(api_key="test-api-key")
         self.assertIsNotNone(google_client.client)
 
@@ -49,18 +48,17 @@ class TestGoogleClient(unittest.TestCase):
         """
         Test that the google client initializes using the GOOGLE_API_KEY environment variable.
         """
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             model=TEST_MODEL,
-            api_key="",
+            model_provider=ModelProvider(api_key="", provider="google"),
             max_tokens=1000,
             temperature=0.8,
             top_p=7.0,
             top_k=8,
             parallel_tool_calls=False,
             max_retries=1,
-            base_url=None,
         )
-        google_client = GoogleClient(model_parameters)
+        google_client = GoogleClient(model_config)
         mock_genai_client.assert_called_once_with(api_key="test-env-api-key")
         self.assertEqual(google_client.api_key, "test-env-api-key")
 
@@ -69,37 +67,35 @@ class TestGoogleClient(unittest.TestCase):
         """
         Test that a ValueError is raised if no API key is provided.
         """
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             model=TEST_MODEL,
-            api_key="",
+            model_provider=ModelProvider(api_key="", provider="google"),
             max_tokens=1000,
             temperature=0.8,
             top_p=7.0,
             top_k=8,
             parallel_tool_calls=False,
             max_retries=1,
-            base_url=None,
         )
         with self.assertRaises(ValueError):
-            GoogleClient(model_parameters)
+            GoogleClient(model_config)
 
     @patch("trae_agent.utils.google_client.genai.Client")
     def test_google_set_chat_history(self, mock_genai_client):
         """
         Test that the chat history is correctly parsed and stored.
         """
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             model=TEST_MODEL,
-            api_key="test-api-key",
+            model_provider=ModelProvider(api_key="test-api-key", provider="google"),
             max_tokens=1000,
             temperature=0.8,
             top_p=7.0,
             top_k=8,
             parallel_tool_calls=False,
             max_retries=1,
-            base_url=None,
         )
-        google_client = GoogleClient(model_parameters)
+        google_client = GoogleClient(model_config)
 
         messages = [
             LLMMessage("system", "You are a helpful assistant."),
@@ -126,20 +122,19 @@ class TestGoogleClient(unittest.TestCase):
         mock_model.generate_content.return_value = mock_response
         mock_genai_client.return_value.models = mock_model
 
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             model=TEST_MODEL,
-            api_key="test-api-key",
+            model_provider=ModelProvider(api_key="test-api-key", provider="google"),
             max_tokens=1000,
             temperature=0.8,
             top_p=7.0,
             top_k=8,
             parallel_tool_calls=False,
             max_retries=1,
-            base_url=None,
         )
-        google_client = GoogleClient(model_parameters)
+        google_client = GoogleClient(model_config)
         message = LLMMessage("user", "this is a test message")
-        response = google_client.chat(messages=[message], model_parameters=model_parameters)
+        response = google_client.chat(messages=[message], model_config=model_config)
 
         mock_model.generate_content.assert_called_once()
         self.assertEqual(response.content, "Hello!")
@@ -174,9 +169,9 @@ class TestGoogleClient(unittest.TestCase):
             "properties": {"location": {"type": "string"}},
         }
 
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             model=TEST_MODEL,
-            api_key="test-api-key",
+            model_provider=ModelProvider(api_key="test-api-key", provider="google"),
             max_tokens=1000,
             temperature=0.8,
             top_p=1.0,
@@ -184,10 +179,10 @@ class TestGoogleClient(unittest.TestCase):
             parallel_tool_calls=True,
             max_retries=1,
         )
-        google_client = GoogleClient(model_parameters)
+        google_client = GoogleClient(model_config)
         message = LLMMessage("user", "What is the weather in Boston?")
         response = google_client.chat(
-            messages=[message], model_parameters=model_parameters, tools=[mock_tool]
+            messages=[message], model_config=model_config, tools=[mock_tool]
         )
 
         self.assertEqual(response.content, "")
@@ -201,9 +196,9 @@ class TestGoogleClient(unittest.TestCase):
     def test_parse_messages(self):
         """Test the parse_messages method with various message types."""
         google_client = GoogleClient(
-            ModelParameters(
+            ModelConfig(
                 model=TEST_MODEL,
-                api_key="test-key",
+                model_provider=ModelProvider(api_key="test-key", provider="google"),
                 max_tokens=1000,
                 temperature=0.8,
                 top_p=1.0,
@@ -245,9 +240,9 @@ class TestGoogleClient(unittest.TestCase):
         Test the _parse_tool_call_result method.
         """
         google_client = GoogleClient(
-            ModelParameters(
+            ModelConfig(
                 model=TEST_MODEL,
-                api_key="test-key",
+                model_provider=ModelProvider(api_key="test-key", provider="google"),
                 max_tokens=1000,
                 temperature=0.8,
                 top_p=1.0,
@@ -299,9 +294,9 @@ class TestGoogleClient(unittest.TestCase):
 
     def test_supports_tool_calling(self):
         """Test the supports_tool_calling method."""
-        model_parameters = ModelParameters(
+        model_config = ModelConfig(
             model=TEST_MODEL,
-            api_key="test-api-key",
+            model_provider=ModelProvider(api_key="test-api-key", provider="google"),
             max_tokens=1000,
             temperature=0.8,
             top_p=7.0,
@@ -310,10 +305,10 @@ class TestGoogleClient(unittest.TestCase):
             max_retries=1,
             base_url=None,
         )
-        google_client = GoogleClient(model_parameters)
-        self.assertEqual(google_client.supports_tool_calling(model_parameters), True)
-        model_parameters.model = "no such model"
-        self.assertEqual(google_client.supports_tool_calling(model_parameters), False)
+        google_client = GoogleClient(model_config)
+        self.assertEqual(google_client.supports_tool_calling(model_config), True)
+        model_config.model = "no such model"
+        self.assertEqual(google_client.supports_tool_calling(model_config), False)
 
 
 if __name__ == "__main__":

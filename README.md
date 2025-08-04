@@ -1,12 +1,14 @@
 # Trae Agent
 
+[![arXiv:2507.23370](https://img.shields.io/badge/TechReport-arXiv%3A2507.23370-b31a1b)](https://arxiv.org/abs/2507.23370)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Alpha](https://img.shields.io/badge/Status-Alpha-red)
 [![Pre-commit](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/pre-commit.yml)
 [![Unit Tests](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml/badge.svg)](https://github.com/bytedance/trae-agent/actions/workflows/unit-test.yml)
 [![Discord](https://img.shields.io/discord/1320998163615846420?label=Join%20Discord&color=7289DA)](https://discord.gg/VwaQ4ZBHvC)
 
 **Trae Agent** is an LLM-based agent for general purpose software engineering tasks. It provides a powerful CLI interface that can understand natural language instructions and execute complex software engineering workflows using various tools and LLM providers.
+
+For technical details please refer to [our technical report](https://arxiv.org/abs/2507.23370).
 
 **Project Status:** The project is still being actively developed. Please refer to [docs/roadmap.md](docs/roadmap.md) and [CONTRIBUTING](CONTRIBUTING.md) if you are willing to help us improve Trae Agent.
 
@@ -19,7 +21,7 @@
 - 🛠️ **Rich Tool Ecosystem**: File editing, bash execution, sequential thinking, and more
 - 🎯 **Interactive Mode**: Conversational interface for iterative development
 - 📊 **Trajectory Recording**: Detailed logging of all agent actions for debugging and analysis
-- ⚙️ **Flexible Configuration**: JSON-based configuration with environment variable support
+- ⚙️ **Flexible Configuration**: YAML-based configuration with environment variable support
 - 🚀 **Easy Installation**: Simple pip-based installation
 
 ## 🚀 Quick Start
@@ -33,6 +35,9 @@ git clone https://github.com/bytedance/trae-agent.git
 cd trae-agent
 uv venv
 uv sync --all-extras
+
+# Activate the virtual environment
+source .venv/bin/activate
 ```
 
 or use make.
@@ -40,6 +45,9 @@ or use make.
 ```bash
 make uv-venv
 make uv-sync
+
+# Activate the virtual environment
+source .venv/bin/activate
 ```
 
 ### Setup API Keys
@@ -51,17 +59,17 @@ We recommend to configure Trae Agent using the config file.
 1. **Copy the example configuration file:**
 
    ```bash
-   cp trae_config.json.example trae_config.json
+   cp trae_config.yaml.example trae_config.yaml
    ```
 
-2. **Edit `trae_config.json` and replace the placeholder values with your actual credentials:**
-   - Replace `"your_openai_api_key"` with your actual OpenAI API key
-   - Replace `"your_anthropic_api_key"` with your actual Anthropic API key
-   - Replace `"your_google_api_key"` with your actual Google API key
-   - Replace `"your_azure_base_url"` with your actual Azure base URL
-   - Replace other placeholder URLs and API keys as needed
+2. **Edit `trae_config.yaml` and replace the placeholder values with your actual credentials:**
+   - Replace `your_anthropic_api_key` with your actual Anthropic API key
+   - Add additional model providers as needed (OpenAI, Google, Azure, etc.)
+   - Configure your preferred models and settings
 
-**Note:** The `trae_config.json` file is ignored by git to prevent accidentally committing your API keys.
+**Note:** The `trae_config.yaml` file is ignored by git to prevent accidentally committing your API keys.
+
+**Legacy JSON Configuration:** If you're using the older JSON configuration format, please refer to [docs/legacy_config.md](docs/legacy_config.md) for instructions. We recommend migrating to the new YAML format.
 
 You can also set your API keys as environment variables:
 
@@ -161,12 +169,54 @@ In interactive mode, you can:
 trae-cli show-config
 
 # With custom config file
-trae-cli show-config --config-file my_config.json
+trae-cli show-config --config-file trae_config.yaml
 ```
 
 ### Configuration
 
-Trae Agent uses a JSON configuration file for settings. Please refer to the `trae_config.json` file in the root directory for the detailed configuration structure.
+Trae Agent uses a YAML configuration file for settings. Please refer to the `trae_config.yaml.example` file in the root directory for the detailed configuration structure.
+
+#### YAML Configuration Structure
+
+The YAML configuration file is organized into several main sections:
+
+- **agents**: Configure agent behavior, tools, and models
+- **lakeview**: Configure the summarization feature
+- **model_providers**: Define API credentials and settings for different LLM providers
+- **models**: Define specific model configurations with parameters
+
+Example YAML configuration:
+
+```yaml
+agents:
+  trae_agent:
+    enable_lakeview: true
+    model: trae_agent_model
+    max_steps: 200
+    tools:
+      - bash
+      - str_replace_based_edit_tool
+      - sequentialthinking
+      - task_done
+
+model_providers:
+  anthropic:
+    api_key: your_anthropic_api_key
+    provider: anthropic
+  openai:
+    api_key: your_openai_api_key
+    provider: openai
+
+models:
+  trae_agent_model:
+    model_provider: anthropic
+    model: claude-sonnet-4-20250514
+    max_tokens: 4096
+    temperature: 0.5
+    top_p: 1
+    max_retries: 10
+    parallel_tool_calls: true
+```
 
 **WARNING:**
 For Doubao users, please use the following base_url.
@@ -246,43 +296,7 @@ For more details, see [docs/TRAJECTORY_RECORDING.md](docs/TRAJECTORY_RECORDING.m
 
 ## 🤝 Contributing
 
-For detailed contribution guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
-
-1. Fork the repository
-2. Set up a development install:
-
-   ```bash
-   make install-dev
-   ```
-
-3. Create a feature branch (`git checkout -b feature/amazing-feature`)
-4. Make your changes
-5. Add tests for new functionality
-6. Pre-commit check
-
-   ```bash
-    make pre-commit
-    or:
-    make uv-pre-commit
-   ```
-
-    if having formatting error,please try:
-
-   ```
-    make fix-format
-   ```
-
-7. Commit your changes (`git commit -m 'Add amazing feature'`)
-8. Push to the branch (`git push origin feature/amazing-feature`)
-9. Open a Pull Request
-
-### Development Guidelines
-
-- Follow PEP 8 style guidelines
-- Add tests for new features
-- Update documentation as needed
-- Use type hints where appropriate
-- Ensure all tests pass before submitting
+For contribution guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📋 Requirements
 
@@ -334,6 +348,20 @@ uv run trae-cli `xxxxx`
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## ✍️ Citation
+
+```bibtex
+@article{traeresearchteam2025traeagent,
+      title={Trae Agent: An LLM-based Agent for Software Engineering with Test-time Scaling},
+      author={Trae Research Team and Pengfei Gao and Zhao Tian and Xiangxin Meng and Xinchen Wang and Ruida Hu and Yuanan Xiao and Yizhou Liu and Zhao Zhang and Junjie Chen and Cuiyun Gao and Yun Lin and Yingfei Xiong and Chao Peng and Xia Liu},
+      year={2025},
+      eprint={2507.23370},
+      archivePrefix={arXiv},
+      primaryClass={cs.SE},
+      url={https://arxiv.org/abs/2507.23370},
+}
+```
 
 ## 🙏 Acknowledgments
 

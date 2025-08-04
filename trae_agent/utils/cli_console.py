@@ -9,9 +9,9 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
-from ..agent.agent_basics import AgentExecution, AgentState, AgentStep
-from .config import Config, LakeviewConfig
-from .lake_view import LakeView
+from trae_agent.agent.agent_basics import AgentExecution, AgentState, AgentStep
+from trae_agent.utils.config import Config, LakeviewConfig, TraeAgentConfig
+from trae_agent.utils.lake_view import LakeView
 
 AGENT_STATE_INFO = {
     AgentState.THINKING: ("blue", "🤔"),
@@ -38,12 +38,15 @@ class CLIConsole:
         self.console: Console = Console()
         self.live_display: Live | None = None
         self.config: Config | None = config
+        self.trae_agent_config: TraeAgentConfig | None = config.trae_agent if config else None
         self.console_steps: dict[int, ConsoleStep] = {}
         self.lakeview_config: LakeviewConfig | None = (
-            config.lakeview_config if config is not None and config.enable_lakeview else None
+            config.lakeview
+            if config and self.trae_agent_config and self.trae_agent_config.enable_lakeview
+            else None
         )
         self.lake_view: LakeView | None = (
-            LakeView(config) if config is not None and config.enable_lakeview else None
+            LakeView(self.lakeview_config) if self.lakeview_config else None
         )
 
         self.agent_step_history: list[AgentStep] = []
@@ -65,14 +68,15 @@ class CLIConsole:
 
     async def start(self):
         while True:
-            if self.agent_execution and (
-                self.lake_view is None
-                or (
-                    len(self.agent_execution.steps) == len(self.console_steps)
-                    and all(step.lake_view_generator_done for step in self.console_steps.values())
-                )
-            ):
-                break
+            if self.agent_execution:
+                if self.lake_view is None:
+                    # Lakeview not enabled, break the loop
+                    break
+                elif len(self.agent_execution.steps) == len(self.console_steps) and all(
+                    step.lake_view_generator_done for step in self.console_steps.values()
+                ):
+                    # If lakeview is enabled, we need to wait until all lakeview panels are generated.
+                    break
             self.print_task_progress()
             await asyncio.sleep(3)
 

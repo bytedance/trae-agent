@@ -8,14 +8,13 @@ import os
 import subprocess
 from typing import override
 
-from ..prompt.agent_prompt import TRAE_AGENT_SYSTEM_PROMPT
-from ..tools import tools_registry
-from ..tools.base import Tool, ToolExecutor, ToolResult
-from ..utils.config import Config
-from ..utils.llm_basics import LLMMessage, LLMResponse
-from ..utils.llm_client import LLMClient
-from .agent_basics import AgentError, AgentExecution
-from .base import Agent
+from trae_agent.agent.agent_basics import AgentError, AgentExecution
+from trae_agent.agent.base import Agent
+from trae_agent.prompt.agent_prompt import TRAE_AGENT_SYSTEM_PROMPT
+from trae_agent.tools import tools_registry
+from trae_agent.tools.base import Tool, ToolExecutor, ToolResult
+from trae_agent.utils.config import TraeAgentConfig
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 
 TraeAgentToolNames = [
     "str_replace_based_edit_tool",
@@ -29,7 +28,7 @@ TraeAgentToolNames = [
 class TraeAgent(Agent):
     """Trae Agent specialized for software engineering tasks."""
 
-    def __init__(self, config: Config | None = None, llm_client: LLMClient | None = None):
+    def __init__(self, trae_agent_config: TraeAgentConfig):
         """Initialize TraeAgent.
 
         Args:
@@ -42,23 +41,7 @@ class TraeAgent(Agent):
         self.base_commit: str | None = None
         self.must_patch: str = "false"
         self.patch_path: str | None = None
-        super().__init__(config=config, llm_client=llm_client)
-
-    @classmethod
-    @override
-    def from_config(cls, config: Config) -> "TraeAgent":
-        """Create a TraeAgent instance from a configuration object.
-
-        This factory method provides the traditional config-based initialization
-        while allowing for future customization of the instantiation process.
-
-        Args:
-            config: Configuration object containing model parameters and other settings.
-
-        Returns:
-            An instance of TraeAgent.
-        """
-        return cls(config=config)
+        super().__init__(agent_config=trae_agent_config)
 
     def setup_trajectory_recording(self, trajectory_path: str | None = None) -> str:
         """Set up trajectory recording for this agent.
@@ -86,14 +69,14 @@ class TraeAgent(Agent):
         """Create a new task."""
         self._task: str = task
 
-        if tool_names is None:
+        if tool_names is None and len(self._tools) == 0:
             tool_names = TraeAgentToolNames
 
-        # Get the model provider from the LLM client
-        provider = self._llm_client.provider.value
-        self._tools: list[Tool] = [
-            tools_registry[tool_name](model_provider=provider) for tool_name in tool_names
-        ]
+            # Get the model provider from the LLM client
+            provider = self._model_config.model_provider.provider
+            self._tools: list[Tool] = [
+                tools_registry[tool_name](model_provider=provider) for tool_name in tool_names
+            ]
         self._tool_caller: ToolExecutor = ToolExecutor(self._tools)
 
         self._initial_messages: list[LLMMessage] = []
@@ -122,7 +105,7 @@ class TraeAgent(Agent):
             self._trajectory_recorder.start_recording(
                 task=task,
                 provider=self._llm_client.provider.value,
-                model=self._model_parameters.model,
+                model=self._model_config.model,
                 max_steps=self._max_steps,
             )
 

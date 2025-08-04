@@ -9,18 +9,18 @@ from typing import override
 import anthropic
 from anthropic.types.tool_union_param import TextEditor20250429
 
-from ..tools.base import Tool, ToolCall, ToolResult
-from ..utils.config import ModelParameters
-from ..utils.llm_basics import LLMMessage, LLMResponse, LLMUsage
-from .base_client import BaseLLMClient
-from .retry_utils import retry_with
+from trae_agent.tools.base import Tool, ToolCall, ToolResult
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.base_client import BaseLLMClient
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse, LLMUsage
+from trae_agent.utils.llm_clients.retry_utils import retry_with
 
 
 class AnthropicClient(BaseLLMClient):
     """Anthropic client wrapper with tool schema generation."""
 
-    def __init__(self, model_parameters: ModelParameters):
-        super().__init__(model_parameters)
+    def __init__(self, model_config: ModelConfig):
+        super().__init__(model_config)
 
         self.client: anthropic.Anthropic = anthropic.Anthropic(
             api_key=self.api_key, base_url=self.base_url
@@ -35,26 +35,26 @@ class AnthropicClient(BaseLLMClient):
 
     def _create_anthropic_response(
         self,
-        model_parameters: ModelParameters,
+        model_config: ModelConfig,
         tool_schemas: list[anthropic.types.ToolUnionParam] | anthropic.NotGiven,
     ) -> anthropic.types.Message:
         """Create a response using Anthropic API. This method will be decorated with retry logic."""
         return self.client.messages.create(
-            model=model_parameters.model,
+            model=model_config.model,
             messages=self.message_history,
-            max_tokens=model_parameters.max_tokens,
+            max_tokens=model_config.max_tokens,
             system=self.system_message,
             tools=tool_schemas,
-            temperature=model_parameters.temperature,
-            top_p=model_parameters.top_p,
-            top_k=model_parameters.top_k,
+            temperature=model_config.temperature,
+            top_p=model_config.top_p,
+            top_k=model_config.top_k,
         )
 
     @override
     def chat(
         self,
         messages: list[LLMMessage],
-        model_parameters: ModelParameters,
+        model_config: ModelConfig,
         tools: list[Tool] | None = None,
         reuse_history: bool = True,
     ) -> LLMResponse:
@@ -96,10 +96,10 @@ class AnthropicClient(BaseLLMClient):
         # Apply retry decorator to the API call
         retry_decorator = retry_with(
             func=self._create_anthropic_response,
-            service_name="Anthropic",
-            max_retries=model_parameters.max_retries,
+            provider_name="Anthropic",
+            max_retries=model_config.max_retries,
         )
-        response = retry_decorator(model_parameters, tool_schemas)
+        response = retry_decorator(model_config, tool_schemas)
 
         # Handle tool calls in response
         content = ""
@@ -146,27 +146,11 @@ class AnthropicClient(BaseLLMClient):
                 messages=messages,
                 response=llm_response,
                 provider="anthropic",
-                model=model_parameters.model,
+                model=model_config.model,
                 tools=tools,
             )
 
         return llm_response
-
-    @override
-    def supports_tool_calling(self, model_parameters: ModelParameters) -> bool:
-        """Check if the current model supports tool calling."""
-        tool_capable_models = [
-            "claude-3-opus",
-            "claude-3-sonnet",
-            "claude-3-haiku",
-            "claude-3-5-opus",
-            "claude-3-5-sonnet",
-            "claude-3-5-haiku",
-            "claude-3-7-sonnet",
-            "claude-4-opus",
-            "claude-4-sonnet",
-        ]
-        return any(model in model_parameters.model for model in tool_capable_models)
 
     def parse_messages(self, messages: list[LLMMessage]) -> list[anthropic.types.MessageParam]:
         """Parse the messages to Anthropic format."""

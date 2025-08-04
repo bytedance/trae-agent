@@ -4,8 +4,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from ..tools.base import ToolCall, ToolResult
-from ..utils.llm_basics import LLMResponse, LLMUsage
+from trae_agent.tools.base import ToolCall, ToolResult
+from trae_agent.utils.llm_clients.llm_basics import LLMResponse, LLMUsage
 
 __all__ = [
     "AgentState",

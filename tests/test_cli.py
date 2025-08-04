@@ -80,17 +80,6 @@ class TestCli(unittest.TestCase):
             call_args, _ = mock_create_agent.return_value.new_task.call_args
             self.assertEqual(call_args[0], "task.txt")
 
-    @patch("trae_agent.cli.create_agent")
-    def test_run_handles_agent_exception(self, mock_create_agent):
-        """Test that the CLI handles exceptions raised from the agent gracefully."""
-        # deliberately make the mock agent's execute_task raise an error
-        mock_agent_instance = mock_create_agent.return_value
-        mock_agent_instance.execute_task.side_effect = Exception("Core agent failed")
-
-        result = self.runner.invoke(cli, ["run", "some task"])
-        self.assertNotEqual(result.exit_code, 0)
-        self.assertIn("Unexpected error: Core agent failed", result.output)
-
 
 if __name__ == "__main__":
     unittest.main()

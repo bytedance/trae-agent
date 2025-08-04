@@ -2,10 +2,9 @@ import re
 from dataclasses import dataclass
 
 from trae_agent.agent.agent_basics import AgentStep
-
-from .config import Config, ModelParameters
-from .llm_basics import LLMMessage
-from .llm_client import LLMClient
+from trae_agent.utils.config import LakeviewConfig
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage
+from trae_agent.utils.llm_clients.llm_client import LLMClient
 
 StepType = tuple[
     str,  # content for human (will write into result file)
@@ -77,26 +76,12 @@ class LakeViewStep:
 
 
 class LakeView:
-    def __init__(self, config: Config):
-        if config.lakeview_config is None:
+    def __init__(self, lake_view_config: LakeviewConfig | None):
+        if lake_view_config is None:
             return
 
-        model_parameters = config.model_providers[config.lakeview_config.model_provider]
-        self.model_parameters: ModelParameters = ModelParameters(
-            model=config.lakeview_config.model_name,
-            api_key=model_parameters.api_key,
-            max_tokens=model_parameters.max_tokens,
-            temperature=model_parameters.temperature,
-            top_p=model_parameters.top_p,
-            top_k=model_parameters.top_k,
-            parallel_tool_calls=model_parameters.parallel_tool_calls,
-            max_retries=model_parameters.max_retries,
-            base_url=model_parameters.base_url,
-            api_version=model_parameters.api_version,
-        )
-        self.lakeview_llm_client: LLMClient = LLMClient(
-            config.lakeview_config.model_provider, self.model_parameters, config.max_steps
-        )
+        self.model_config = lake_view_config.model
+        self.lakeview_llm_client: LLMClient = LLMClient(self.model_config)
 
         self.steps: list[str] = []
 
@@ -120,9 +105,9 @@ class LakeView:
             ),
         ]
 
-        self.model_parameters.temperature = 0.1
+        self.model_config.temperature = 0.1
         llm_response = self.lakeview_llm_client.chat(
-            model_parameters=self.model_parameters,
+            model_config=self.model_config,
             messages=llm_messages,
             reuse_history=False,
         )
@@ -135,7 +120,7 @@ class LakeView:
         ):
             retry += 1
             llm_response = self.lakeview_llm_client.chat(
-                model_parameters=self.model_parameters,
+                model_config=self.model_config,
                 messages=llm_messages,
                 reuse_history=False,
             )
@@ -168,12 +153,12 @@ class LakeView:
             LLMMessage(role="user", content=TAGGER_PROMPT),
             LLMMessage(role="assistant", content="Sure. The tags are: <tags>"),
         ]
-        self.model_parameters.temperature = 0.1
+        self.model_config.temperature = 0.1
 
         retry = 0
         while retry < 10:
             llm_response = self.lakeview_llm_client.chat(
-                model_parameters=self.model_parameters,
+                model_config=self.model_config,
                 messages=llm_messages,
                 reuse_history=False,
             )

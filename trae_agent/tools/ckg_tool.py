@@ -4,10 +4,9 @@
 from pathlib import Path
 from typing import override
 
+from trae_agent.tools.base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
+from trae_agent.tools.ckg.ckg_database import CKGDatabase
 from trae_agent.tools.run import MAX_RESPONSE_LEN
-
-from .base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
-from .ckg.ckg_database import CKGDatabase
 
 CKGToolCommands = ["search_function", "search_class", "search_class_method"]
 

@@ -12,8 +12,8 @@ from typing import Literal
 from tree_sitter import Node, Parser
 from tree_sitter_languages import get_parser
 
-from ...utils.constants import LOCAL_STORAGE_PATH
-from .base import ClassEntry, FunctionEntry, extension_to_language
+from trae_agent.tools.ckg.base import ClassEntry, FunctionEntry, extension_to_language
+from trae_agent.utils.constants import LOCAL_STORAGE_PATH
 
 CKG_DATABASE_PATH = LOCAL_STORAGE_PATH / "ckg"
 CKG_STORAGE_INFO_FILE = CKG_DATABASE_PATH / "storage_info.json"

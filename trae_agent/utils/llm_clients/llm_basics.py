@@ -4,7 +4,7 @@
 
 from dataclasses import dataclass
 
-from ..tools.base import ToolCall, ToolResult
+from trae_agent.tools.base import ToolCall, ToolResult
 
 
 @dataclass

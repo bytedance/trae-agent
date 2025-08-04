@@ -12,8 +12,8 @@
 from pathlib import Path
 from typing import override
 
-from .base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
-from .run import maybe_truncate, run
+from trae_agent.tools.base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
+from trae_agent.tools.run import maybe_truncate, run
 
 EditToolSubCommands = [
     "view",

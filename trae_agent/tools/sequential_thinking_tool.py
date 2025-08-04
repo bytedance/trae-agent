@@ -13,7 +13,7 @@ import json
 from dataclasses import dataclass
 from typing import override
 
-from .base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
+from trae_agent.tools.base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
 
 
 @dataclass

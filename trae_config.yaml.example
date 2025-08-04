@@ -1,0 +1,38 @@
+agents:
+    trae_agent:
+        enable_lakeview: true
+        model: trae_agent_model
+        max_steps: 200
+        tools:
+            - bash
+            - str_replace_based_edit_tool
+            - sequentialthinking
+            - task_done
+
+lakeview:
+    model: lakeview_model
+
+model_providers:
+    anthropic:
+        api_key: your_anthropic_api_key
+        provider: anthropic
+
+models:
+    default_model:
+        model_provider: anthropic
+        model: claude-4-sonnet
+        max_tokens: 4096
+        temperature: 0.5
+        top_p: 1
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    lakeview_model:
+        model_provider: anthropic
+        model: claude-3.5-sonnet
+        max_tokens: 4096
+        temperature: 0.5
+        top_p: 1
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true

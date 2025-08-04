@@ -7,7 +7,11 @@ import os
 
 import openai
 
-from .openai_compatible_base import ProviderConfig
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.openai_compatible_base import (
+    OpenAICompatibleClient,
+    ProviderConfig,
+)
 
 
 class OpenRouterProvider(ProviderConfig):
@@ -56,3 +60,15 @@ class OpenRouterProvider(ProviderConfig):
             "command-r",
         ]
         return any(pattern in model_name.lower() for pattern in tool_capable_patterns)
+
+
+class OpenRouterClient(OpenAICompatibleClient):
+    """OpenRouter client wrapper that maintains compatibility while using the new architecture."""
+
+    def __init__(self, model_config: ModelConfig):
+        if (
+            model_config.model_provider.base_url is None
+            or model_config.model_provider.base_url == ""
+        ):
+            model_config.model_provider.base_url = "https://openrouter.ai/api/v1"
+        super().__init__(model_config, OpenRouterProvider())

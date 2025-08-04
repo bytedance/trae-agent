@@ -1,11 +1,15 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-"""Doubao provider configuration."""
+"""Doubao client wrapper with tool integrations"""
 
 import openai
 
-from .openai_compatible_base import ProviderConfig
+from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.llm_clients.openai_compatible_base import (
+    OpenAICompatibleClient,
+    ProviderConfig,
+)
 
 
 class DoubaoProvider(ProviderConfig):
@@ -33,3 +37,10 @@ class DoubaoProvider(ProviderConfig):
         """Check if the model supports tool calling."""
         # Doubao models generally support tool calling
         return True
+
+
+class DoubaoClient(OpenAICompatibleClient):
+    """Doubao client wrapper that maintains compatibility while using the new architecture."""
+
+    def __init__(self, model_config: ModelConfig):
+        super().__init__(model_config, DoubaoProvider())

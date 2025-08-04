@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
 from trae_agent.utils.config import Config
-from trae_agent.utils.llm_basics import LLMResponse
-from trae_agent.utils.llm_client import LLMClient
+from trae_agent.utils.legacy_config import LegacyConfig
+from trae_agent.utils.llm_clients.llm_basics import LLMResponse
 
 
 class TestTraeAgentExtended(unittest.TestCase):
@@ -30,37 +30,22 @@ class TestTraeAgentExtended(unittest.TestCase):
                 }
             },
         }
-        self.config = Config(test_config)
+        self.config = Config.create_from_legacy_config(legacy_config=LegacyConfig(test_config))
 
         # Avoid create real LLMClient instance to avoid actual API calls
         self.llm_client_patcher = patch("trae_agent.agent.base.LLMClient")
         mock_llm_client = self.llm_client_patcher.start()
         mock_llm_client.return_value.client = MagicMock()
 
-        self.agent = TraeAgent(self.config)
+        if self.config.trae_agent:
+            self.agent = TraeAgent(self.config.trae_agent)
+        else:
+            self.fail("trae_agent config is None")
         self.test_project_path = "/test/project"
         self.test_patch_path = "/test/patch.diff"
 
     def tearDown(self):
         self.llm_client_patcher.stop()
-
-    def test_init_with_mock_client(self):
-        """Test initializing TraeAgent with a mock client"""
-        # Create a mock LLMClient
-        mock_client = MagicMock(spec=LLMClient)
-        mock_client.model_parameters = self.config.model_providers["anthropic"]
-        mock_client._max_steps = 20
-
-        # Initialize TraeAgent with mock client
-        agent = TraeAgent(llm_client=mock_client)
-
-        # Verify agent initialization
-        self.assertIsNotNone(agent)
-        self.assertEqual(agent.llm_client, mock_client)
-        self.assertEqual(agent.model_parameters, mock_client.model_parameters)
-        self.assertEqual(agent.max_steps, mock_client.max_steps)
-        self.assertEqual(len(agent.initial_messages), 0)
-        self.assertEqual(len(agent.tools), 0)
 
     @patch("trae_agent.utils.trajectory_recorder.TrajectoryRecorder")
     def test_trajectory_setup(self, mock_recorder):
@@ -83,7 +68,7 @@ class TestTraeAgentExtended(unittest.TestCase):
 
         self.assertEqual(self.agent.project_path, self.test_project_path)
         self.assertEqual(self.agent.must_patch, "true")
-        self.assertEqual(len(self.agent.tools), 5)
+        self.assertEqual(len(self.agent.tools), 4)
         self.assertTrue(any(tool.get_name() == "bash" for tool in self.agent.tools))
 
     @patch("subprocess.check_output")
@@ -153,7 +138,7 @@ class TestTraeAgentExtended(unittest.TestCase):
             self.agent.max_steps = None
 
         with self.assertRaises(AttributeError):
-            self.agent.model_parameters = False
+            self.agent.model_config = False
 
         with self.assertRaises(AttributeError):
             self.agent.initial_messages = "random"

@@ -13,8 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..tools.base import ToolCall, ToolResult
-from .llm_basics import LLMMessage, LLMResponse
+from trae_agent.tools.base import ToolCall, ToolResult
+from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 
 
 class TrajectoryRecorder:
