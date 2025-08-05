@@ -24,7 +24,7 @@ model_providers:
         provider: anthropic
 
 models:
-    default_model:
+    trae_agent_model:
         model_provider: anthropic
         model: claude-4-sonnet
         max_tokens: 4096
