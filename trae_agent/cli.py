@@ -330,7 +330,7 @@ async def interactive(
 @click.option(
     "--config-file",
     help="Path to configuration file",
-    default="trae_config.json",
+    default="trae_config.yaml",
     envvar="TRAE_CONFIG_FILE",
 )
 @click.option("--provider", "-p", help="LLM provider to use")
