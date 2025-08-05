@@ -1,7 +1,6 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -33,7 +32,7 @@ class TestTraeAgentExtended(unittest.TestCase):
         self.config = Config.create_from_legacy_config(legacy_config=LegacyConfig(test_config))
 
         # Avoid create real LLMClient instance to avoid actual API calls
-        self.llm_client_patcher = patch("trae_agent.agent.base.LLMClient")
+        self.llm_client_patcher = patch("trae_agent.agent.base_agent.LLMClient")
         mock_llm_client = self.llm_client_patcher.start()
         mock_llm_client.return_value.client = MagicMock()
 
@@ -93,13 +92,6 @@ class TestTraeAgentExtended(unittest.TestCase):
         filtered = self.agent.remove_patches_to_tests(test_patch)
         self.assertEqual(filtered, "")
 
-    @patch("asyncio.create_task")
-    @patch("trae_agent.utils.cli_console.CLIConsole")
-    def test_task_execution_flow(self, mock_console, mock_task):
-        self.agent.set_cli_console(mock_console)
-        asyncio.run(self.agent.execute_task())
-        mock_console.start.assert_called_once()
-
     def test_task_completion_detection(self):
         mock_response = MagicMock(spec=LLMResponse)
 
@@ -154,7 +146,7 @@ class TestTraeAgentExtended(unittest.TestCase):
         self.assertIsNone(self.agent.cli_console)
 
         # Test that public property setters work
-        from trae_agent.utils.cli_console import CLIConsole
+        from trae_agent.utils.cli import CLIConsole
 
         mock_console = MagicMock(spec=CLIConsole)
         self.agent.set_cli_console(mock_console)

@@ -9,40 +9,21 @@ import sys
 import traceback
 from pathlib import Path
 
-import asyncclick as click
+import click
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from trae_agent.agent import TraeAgent
-from trae_agent.utils.cli_console import CLIConsole
+from trae_agent.agent import Agent
+from trae_agent.utils.cli import CLIConsole, ConsoleFactory, ConsoleMode, ConsoleType
 from trae_agent.utils.config import Config, TraeAgentConfig
+from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 
 # Load environment variables
 _ = load_dotenv()
 
 console = Console()
-
-
-async def create_agent(trae_agent_config: TraeAgentConfig) -> TraeAgent:
-    """
-    create_agent creates a Trae Agent with the specified configuration.
-    Args:
-        config: Agent configuration. It is expected that the config comes from load_config.
-    Return:
-        TraeAgent object
-    """
-    try:
-        # Create agent
-        # agent = TraeAgent(trae_agent_config)
-        agent = await TraeAgent.create(trae_agent_config)
-        return agent
-
-    except Exception as e:
-        console.print(f"[red]Error creating agent: {e}[/red]")
-        console.print(traceback.format_exc())
-        sys.exit(1)
 
 
 @click.group()
@@ -70,7 +51,20 @@ def cli():
 )
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 @click.option("--patch-path", "-pp", help="Path to patch file")
-async def run(
+@click.option(
+    "--console-type",
+    "-ct",
+    type=click.Choice(["simple", "rich"], case_sensitive=False),
+    help="Type of console to use (simple or rich)",
+)
+@click.option(
+    "--agent-type",
+    "-at",
+    type=click.Choice(["trae_agent"], case_sensitive=False),
+    help="Type of agent to use (trae_agent)",
+    default="trae_agent",
+)
+def run(
     task: str | None,
     file_path: str | None,
     patch_path: str,
@@ -83,6 +77,8 @@ async def run(
     must_patch: bool = False,
     config_file: str = "trae_config.json",
     trajectory_file: str | None = None,
+    console_type: str | None = "simple",
+    agent_type: str | None = "trae_agent",
 ):
     """
     Run is the main function of tace. It runs a task using Trae Agent.
@@ -122,20 +118,33 @@ async def run(
         max_steps=max_steps,
     )
 
-    trae_agent_config = config.trae_agent
-    # Create agent
-    if trae_agent_config:
-        agent: TraeAgent = await create_agent(trae_agent_config)
-    else:
-        console.print("[red]Error: trae_agent configuration is required in the config file.[/red]")
+    if not agent_type:
+        console.print("[red]Error: agent_type is required.[/red]")
         sys.exit(1)
 
-    # Set up trajectory recording
-    trajectory_path = None
     if trajectory_file:
-        trajectory_path = agent.setup_trajectory_recording(trajectory_file)
+        trajectory_recorder = TrajectoryRecorder(trajectory_file)
     else:
-        trajectory_path = agent.setup_trajectory_recording()
+        trajectory_recorder = TrajectoryRecorder()
+
+    # Create CLI Console
+    console_mode = ConsoleMode.RUN
+    if console_type:
+        selected_console_type = (
+            ConsoleType.SIMPLE if console_type.lower() == "simple" else ConsoleType.RICH
+        )
+    else:
+        selected_console_type = ConsoleFactory.get_recommended_console_type(console_mode)
+
+    cli_console = ConsoleFactory.create_console(
+        console_type=selected_console_type, mode=console_mode
+    )
+
+    # For rich console in RUN mode, set the initial task
+    if selected_console_type == ConsoleType.RICH and hasattr(cli_console, "set_initial_task"):
+        cli_console.set_initial_task(task)
+
+    agent = Agent(agent_type, config, trajectory_recorder, cli_console)
 
     # Change working directory if specified
     if working_dir:
@@ -154,19 +163,6 @@ async def run(
             f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
         )
         sys.exit(1)
-    # Create CLI Console
-    cli_console = CLIConsole(config)
-    cli_console.print_task_details(
-        task,
-        working_dir,
-        trae_agent_config.model.model_provider.provider,
-        trae_agent_config.model.model,
-        trae_agent_config.max_steps,
-        config_file,
-        trajectory_path,
-    )
-
-    agent.set_cli_console(cli_console)
 
     try:
         task_args = {
@@ -175,22 +171,32 @@ async def run(
             "must_patch": "true" if must_patch else "false",
             "patch_path": patch_path,
         }
-        agent.new_task(task, task_args)
-        # _ = asyncio.run(agent.execute_task())
-        await agent.execute_task()
 
-        console.print(f"\n[green]Trajectory saved to: {trajectory_path}[/green]")
+        # Set up agent context for rich console if applicable
+        if selected_console_type == ConsoleType.RICH and hasattr(cli_console, "set_agent_context"):
+            cli_console.set_agent_context(agent, config.trae_agent, config_file, trajectory_file)
+
+        # Agent will handle starting the appropriate console
+        _ = asyncio.run(agent.run(task, task_args))
+
+        console.print(
+            f"\n[green]Trajectory saved to: {trajectory_recorder.trajectory_path.absolute().as_posix()}[/green]"
+        )
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Task execution interrupted by user[/yellow]")
-        if trajectory_path:
-            console.print(f"[blue]Partial trajectory saved to: {trajectory_path}[/blue]")
+        if trajectory_recorder:
+            console.print(
+                f"[blue]Partial trajectory saved to: {trajectory_recorder.trajectory_path.absolute().as_posix()}[/blue]"
+            )
         sys.exit(1)
     except Exception as e:
         console.print(f"\n[red]Unexpected error: {e}[/red]")
         console.print(traceback.format_exc())
-        if trajectory_path:
-            console.print(f"[blue]Trajectory saved to: {trajectory_path}[/blue]")
+        if trajectory_recorder:
+            console.print(
+                f"[blue]Trajectory saved to: {trajectory_recorder.trajectory_path.absolute().as_posix()}[/blue]"
+            )
         sys.exit(1)
 
 
@@ -207,7 +213,20 @@ async def run(
 )
 @click.option("--max-steps", help="Maximum number of execution steps", type=int, default=20)
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
-async def interactive(
+@click.option(
+    "--console-type",
+    "-ct",
+    type=click.Choice(["simple", "rich"], case_sensitive=False),
+    help="Type of console to use (simple or rich)",
+)
+@click.option(
+    "--agent-type",
+    "-at",
+    type=click.Choice(["trae_agent"], case_sensitive=False),
+    help="Type of agent to use (trae_agent)",
+    default="trae_agent",
+)
+def interactive(
     provider: str | None = None,
     model: str | None = None,
     model_base_url: str | None = None,
@@ -215,11 +234,13 @@ async def interactive(
     config_file: str = "trae_config.json",
     max_steps: int | None = None,
     trajectory_file: str | None = None,
+    console_type: str | None = "simple",
+    agent_type: str | None = "trae_agent",
 ):
     """
     This function starts an interactive session with Trae Agent.
     Args:
-        tasks: the task that you want your agent to solve. This is required to be in the input
+        console_type: Type of console to use for the interactive session
     """
     config = Config.create(
         config_file=config_file,
@@ -237,27 +258,59 @@ async def interactive(
         console.print("[red]Error: trae_agent configuration is required in the config file.[/red]")
         sys.exit(1)
 
-    console.print(
-        Panel(
-            f"""[bold]Welcome to Trae Agent Interactive Mode![/bold]
-    [bold]Provider:[/bold] {trae_agent_config.model.model_provider.provider}
-    [bold]Model:[/bold] {trae_agent_config.model.model}
-    [bold]Max Steps:[/bold] {trae_agent_config.max_steps}
-    [bold]Config File:[/bold] {config_file}""",
-            title="Interactive Mode",
-            border_style="green",
+    # Create CLI Console for interactive mode
+    console_mode = ConsoleMode.INTERACTIVE
+    if console_type:
+        selected_console_type = (
+            ConsoleType.SIMPLE if console_type.lower() == "simple" else ConsoleType.RICH
         )
+    else:
+        selected_console_type = ConsoleFactory.get_recommended_console_type(console_mode)
+
+    cli_console = ConsoleFactory.create_console(
+        console_type=selected_console_type, lakeview_config=config.lakeview, mode=console_mode
     )
 
-    # Create agent
-    agent = await create_agent(trae_agent_config)
+    if trajectory_file:
+        trajectory_recorder = TrajectoryRecorder(trajectory_file)
+    else:
+        trajectory_recorder = TrajectoryRecorder()
 
+    if not agent_type:
+        console.print("[red]Error: agent_type is required.[/red]")
+        sys.exit(1)
+
+    # Create agent
+    agent = Agent(agent_type, config, trajectory_recorder, cli_console)
+
+    # For simple console, use traditional interactive loop
+    if selected_console_type == ConsoleType.SIMPLE:
+        asyncio.run(
+            _run_simple_interactive_loop(
+                agent, cli_console, trae_agent_config, config_file, trajectory_file
+            )
+        )
+    else:
+        # For rich console, start the textual app which handles interaction
+        asyncio.run(
+            _run_rich_interactive_loop(
+                agent, cli_console, trae_agent_config, config_file, trajectory_file
+            )
+        )
+
+
+async def _run_simple_interactive_loop(
+    agent: Agent,
+    cli_console: CLIConsole,
+    trae_agent_config: TraeAgentConfig,
+    config_file: str,
+    trajectory_file: str | None,
+):
+    """Run the interactive loop for simple console."""
     while True:
         try:
-            console.print("\n[bold blue]Task:[/bold blue] ", end="")
-            task = input()
-
-            if task.lower() in ["exit", "quit"]:
+            task = cli_console.get_task_input()
+            if task is None:
                 console.print("[green]Goodbye![/green]")
                 break
 
@@ -276,15 +329,14 @@ async def interactive(
                 )
                 continue
 
-            console.print("\n[bold blue]Working Directory:[/bold blue] ", end="")
-            working_dir = input()
+            working_dir = cli_console.get_working_dir_input()
 
             if task.lower() == "status":
                 console.print(
                     Panel(
-                        f"""[bold]Provider:[/bold] {agent.llm_client.provider.value}
-    [bold]Model:[/bold] {trae_agent_config.model.model}
-    [bold]Available Tools:[/bold] {len(agent.tools)}
+                        f"""[bold]Provider:[/bold] {agent.agent_config.model.model_provider.provider}
+    [bold]Model:[/bold] {agent.agent_config.model.model}
+    [bold]Available Tools:[/bold] {len(agent.agent.tools)}
     [bold]Config File:[/bold] {config_file}
     [bold]Working Directory:[/bold] {os.getcwd()}""",
                         title="Agent Status",
@@ -298,9 +350,7 @@ async def interactive(
                 continue
 
             # Set up trajectory recording for this task
-            trajectory_path = agent.setup_trajectory_recording(trajectory_file)
-
-            console.print(f"[blue]Trajectory will be saved to: {trajectory_path}[/blue]")
+            console.print(f"[blue]Trajectory will be saved to: {trajectory_file}[/blue]")
 
             task_args = {
                 "project_path": working_dir,
@@ -310,12 +360,16 @@ async def interactive(
 
             # Execute the task
             console.print(f"\n[blue]Executing task: {task}[/blue]")
-            agent.new_task(task, task_args)
 
-            # Configure agent for progress display
-            _ = asyncio.run(agent.execute_task())
+            # Start console and execute task
+            console_task = asyncio.create_task(cli_console.start())
+            execution_task = asyncio.create_task(agent.run(task, task_args))
 
-            console.print(f"\n[green]Trajectory saved to: {trajectory_path}[/green]")
+            # Wait for execution to complete
+            _ = await execution_task
+            _ = await console_task
+
+            console.print(f"\n[green]Trajectory saved to: {trajectory_file}[/green]")
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Use 'exit' or 'quit' to end the session[/yellow]")
@@ -324,6 +378,22 @@ async def interactive(
             break
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
+
+
+async def _run_rich_interactive_loop(
+    agent: Agent,
+    cli_console: CLIConsole,
+    trae_agent_config: TraeAgentConfig,
+    config_file: str,
+    trajectory_file: str | None,
+):
+    """Run the interactive loop for rich console."""
+    # Set up the agent in the rich console so it can handle task execution
+    if hasattr(cli_console, "set_agent_context"):
+        cli_console.set_agent_context(agent, trae_agent_config, config_file, trajectory_file)
+
+    # Start the console UI - this will handle the entire interaction
+    await cli_console.start()
 
 
 @cli.command()
@@ -433,7 +503,7 @@ def tools():
 
 def main():
     """Main entry point for the CLI."""
-    asyncio.run(cli())
+    cli()
 
 
 if __name__ == "__main__":

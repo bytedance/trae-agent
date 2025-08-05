@@ -5,9 +5,9 @@
 
 __version__ = "0.1.0"
 
-from trae_agent.agent.base import Agent
+from trae_agent.agent.base_agent import BaseAgent
 from trae_agent.agent.trae_agent import TraeAgent
 from trae_agent.tools.base import Tool, ToolExecutor
 from trae_agent.utils.llm_clients.llm_client import LLMClient
 
-__all__ = ["Agent", "TraeAgent", "LLMClient", "Tool", "ToolExecutor"]
+__all__ = ["BaseAgent", "TraeAgent", "LLMClient", "Tool", "ToolExecutor"]
