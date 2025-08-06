@@ -1,6 +1,6 @@
 # HTTP Server
 
-This folder contains the elements for hosting the Trae agent as an HTTP server using Flask or FastAPI. It is still under construction and should **not** be used in production yet.
+This folder contains the elements for hosting the Trae agent as an HTTP server using FastAPI. It is still under construction and should **not** be used in production yet.
 
 ## Expected Features of the HTTP Server
 
