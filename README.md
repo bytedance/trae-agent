@@ -34,6 +34,7 @@ We strongly recommend using [uv](https://docs.astral.sh/uv/) to setup the projec
 git clone https://github.com/bytedance/trae-agent.git
 cd trae-agent
 uv venv
+source .venv/bin/activate
 uv sync --all-extras
 
 # Activate the virtual environment
