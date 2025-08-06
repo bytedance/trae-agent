@@ -94,15 +94,15 @@ async def run(
     task: str | None,
     file_path: str | None,
     patch_path: str,
-    provider: str | None = None,
-    model: str | None = None,
-    model_base_url: str | None = None,
-    api_key: str | None = None,
-    max_steps: int | None = None,
-    working_dir: str | None = None,
-    must_patch: bool = False,
-    config_file: str = "trae_config.yaml",
-    trajectory_file: str | None = None,
+    provider: str | None,
+    model: str | None,
+    model_base_url: str | None,
+    api_key: str | None,
+    max_steps: int | None,
+    working_dir: str | None,
+    must_patch: bool,
+    config_file: str,
+    trajectory_file: str | None,
 ):
     """
     Run is the main function of tace. it runs a task using Trae Agent.
@@ -231,13 +231,13 @@ async def run(
 @click.option("--max-steps", help="Maximum number of execution steps", type=int, default=20)
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 async def interactive(
-    provider: str | None = None,
-    model: str | None = None,
-    model_base_url: str | None = None,
-    api_key: str | None = None,
-    config_file: str = "trae_config.yaml",
-    max_steps: int | None = None,
-    trajectory_file: str | None = None,
+    provider: str | None,
+    model: str | None,
+    model_base_url: str | None,
+    api_key: str | None,
+    config_file: str,
+    max_steps: int | None,
+    trajectory_file: str | None,
 ):
     """
     This function starts an interactive session with Trae Agent.
@@ -366,11 +366,11 @@ async def interactive(
 @click.option("--max-steps", help="Maximum number of execution steps", type=int)
 def show_config(
     config_file: str,
-    provider: str | None = None,
-    model: str | None = None,
-    model_base_url: str | None = None,
-    api_key: str | None = None,
-    max_steps: int | None = None,
+    provider: str | None,
+    model: str | None,
+    model_base_url: str | None,
+    api_key: str | None,
+    max_steps: int | None,
 ):
     """Show current configuration settings."""
     # Apply backward compatibility for config file
