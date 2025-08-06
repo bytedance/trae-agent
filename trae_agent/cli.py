@@ -268,7 +268,7 @@ def interactive(
     """
     # Apply backward compatibility for config file
     config_file = resolve_config_file(config_file)
-    
+
     config = Config.create(
         config_file=config_file,
     ).resolve_config_values(
@@ -447,7 +447,7 @@ def show_config(
     """Show current configuration settings."""
     # Apply backward compatibility for config file
     config_file = resolve_config_file(config_file)
-    
+
     config_path = Path(config_file)
     if not config_path.exists():
         console.print(
