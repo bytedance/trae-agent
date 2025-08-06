@@ -40,8 +40,10 @@ def resolve_config_file(config_file: str) -> str:
             console.print(f"[yellow]YAML config not found, using JSON config: {json_path}[/yellow]")
             return str(json_path)
         else:
-            console.print(f"[red]Error: Config file not found. Please specify a valid config file in the command line option --config-file[/red]")
-            sys.exit(1)
+            console.print(
+                "[red]Error: Config file not found. Please specify a valid config file in the command line option --config-file[/red]"
+            )
+            exit()
     else:
         return config_file
 
