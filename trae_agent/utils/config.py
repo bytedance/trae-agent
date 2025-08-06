@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import os
+from pathlib import Path
 from dataclasses import dataclass, field
 
 import yaml
@@ -194,10 +195,19 @@ class Config:
             raise ConfigError("Only one of config_file or config_string should be provided")
 
         # Parse YAML config from file or string
+        if (
+            config_file is not None
+            and config_file.endswith(".json")
+            and Path("./" + config_file).is_file()
+        ):
+            return cls.create_from_legacy_config(config_file=config_file)
+
+        if config_file and config_file.endswith(".json"):
+            # we have already checked the json doesn't work
+            config_file = config_file[:-5] + ".yaml"
+
         try:
             if config_file is not None:
-                if config_file.endswith(".json"):
-                    return cls.create_from_legacy_config(config_file=config_file)
                 with open(config_file, "r") as f:
                     yaml_config = yaml.safe_load(f)
             elif config_string is not None:
