@@ -64,7 +64,6 @@ class MCPClient:
             )
         try:
             await self.connect_to_server(mcp_server_name, transport)
-
             mcp_tools = await self.list_tools()
             for tool in mcp_tools.tools:
                 mcp_tool = MCPTool(self, tool, model_provider)

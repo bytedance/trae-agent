@@ -183,6 +183,13 @@ class TrajectoryRecorder:
         self.trajectory_data["agent_steps"].append(step_data)
         self.save_trajectory()
 
+    def update_lakeview(self, step_number: int, lakeview_summary: str):
+        for step_data in self.trajectory_data["agent_steps"]:
+            if step_data["step_number"] == step_number:
+                step_data["lakeview_summary"] = lakeview_summary
+                break
+        self.save_trajectory()
+
     def finalize_recording(self, success: bool, final_result: str | None = None) -> None:
         """Finalize the trajectory recording.
 

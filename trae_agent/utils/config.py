@@ -74,28 +74,27 @@ class ModelConfig:
                     base_url=model_base_url,
                 )
 
-        if api_key:
-            # Map providers to their environment variable names
-            env_var_api_key = str(self.model_provider.provider).upper() + "_API_KEY"
-            env_var_api_base_url = str(self.model_provider.provider).upper() + "_BASE_URL"
+        # Map providers to their environment variable names
+        env_var_api_key = str(self.model_provider.provider).upper() + "_API_KEY"
+        env_var_api_base_url = str(self.model_provider.provider).upper() + "_BASE_URL"
 
-            resolved_api_key = resolve_config_value(
-                cli_value=api_key,
-                config_value=self.model_provider.api_key,
-                env_var=env_var_api_key,
-            )
+        resolved_api_key = resolve_config_value(
+            cli_value=api_key,
+            config_value=self.model_provider.api_key,
+            env_var=env_var_api_key,
+        )
 
-            resolved_api_base_url = resolve_config_value(
-                cli_value=model_base_url,
-                config_value=self.model_provider.base_url,
-                env_var=env_var_api_base_url,
-            )
+        resolved_api_base_url = resolve_config_value(
+            cli_value=model_base_url,
+            config_value=self.model_provider.base_url,
+            env_var=env_var_api_base_url,
+        )
 
-            if resolved_api_key:
-                self.model_provider.api_key = str(resolved_api_key)
+        if resolved_api_key:
+            self.model_provider.api_key = str(resolved_api_key)
 
-            if resolved_api_base_url:
-                self.model_provider.base_url = str(resolved_api_base_url)
+        if resolved_api_base_url:
+            self.model_provider.base_url = str(resolved_api_base_url)
 
 
 @dataclass
@@ -284,7 +283,6 @@ class Config:
     def resolve_config_values(
         self,
         *,
-        model_providers: dict[str, ModelProvider] | None = None,
         provider: str | None = None,
         model: str | None = None,
         model_base_url: str | None = None,
@@ -296,7 +294,7 @@ class Config:
                 max_steps=max_steps,
             )
             self.trae_agent.model.resolve_config_values(
-                model_providers=model_providers,
+                model_providers=self.model_providers,
                 provider=provider,
                 model=model,
                 model_base_url=model_base_url,

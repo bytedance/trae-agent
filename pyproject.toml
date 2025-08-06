@@ -22,6 +22,7 @@ dependencies = [
     "mcp==1.12.2",
     "asyncclick>=8.0.0",
     "pyyaml>=6.0.2",
+    "textual>=0.50.0",
 ]
 
 [project.optional-dependencies]

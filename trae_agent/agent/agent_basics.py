@@ -8,6 +8,7 @@ from trae_agent.tools.base import ToolCall, ToolResult
 from trae_agent.utils.llm_clients.llm_basics import LLMResponse, LLMUsage
 
 __all__ = [
+    "AgentStepState",
     "AgentState",
     "AgentStep",
     "AgentExecution",
@@ -15,13 +16,21 @@ __all__ = [
 ]
 
 
+class AgentStepState(Enum):
+    """Defines possible states during an agent's execution lifecycle."""
+
+    THINKING = "thinking"
+    CALLING_TOOL = "calling_tool"
+    REFLECTING = "reflecting"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
 class AgentState(Enum):
     """Defines possible states during an agent's execution lifecycle."""
 
     IDLE = "idle"
-    THINKING = "thinking"
-    CALLING_TOOL = "calling_tool"
-    REFLECTING = "reflecting"
+    RUNNING = "running"
     COMPLETED = "completed"
     ERROR = "error"
 
@@ -36,7 +45,7 @@ class AgentStep:
     """
 
     step_number: int
-    state: AgentState
+    state: AgentStepState
     thought: str | None = None
     tool_calls: list[ToolCall] | None = None
     tool_results: list[ToolResult] | None = None
@@ -69,6 +78,7 @@ class AgentExecution:
     success: bool = False
     total_tokens: LLMUsage | None = None
     execution_time: float = 0.0
+    agent_state: AgentState = AgentState.IDLE
 
     def __repr__(self) -> str:
         return f"<AgentExecution task={self.task!r} steps={len(self.steps)} success={self.success}>"
