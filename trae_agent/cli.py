@@ -43,7 +43,7 @@ def resolve_config_file(config_file: str) -> str:
             console.print(
                 "[red]Error: Config file not found. Please specify a valid config file in the command line option --config-file[/red]"
             )
-            exit()
+            sys.exit(1)
     else:
         return config_file
 
