@@ -275,6 +275,7 @@ def interactive(
         trajectory_recorder = TrajectoryRecorder(trajectory_file)
     else:
         trajectory_recorder = TrajectoryRecorder()
+        trajectory_file = trajectory_recorder.trajectory_path.absolute().as_posix()
 
     if not agent_type:
         console.print("[red]Error: agent_type is required.[/red]")
