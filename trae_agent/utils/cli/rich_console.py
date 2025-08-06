@@ -74,7 +74,7 @@ class RichConsoleApp(App[None]):
         self.current_task: str | None = None
         self.is_running_task: bool = False
 
-        self.options = ["help", "exit", "status", "clear"]
+        self.options: list[str] = ["help", "exit", "status", "clear"]
 
     @override
     def compose(self) -> ComposeResult:
