@@ -131,50 +131,17 @@ class RichConsoleApp(App[None]):
         if not task:
             return
 
-        if task.lower() in ["exit", "quit"]:
-            self.exit()
-            return
+        handlers: dict = {
+            "exit": self._exit_handler,
+            "quit": self._exit_handler,
+            "help": self._help_handler,
+            "clear": self._clear_handler,
+            "status": self._status_handler,
+        }
 
-        if task.lower() == "help":
-            if self.execution_log:
-                _ = self.execution_log.write(
-                    Panel(
-                        """[bold]Available Commands:[/bold]
-
-• Type any task description to execute it
-• 'status' - Show agent status
-• 'clear' - Clear the execution log
-• 'exit' or 'quit' - End the session""",
-                        title="Help",
-                        border_style="yellow",
-                    )
-                )
-            event.input.value = ""
-            return
-
-        if task.lower() == "clear":
-            if self.execution_log:
-                _ = self.execution_log.clear()
-            event.input.value = ""
-            return
-
-        if task.lower() == "status":
-            if hasattr(self.console_impl, "agent") and self.console_impl.agent:
-                agent_info = getattr(self.console_impl.agent, "agent_config", None)
-                if agent_info and self.execution_log:
-                    _ = self.execution_log.write(
-                        Panel(
-                            f"""[bold]Provider:[/bold] {agent_info.model.model_provider.provider}
-[bold]Model:[/bold] {agent_info.model.model}
-[bold]Working Directory:[/bold] {os.getcwd()}""",
-                            title="Agent Status",
-                            border_style="blue",
-                        )
-                    )
-            else:
-                if self.execution_log:
-                    _ = self.execution_log.write("[yellow]Agent not initialized[/yellow]")
-            event.input.value = ""
+        handler = handlers.get(task.lower())
+        if handler:
+            handler(event) if task.lower() not in ["exit", "quit"] else handler()
             return
 
         # Execute the task
@@ -244,6 +211,48 @@ class RichConsoleApp(App[None]):
             _ = self.execution_log.write(
                 Panel(step_content, title=f"Step {agent_step.step_number}", border_style=color)
             )
+
+    def _help_handler(self, event: Input.Submitted):
+        if self.execution_log:
+            self.execution_log.write(
+                Panel(
+                    """[bold]Available Commands:[/bold]
+
+• Type any task description to execute it
+• 'status' - Show agent status
+• 'clear' - Clear the execution log
+• 'exit' or 'quit' - End the session""",
+                    title="Help",
+                    border_style="yellow",
+                )
+            )
+        event.input.value = ""
+
+    def _clear_handler(self, event: Input.Submitted):
+        if self.execution_log:
+            _ = self.execution_log.clear()
+        event.input.value = ""
+
+    def _status_handler(self, event: Input.Submitted):
+        if hasattr(self.console_impl, "agent") and self.console_impl.agent:
+            agent_info = getattr(self.console_impl.agent, "agent_config", None)
+            if agent_info and self.execution_log:
+                _ = self.execution_log.write(
+                    Panel(
+                        f"""[bold]Provider:[/bold] {agent_info.model.model_provider.provider}
+[bold]Model:[/bold] {agent_info.model.model}
+[bold]Working Directory:[/bold] {os.getcwd()}""",
+                        title="Agent Status",
+                        border_style="blue",
+                    )
+                )
+        else:
+            if self.execution_log:
+                _ = self.execution_log.write("[yellow]Agent not initialized[/yellow]")
+        event.input.value = ""
+
+    def _exit_handler(self):
+        self.exit()
 
     async def action_quit(self) -> None:
         """Quit the application."""
