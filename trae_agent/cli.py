@@ -25,6 +25,26 @@ _ = load_dotenv()
 console = Console()
 
 
+def resolve_config_file(config_file: str) -> str:
+    """
+    Resolve config file with backward compatibility.
+    First tries the specified file, then falls back to JSON if YAML doesn't exist.
+    """
+    if config_file.endswith(".yaml") or config_file.endswith(".yml"):
+        yaml_path = Path(config_file)
+        json_path = Path(config_file.replace(".yaml", ".json").replace(".yml", ".json"))
+        
+        if yaml_path.exists():
+            return str(yaml_path)
+        elif json_path.exists():
+            console.print(f"[yellow]YAML config not found, using JSON config: {json_path}[/yellow]")
+            return str(json_path)
+        else:
+            return config_file  # Let the Config class handle the error
+    else:
+        return config_file
+
+
 async def create_agent(trae_agent_config: TraeAgentConfig) -> TraeAgent:
     """
     create_agent creates a Trae Agent with the specified configuration.
@@ -65,7 +85,7 @@ def cli():
 @click.option(
     "--config-file",
     help="Path to configuration file",
-    default="trae_config.json",
+    default="trae_config.yaml",
     envvar="TRAE_CONFIG_FILE",
 )
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
@@ -81,19 +101,22 @@ async def run(
     max_steps: int | None = None,
     working_dir: str | None = None,
     must_patch: bool = False,
-    config_file: str = "trae_config.json",
+    config_file: str = "trae_config.yaml",
     trajectory_file: str | None = None,
 ):
     """
-    Run is the main function of tace. It runs a task using Trae Agent.
+    Run is the main function of tace. it runs a task using Trae Agent.
     Args:
         tasks: the task that you want your agent to solve. This is required to be in the input
         model: the model expected to be use
-        working_dir: the working directory of the agent. This should be set either in cli or inf the config file (trae_config.json)
+        working_dir: the working directory of the agent. This should be set either in cli or in the config file
 
     Return:
         None (it is expected to be ended after calling the run function)
     """
+
+    # Apply backward compatibility for config file
+    config_file = resolve_config_file(config_file)
 
     if file_path:
         if task:
@@ -202,7 +225,7 @@ async def run(
 @click.option(
     "--config-file",
     help="Path to configuration file",
-    default="trae_config.json",
+    default="trae_config.yaml",
     envvar="TRAE_CONFIG_FILE",
 )
 @click.option("--max-steps", help="Maximum number of execution steps", type=int, default=20)
@@ -212,7 +235,7 @@ async def interactive(
     model: str | None = None,
     model_base_url: str | None = None,
     api_key: str | None = None,
-    config_file: str = "trae_config.json",
+    config_file: str = "trae_config.yaml",
     max_steps: int | None = None,
     trajectory_file: str | None = None,
 ):
@@ -221,6 +244,9 @@ async def interactive(
     Args:
         tasks: the task that you want your agent to solve. This is required to be in the input
     """
+    # Apply backward compatibility for config file
+    config_file = resolve_config_file(config_file)
+    
     config = Config.create(
         config_file=config_file,
     ).resolve_config_values(
@@ -347,6 +373,9 @@ def show_config(
     max_steps: int | None = None,
 ):
     """Show current configuration settings."""
+    # Apply backward compatibility for config file
+    config_file = resolve_config_file(config_file)
+    
     config_path = Path(config_file)
     if not config_path.exists():
         console.print(
