@@ -242,6 +242,8 @@ def interactive(
     Args:
         console_type: Type of console to use for the interactive session
     """
+    config_file = _check_config_file(config_file)
+
     config = Config.create(
         config_file=config_file,
     ).resolve_config_values(
@@ -418,7 +420,9 @@ def show_config(
     max_steps: int | None = None,
 ):
     """Show current configuration settings."""
+    config_file = _check_config_file(config_file)
     config_path = Path(config_file)
+
     if not config_path.exists():
         console.print(
             Panel(
@@ -500,6 +504,16 @@ def tools():
             tools_table.add_row(tool_name, f"[red]Error loading: {e}[/red]")
 
     console.print(tools_table)
+
+
+def _check_config_file(config_file: str) -> str:
+    if not Path(config_file).is_file():
+        return (
+            config_file[:-5] + ".yaml"
+            if config_file.endswith(".json")
+            else config_file[:-1] + ".json"
+        )
+    return config_file
 
 
 def main():
