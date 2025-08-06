@@ -12,6 +12,7 @@ from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Container
+from textual.suggester import SuggestFromList
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
@@ -56,44 +57,7 @@ class TokenDisplay(Static):
 class RichConsoleApp(App[None]):
     """Textual app for the rich console."""
 
-    CSS = """
-    Screen {
-        layout: vertical;
-    }
-
-    #execution_container {
-        height: 1fr;
-        border: solid $primary;
-    }
-
-    #input_container {
-        height: auto;
-        max-height: 5;
-        border: solid $secondary;
-    }
-
-    #footer_container {
-        height: 1;
-        background: $background 50%;
-    }
-
-    RichLog {
-        scrollbar-size: 1 1;
-        scrollbar-size-horizontal: 1;
-    }
-
-    Input {
-        height: 3;
-    }
-
-    .task_display {
-        background: $surface;
-        color: $text;
-        padding: 1;
-        height: auto;
-        max-height: 3;
-    }
-    """
+    CSS_PATH="rich_console.tcss"
 
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),
@@ -110,6 +74,8 @@ class RichConsoleApp(App[None]):
         self.current_task: str | None = None
         self.is_running_task: bool = False
 
+        self.options = ["help" , "exit" , "status" , "clear"]
+
     @override
     def compose(self) -> ComposeResult:
         """Compose the UI layout."""
@@ -122,7 +88,7 @@ class RichConsoleApp(App[None]):
         # Bottom container for input/task display
         with Container(id="input_container"):
             if self.console_impl.mode == ConsoleMode.INTERACTIVE:
-                yield Input(placeholder="Enter your task...", id="task_input")
+                yield Input(placeholder="Enter your task...", id="task_input" , suggester=SuggestFromList(self.options , case_sensitive=True))
                 yield Static("", id="task_display", classes="task_display")
             else:
                 yield Static("", id="task_display", classes="task_display")
