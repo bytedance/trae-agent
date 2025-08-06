@@ -7,6 +7,7 @@ import asyncio
 from typing import override
 
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
@@ -157,7 +158,7 @@ class SimpleCLIConsole(CLIConsole):
         if self.agent_execution.final_result:
             self.console.print(
                 Panel(
-                    self.agent_execution.final_result,
+                    Markdown(self.agent_execution.final_result),
                     title="Final Result",
                     border_style="green" if self.agent_execution.success else "red",
                 )

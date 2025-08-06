@@ -3,8 +3,6 @@
 
 """Tools module for Trae Agent."""
 
-from typing import Type
-
 from trae_agent.tools.base import Tool, ToolCall, ToolExecutor, ToolResult
 from trae_agent.tools.bash_tool import BashTool
 from trae_agent.tools.ckg_tool import CKGTool
@@ -26,7 +24,7 @@ __all__ = [
     "CKGTool",
 ]
 
-tools_registry: dict[str, Type[Tool]] = {
+tools_registry: dict[str, type[Tool]] = {
     "bash": BashTool,
     "str_replace_based_edit_tool": TextEditorTool,
     "json_edit_tool": JSONEditTool,
