@@ -12,8 +12,8 @@ from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Container
-from textual.suggester import SuggestFromList
 from textual.reactive import reactive
+from textual.suggester import SuggestFromList
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
 from trae_agent.agent.agent_basics import AgentExecution, AgentStep, AgentStepState
@@ -57,7 +57,7 @@ class TokenDisplay(Static):
 class RichConsoleApp(App[None]):
     """Textual app for the rich console."""
 
-    CSS_PATH="rich_console.tcss"
+    CSS_PATH = "rich_console.tcss"
 
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),
@@ -74,7 +74,7 @@ class RichConsoleApp(App[None]):
         self.current_task: str | None = None
         self.is_running_task: bool = False
 
-        self.options = ["help" , "exit" , "status" , "clear"]
+        self.options = ["help", "exit", "status", "clear"]
 
     @override
     def compose(self) -> ComposeResult:
@@ -88,7 +88,11 @@ class RichConsoleApp(App[None]):
         # Bottom container for input/task display
         with Container(id="input_container"):
             if self.console_impl.mode == ConsoleMode.INTERACTIVE:
-                yield Input(placeholder="Enter your task...", id="task_input" , suggester=SuggestFromList(self.options , case_sensitive=True))
+                yield Input(
+                    placeholder="Enter your task...",
+                    id="task_input",
+                    suggester=SuggestFromList(self.options, case_sensitive=True),
+                )
                 yield Static("", id="task_display", classes="task_display")
             else:
                 yield Static("", id="task_display", classes="task_display")
