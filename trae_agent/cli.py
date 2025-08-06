@@ -46,7 +46,7 @@ def cli():
 @click.option(
     "--config-file",
     help="Path to configuration file",
-    default="trae_config.json",
+    default="trae_config.yaml",
     envvar="TRAE_CONFIG_FILE",
 )
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
@@ -75,7 +75,7 @@ def run(
     max_steps: int | None = None,
     working_dir: str | None = None,
     must_patch: bool = False,
-    config_file: str = "trae_config.json",
+    config_file: str = "trae_config.yaml",
     trajectory_file: str | None = None,
     console_type: str | None = "simple",
     agent_type: str | None = "trae_agent",
