@@ -34,14 +34,14 @@ def resolve_config_file(config_file: str) -> str:
     if config_file.endswith(".yaml") or config_file.endswith(".yml"):
         yaml_path = Path(config_file)
         json_path = Path(config_file.replace(".yaml", ".json").replace(".yml", ".json"))
-        
         if yaml_path.exists():
             return str(yaml_path)
         elif json_path.exists():
             console.print(f"[yellow]YAML config not found, using JSON config: {json_path}[/yellow]")
             return str(json_path)
         else:
-            return config_file  # Let the Config class handle the error
+            console.print(f"[red]Error: Config file not found. Please specify a valid config file in the command line option --config-file[/red]")
+            sys.exit(1)
     else:
         return config_file
 
@@ -89,17 +89,17 @@ def run(
     task: str | None,
     file_path: str | None,
     patch_path: str,
-    provider: str | None,
-    model: str | None,
-    model_base_url: str | None,
-    api_key: str | None,
-    max_steps: int | None,
-    working_dir: str | None,
-    must_patch: bool,
-    config_file: str,
-    trajectory_file: str | None,
-    console_type: str | None,
-    agent_type: str | None,
+    provider: str | None = None,
+    model: str | None = None,
+    model_base_url: str | None = None,
+    api_key: str | None = None,
+    max_steps: int | None = None,
+    working_dir: str | None = None,
+    must_patch: bool = False,
+    config_file: str = "trae_config.yaml",
+    trajectory_file: str | None = None,
+    console_type: str | None = "simple",
+    agent_type: str | None = "trae_agent",
 ):
     """
     Run is the main function of tace. it runs a task using Trae Agent.
@@ -250,16 +250,16 @@ def run(
     help="Type of agent to use (trae_agent)",
     default="trae_agent",
 )
-async def interactive(
-    provider: str | None,
-    model: str | None,
-    model_base_url: str | None,
-    api_key: str | None,
-    config_file: str,
-    max_steps: int | None,
-    trajectory_file: str | None,
-    console_type: str | None,
-    agent_type: str | None,
+def interactive(
+    provider: str | None = None,
+    model: str | None = None,
+    model_base_url: str | None = None,
+    api_key: str | None = None,
+    config_file: str = "trae_config.yaml",
+    max_steps: int | None = None,
+    trajectory_file: str | None = None,
+    console_type: str | None = "simple",
+    agent_type: str | None = "trae_agent",
 ):
     """
     This function starts an interactive session with Trae Agent.
