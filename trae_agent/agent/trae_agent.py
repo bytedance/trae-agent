@@ -4,6 +4,7 @@
 """TraeAgent for software engineering tasks."""
 
 import asyncio
+import contextlib
 import os
 import subprocess
 from typing import override
@@ -49,6 +50,7 @@ class TraeAgent(BaseAgent):
             trae_agent_config.allow_mcp_servers if trae_agent_config.allow_mcp_servers else []
         )
         self.mcp_tools: list[Tool] = []
+        self.mcp_clients: list[MCPClient] = []  # Keep track of MCP clients for cleanup
         super().__init__(agent_config=trae_agent_config)
 
     async def initialise_mcp(self):
@@ -89,10 +91,17 @@ class TraeAgent(BaseAgent):
                         self.mcp_tools,
                         self._llm_client.provider.value,
                     )
+                    # Store client for later cleanup
+                    self.mcp_clients.append(mcp_client)
                 except Exception:
+                    # Clean up failed client
+                    with contextlib.suppress(Exception):
+                        await mcp_client.cleanup(mcp_server_name)
                     continue
                 except asyncio.CancelledError:
-                    # If the task is cancelled, we just skip this server
+                    # If the task is cancelled, clean up and skip this server
+                    with contextlib.suppress(Exception):
+                        await mcp_client.cleanup(mcp_server_name)
                     continue
         else:
             return
@@ -242,3 +251,12 @@ class TraeAgent(BaseAgent):
     def task_incomplete_message(self) -> str:
         """Return a message indicating that the task is incomplete."""
         return "ERROR! Your Patch is empty. Please provide a patch that fixes the problem."
+
+    @override
+    async def cleanup_mcp_clients(self) -> None:
+        """Clean up all MCP clients to prevent async context leaks."""
+        for client in self.mcp_clients:
+            with contextlib.suppress(Exception):
+                # Use a generic server name for cleanup since we don't track which server each client is for
+                await client.cleanup("cleanup")
+        self.mcp_clients.clear()

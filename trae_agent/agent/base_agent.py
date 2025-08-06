@@ -3,6 +3,7 @@
 
 """Base Agent class for LLM-based agents."""
 
+import contextlib
 from abc import ABC, abstractmethod
 
 from trae_agent.agent.agent_basics import AgentExecution, AgentState, AgentStep, AgentStepState
@@ -144,6 +145,10 @@ class BaseAgent(ABC):
 
         execution.execution_time = time.time() - start_time
 
+        # Clean up any MCP clients
+        with contextlib.suppress(Exception):
+            await self.cleanup_mcp_clients()
+
         self._update_cli_console(step, execution)
         return execution
 
@@ -217,6 +222,11 @@ class BaseAgent(ABC):
     def task_incomplete_message(self) -> str:
         """Return a message indicating that the task is incomplete. Override for custom logic."""
         return "The task is incomplete. Please try again."
+
+    @abstractmethod
+    async def cleanup_mcp_clients(self) -> None:
+        """Clean up MCP clients. Override in subclasses that use MCP."""
+        pass
 
     def _update_cli_console(
         self, step: AgentStep | None = None, agent_execution: AgentExecution | None = None

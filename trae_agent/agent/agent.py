@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from enum import Enum
 
 from trae_agent.utils.cli.cli_console import CLIConsole
@@ -78,7 +79,12 @@ class Agent:
             asyncio.create_task(self.agent.cli_console.start()) if self.agent.cli_console else None
         )
 
-        execution = await self.agent.execute_task()
+        try:
+            execution = await self.agent.execute_task()
+        finally:
+            # Ensure MCP cleanup happens even if execution fails
+            with contextlib.suppress(Exception):
+                await self.agent.cleanup_mcp_clients()
 
         if cli_console_task:
             await cli_console_task
