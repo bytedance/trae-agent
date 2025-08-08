@@ -51,13 +51,13 @@ class OpenRouterProvider(ProviderConfig):
         # We'll be conservative and check for known capable models
         tool_capable_patterns = [
             "gpt-4",
-            "gpt-3.5-turbo",
-            "claude-3",
-            "claude-2",
-            "gemini",
+            "gpt-4o",
+            "claude",
+            "sonnet",
+            "grok",
             "mistral",
-            "llama-3",
-            "command-r",
+            "qwen",
+            "deepseek",  # DeepSeek models via OpenRouter (e.g., deepseek/deepseek-chat, deepseek/deepseek-coder)
         ]
         return any(pattern in model_name.lower() for pattern in tool_capable_patterns)
 
