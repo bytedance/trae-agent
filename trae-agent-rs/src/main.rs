@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::{self, Write as IoWrite};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
@@ -85,6 +85,8 @@ enum Commands {
     },
     /// Interactive REPL
     Interactive,
+    /// Terminal coding REPL (Claude Code/Gemini CLI style)
+    Code,
 }
 
 fn init_tracing() {
@@ -150,6 +152,18 @@ fn run_bash(working_dir: &Option<PathBuf>, cmd_pieces: &[String]) -> Result<i32>
         .with_context(|| format!("Failed to spawn bash with command: {command_str}"))?;
 
     Ok(status.code().unwrap_or(-1))
+}
+
+fn run_bash_capture(working_dir: &Path, command_str: &str) -> Result<(i32, String)> {
+    let output = Command::new("/usr/bin/bash")
+        .arg("-lc")
+        .arg(command_str)
+        .current_dir(working_dir)
+        .output()
+        .with_context(|| format!("Failed to run bash command: {command_str}"))?;
+    let code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    Ok((code, stdout))
 }
 
 fn edit_file(file: &PathBuf, search: &str, replace: &str, once: bool) -> Result<usize> {
@@ -286,6 +300,149 @@ fn interactive_loop(
     Ok(())
 }
 
+fn print_code_help() {
+    println!("Terminal Coding Tool (code mode) commands:");
+    println!("  help                    - show this help");
+    println!("  ls [path]               - list directory");
+    println!("  open <file>             - show file with line numbers");
+    println!("  grep <pattern> [path]   - search text (uses ripgrep if available)");
+    println!("  run <cmd...>            - run shell command (bash -lc)");
+    println!("  edit <file> <s> <r> [--once] - replace text in file");
+    println!("  diff [path]             - git diff (optional path)");
+    println!("  commit <message>        - git add -A && git commit -m <message>");
+    println!("  status                  - git status -s");
+    println!("  pwd                     - print current working dir");
+    println!("  cd <path>               - change working dir for subsequent commands");
+    println!("  exit | quit             - leave code mode");
+}
+
+fn show_file_with_numbers(path: &Path) -> Result<()> {
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    for (idx, line) in content.lines().enumerate() {
+        println!("{:>6} | {}", idx + 1, line);
+    }
+    Ok(())
+}
+
+fn list_directory(path: &Path) -> Result<()> {
+    let entries = fs::read_dir(path).with_context(|| format!("Cannot read dir: {}", path.display()))?;
+    for entry in entries {
+        let entry = entry?;
+        let meta = entry.metadata()?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if meta.is_dir() {
+            println!("{}/", name);
+        } else if meta.is_file() {
+            println!("{}", name);
+        } else {
+            println!("{}", name);
+        }
+    }
+    Ok(())
+}
+
+fn code_loop(mut current_dir: PathBuf, trajectory_file: &Option<PathBuf>) -> Result<()> {
+    println!("Entering code mode. Type 'help' for commands.");
+    let mut line = String::new();
+    loop {
+        print!("code:{}$ ", current_dir.display());
+        io::stdout().flush().ok();
+        line.clear();
+        if io::stdin().read_line(&mut line)? == 0 {
+            break;
+        }
+        let input = line.trim();
+        if input.is_empty() {
+            continue;
+        }
+        let mut parts = input.split_whitespace();
+        let cmd = parts.next().unwrap();
+        match cmd {
+            "help" => print_code_help(),
+            "exit" | "quit" => break,
+            "pwd" => println!("{}", current_dir.display()),
+            "cd" => {
+                let target = parts.next().unwrap_or(".");
+                let new_dir = PathBuf::from(target);
+                let abs = if new_dir.is_absolute() { new_dir } else { current_dir.join(new_dir) };
+                if abs.is_dir() {
+                    current_dir = abs.canonicalize().unwrap_or(abs);
+                } else {
+                    eprintln!("Not a directory: {}", abs.display());
+                }
+            }
+            "ls" => {
+                let p = parts.next().map(PathBuf::from).unwrap_or_else(|| current_dir.clone());
+                let abs = if p.is_absolute() { p } else { current_dir.join(p) };
+                if let Err(e) = list_directory(&abs) { eprintln!("{}", e); }
+            }
+            "open" => {
+                let Some(file) = parts.next() else { eprintln!("usage: open <file>"); continue; };
+                let p = PathBuf::from(file);
+                let abs = if p.is_absolute() { p } else { current_dir.join(p) };
+                if let Err(e) = show_file_with_numbers(&abs) { eprintln!("{}", e); }
+            }
+            "grep" => {
+                let Some(pattern) = parts.next() else { eprintln!("usage: grep <pattern> [path]"); continue; };
+                let path = parts.next().unwrap_or(".");
+                let abs = if Path::new(path).is_absolute() { PathBuf::from(path) } else { current_dir.join(path) };
+                // Prefer ripgrep
+                let cmd = format!("(command -v rg >/dev/null 2>&1 && rg -n --no-heading --color never -S '{}' '{}') || grep -RIn --binary-files=without-match '{}' '{}' | cat", pattern, abs.display(), pattern, abs.display());
+                match run_bash_capture(&current_dir, &cmd) {
+                    Ok((_code, out)) => print!("{}", out),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+            "run" => {
+                let rest = parts.collect::<Vec<_>>().join(" ");
+                if rest.is_empty() { eprintln!("usage: run <cmd...>"); continue; }
+                match run_bash_capture(&current_dir, &rest) {
+                    Ok((code, out)) => { print!("{}", out); println!("[exit {}]", code); record_trajectory(trajectory_file, serde_json::json!({"event":"code.run","cmd":rest,"status":code}))?; }
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+            "edit" => {
+                let args: Vec<&str> = parts.collect();
+                if args.len() < 3 { eprintln!("usage: edit <file> <search> <replace> [--once]"); continue; }
+                let once = args.iter().any(|&a| a == "--once");
+                let file = PathBuf::from(args[0]);
+                let abs = if file.is_absolute() { file } else { current_dir.join(file) };
+                match edit_file(&abs, args[1], args[2], once) {
+                    Ok(count) => { println!("Replacements: {}", count); record_trajectory(trajectory_file, serde_json::json!({"event":"code.edit","file":abs,"search":args[1],"replace":args[2],"once":once,"replacements":count}))?; }
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+            "diff" => {
+                let path_opt = parts.next();
+                let cmd = if let Some(p) = path_opt { format!("git -c color.ui=always diff -- '{}' | cat", p) } else { "git -c color.ui=always diff | cat".to_string() };
+                match run_bash_capture(&current_dir, &cmd) {
+                    Ok((_c, out)) => print!("{}", out),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+            "commit" => {
+                let msg = parts.collect::<Vec<_>>().join(" ");
+                if msg.is_empty() { eprintln!("usage: commit <message>"); continue; }
+                let cmd = format!("git add -A && git commit -m '{}' | cat", msg.replace("'", "'\\''"));
+                match run_bash_capture(&current_dir, &cmd) {
+                    Ok((_c, out)) => { print!("{}", out); record_trajectory(trajectory_file, serde_json::json!({"event":"code.commit","message":msg}))?; }
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+            "status" => {
+                match run_bash_capture(&current_dir, "git status -s | cat") { Ok((_c, out)) => print!("{}", out), Err(e) => eprintln!("{}", e) }
+            }
+            unknown => {
+                eprintln!("Unknown command: {}", unknown);
+                print_code_help();
+            }
+        }
+    }
+    println!("Goodbye.");
+    Ok(())
+}
+
 fn main() -> Result<()> {
     init_tracing();
     let cli = Cli::parse();
@@ -331,6 +488,10 @@ fn main() -> Result<()> {
         }
         Commands::Interactive => {
             interactive_loop(&config, &cli.working_dir, &cli.trajectory_file)?;
+        }
+        Commands::Code => {
+            let cwd = cli.working_dir.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+            code_loop(cwd, &cli.trajectory_file)?;
         }
     }
 
