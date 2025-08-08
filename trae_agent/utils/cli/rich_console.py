@@ -13,6 +13,7 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.reactive import reactive
+from textual.suggester import SuggestFromList
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
 from trae_agent.agent.agent_basics import AgentExecution, AgentStep, AgentStepState
@@ -56,44 +57,7 @@ class TokenDisplay(Static):
 class RichConsoleApp(App[None]):
     """Textual app for the rich console."""
 
-    CSS = """
-    Screen {
-        layout: vertical;
-    }
-
-    #execution_container {
-        height: 1fr;
-        border: solid $primary;
-    }
-
-    #input_container {
-        height: auto;
-        max-height: 5;
-        border: solid $secondary;
-    }
-
-    #footer_container {
-        height: 1;
-        background: $background 50%;
-    }
-
-    RichLog {
-        scrollbar-size: 1 1;
-        scrollbar-size-horizontal: 1;
-    }
-
-    Input {
-        height: 3;
-    }
-
-    .task_display {
-        background: $surface;
-        color: $text;
-        padding: 1;
-        height: auto;
-        max-height: 3;
-    }
-    """
+    CSS_PATH = "rich_console.tcss"
 
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),
@@ -110,6 +74,8 @@ class RichConsoleApp(App[None]):
         self.current_task: str | None = None
         self.is_running_task: bool = False
 
+        self.options: list[str] = ["help", "exit", "status", "clear"]
+
     @override
     def compose(self) -> ComposeResult:
         """Compose the UI layout."""
@@ -122,7 +88,11 @@ class RichConsoleApp(App[None]):
         # Bottom container for input/task display
         with Container(id="input_container"):
             if self.console_impl.mode == ConsoleMode.INTERACTIVE:
-                yield Input(placeholder="Enter your task...", id="task_input")
+                yield Input(
+                    placeholder="Enter your task...",
+                    id="task_input",
+                    suggester=SuggestFromList(self.options, case_sensitive=True),
+                )
                 yield Static("", id="task_display", classes="task_display")
             else:
                 yield Static("", id="task_display", classes="task_display")
@@ -161,50 +131,17 @@ class RichConsoleApp(App[None]):
         if not task:
             return
 
-        if task.lower() in ["exit", "quit"]:
-            self.exit()
-            return
+        handlers: dict = {
+            "exit": self._exit_handler,
+            "quit": self._exit_handler,
+            "help": self._help_handler,
+            "clear": self._clear_handler,
+            "status": self._status_handler,
+        }
 
-        if task.lower() == "help":
-            if self.execution_log:
-                _ = self.execution_log.write(
-                    Panel(
-                        """[bold]Available Commands:[/bold]
-
-• Type any task description to execute it
-• 'status' - Show agent status
-• 'clear' - Clear the execution log
-• 'exit' or 'quit' - End the session""",
-                        title="Help",
-                        border_style="yellow",
-                    )
-                )
-            event.input.value = ""
-            return
-
-        if task.lower() == "clear":
-            if self.execution_log:
-                _ = self.execution_log.clear()
-            event.input.value = ""
-            return
-
-        if task.lower() == "status":
-            if hasattr(self.console_impl, "agent") and self.console_impl.agent:
-                agent_info = getattr(self.console_impl.agent, "agent_config", None)
-                if agent_info and self.execution_log:
-                    _ = self.execution_log.write(
-                        Panel(
-                            f"""[bold]Provider:[/bold] {agent_info.model.model_provider.provider}
-[bold]Model:[/bold] {agent_info.model.model}
-[bold]Working Directory:[/bold] {os.getcwd()}""",
-                            title="Agent Status",
-                            border_style="blue",
-                        )
-                    )
-            else:
-                if self.execution_log:
-                    _ = self.execution_log.write("[yellow]Agent not initialized[/yellow]")
-            event.input.value = ""
+        handler = handlers.get(task.lower())
+        if handler:
+            handler(event) if task.lower() not in ["exit", "quit"] else handler()
             return
 
         # Execute the task
@@ -274,6 +211,48 @@ class RichConsoleApp(App[None]):
             _ = self.execution_log.write(
                 Panel(step_content, title=f"Step {agent_step.step_number}", border_style=color)
             )
+
+    def _help_handler(self, event: Input.Submitted):
+        if self.execution_log:
+            self.execution_log.write(
+                Panel(
+                    """[bold]Available Commands:[/bold]
+
+• Type any task description to execute it
+• 'status' - Show agent status
+• 'clear' - Clear the execution log
+• 'exit' or 'quit' - End the session""",
+                    title="Help",
+                    border_style="yellow",
+                )
+            )
+        event.input.value = ""
+
+    def _clear_handler(self, event: Input.Submitted):
+        if self.execution_log:
+            _ = self.execution_log.clear()
+        event.input.value = ""
+
+    def _status_handler(self, event: Input.Submitted):
+        if hasattr(self.console_impl, "agent") and self.console_impl.agent:
+            agent_info = getattr(self.console_impl.agent, "agent_config", None)
+            if agent_info and self.execution_log:
+                _ = self.execution_log.write(
+                    Panel(
+                        f"""[bold]Provider:[/bold] {agent_info.model.model_provider.provider}
+[bold]Model:[/bold] {agent_info.model.model}
+[bold]Working Directory:[/bold] {os.getcwd()}""",
+                        title="Agent Status",
+                        border_style="blue",
+                    )
+                )
+        else:
+            if self.execution_log:
+                _ = self.execution_log.write("[yellow]Agent not initialized[/yellow]")
+        event.input.value = ""
+
+    def _exit_handler(self):
+        self.exit()
 
     async def action_quit(self) -> None:
         """Quit the application."""
