@@ -87,6 +87,14 @@ enum Commands {
     Interactive,
     /// Terminal coding REPL (Claude Code/Gemini CLI style)
     Code,
+    /// AI single-shot call via OpenRouter (e.g., DeepSeek)
+    Ai {
+        /// Model name, e.g., deepseek/deepseek-chat
+        #[arg(long, default_value = "deepseek/deepseek-chat")]
+        model: String,
+        /// Prompt text
+        prompt: String,
+    },
 }
 
 fn init_tracing() {
@@ -342,6 +350,38 @@ fn list_directory(path: &Path) -> Result<()> {
     Ok(())
 }
 
+async fn call_openrouter(model: &str, prompt: &str) -> Result<String> {
+    let api_key = std::env::var("OPENROUTER_API_KEY")
+        .map_err(|_| anyhow::anyhow!("OPENROUTER_API_KEY not set"))?;
+    let base_url = std::env::var("OPENROUTER_BASE_URL").unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string());
+
+    #[derive(Serialize)]
+    struct Message { role: &'static str, content: String }
+    #[derive(Serialize)]
+    struct Req<'a> { model: &'a str, messages: Vec<Message> }
+    #[derive(Deserialize)]
+    struct ChoiceMsg { content: String }
+    #[derive(Deserialize)]
+    struct Choice { message: ChoiceMsg }
+    #[derive(Deserialize)]
+    struct Resp { choices: Vec<Choice> }
+
+    let req = Req { model, messages: vec![Message{ role: "user", content: prompt.to_string() }] };
+    let client = reqwest::Client::new();
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let mut rb = client.post(&url)
+        .bearer_auth(api_key)
+        .json(&req);
+
+    if let Ok(site) = std::env::var("OPENROUTER_SITE_URL") { rb = rb.header("HTTP-Referer", site); }
+    if let Ok(title) = std::env::var("OPENROUTER_SITE_NAME") { rb = rb.header("X-Title", title); }
+
+    let resp = rb.send().await?.error_for_status()?;
+    let data: Resp = resp.json().await?;
+    let text = data.choices.get(0).map(|c| c.message.content.clone()).unwrap_or_default();
+    Ok(text)
+}
+
 fn code_loop(mut current_dir: PathBuf, trajectory_file: &Option<PathBuf>) -> Result<()> {
     println!("Entering code mode. Type 'help' for commands.");
     let mut line = String::new();
@@ -433,6 +473,24 @@ fn code_loop(mut current_dir: PathBuf, trajectory_file: &Option<PathBuf>) -> Res
             "status" => {
                 match run_bash_capture(&current_dir, "git status -s | cat") { Ok((_c, out)) => print!("{}", out), Err(e) => eprintln!("{}", e) }
             }
+            "ai" => {
+                let args: Vec<&str> = parts.collect();
+                if args.is_empty() { eprintln!("usage: ai <prompt> [--model MODEL]"); continue; }
+                // naive parse for --model
+                let mut model = "deepseek/deepseek-chat".to_string();
+                let mut prompt_parts: Vec<&str> = Vec::new();
+                let mut iter = args.iter().copied();
+                while let Some(token) = iter.next() {
+                    if token == "--model" { if let Some(m) = iter.next() { model = m.to_string(); } continue; }
+                    prompt_parts.push(token);
+                }
+                let prompt = prompt_parts.join(" ");
+                if prompt.is_empty() { eprintln!("usage: ai <prompt> [--model MODEL]"); continue; }
+                match tokio::runtime::Runtime::new().unwrap().block_on(call_openrouter(&model, &prompt)) {
+                    Ok(text) => { println!("{}", text); record_trajectory(trajectory_file, serde_json::json!({"event":"code.ai","model":model,"prompt":prompt}))?; }
+                    Err(e) => eprintln!("AI error: {}", e),
+                }
+            }
             unknown => {
                 eprintln!("Unknown command: {}", unknown);
                 print_code_help();
@@ -492,6 +550,11 @@ fn main() -> Result<()> {
         Commands::Code => {
             let cwd = cli.working_dir.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
             code_loop(cwd, &cli.trajectory_file)?;
+        }
+        Commands::Ai { model, prompt } => {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let out = rt.block_on(call_openrouter(&model, &prompt))?;
+            println!("{}", out);
         }
     }
 
