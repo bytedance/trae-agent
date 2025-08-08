@@ -40,6 +40,7 @@ evaluation = [
 
 [project.scripts]
 trae-cli = "trae_agent.cli:main"
+spark-cli = "trae_agent.cli:main"
 
 [build-system]
 requires = ["hatchling"]

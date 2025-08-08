@@ -7,8 +7,7 @@ on:
       - main
 
 jobs:
-  test:
-    if: github.repository == 'bytedance/trae-agent'
+  python-tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,3 +29,18 @@ jobs:
     - name: Run unit tests
       run: |
         make uv-test
+
+  rust-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build Rust crate
+      run: |
+        cd trae-agent-rs
+        cargo build --locked --verbose
