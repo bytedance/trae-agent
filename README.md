@@ -49,9 +49,10 @@ cargo run --manifest-path trae-agent-rs/Cargo.toml -- --help
 1) Copy the example configuration file:
 ```bash
 cp trae_config.yaml.example trae_config.yaml
+cp spark_config.yaml.example spark_config.yaml
 ```
 
-2) Edit `trae_config.yaml` with your API credentials and preferences:
+2) Edit `spark_config.yaml` or `trae_config.yaml` with your API credentials and preferences:
 
 ```yaml
 agents:
@@ -66,22 +67,20 @@ agents:
       - task_done
 
 model_providers:
-  anthropic:
-    api_key: your_anthropic_api_key
-    provider: anthropic
-  openai:
-    api_key: your_openai_api_key
-    provider: openai
+  openrouter:
+    api_key: your_openrouter_api_key
+    provider: openrouter
+    base_url: https://openrouter.ai/api/v1
 
 models:
-  default_model:
-    model_provider: anthropic
-    model: claude-sonnet-4-20250514
+  deepseek_model:
+    model_provider: openrouter
+    model: deepseek/deepseek-chat
     max_tokens: 4096
     temperature: 0.5
 ```
 
-> Note: File name remains `trae_config.yaml` for now.
+> Note: File name remains `trae_config.yaml` for now; Spark prefers `spark_config.yaml`.
 
 ### Environment Variables (optional)
 
@@ -90,8 +89,8 @@ export OPENAI_API_KEY="your-openai-api-key"
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
 export GOOGLE_API_KEY="your-google-api-key"
 export OPENROUTER_API_KEY="your-openrouter-api-key"
-export DOUBAO_API_KEY="your-doubao-api-key"
-export DOUBAO_BASE_URL="https://ark.cn-beijing.volces.com/api/v3/"
+export OPENROUTER_SITE_URL="https://your.site/"
+export OPENROUTER_SITE_NAME="Your App Name"
 ```
 
 ### MCP Services (optional)
@@ -132,7 +131,10 @@ trae-cli run "Add unit tests" --provider anthropic --model claude-sonnet-4-20250
 # Google Gemini
 trae-cli run "Optimize this algorithm" --provider google --model gemini-2.5-flash
 
-# OpenRouter
+# OpenRouter (DeepSeek via OpenRouter)
+trae-cli run "Refactor module" --provider openrouter --model "deepseek/deepseek-chat"
+
+# OpenRouter (others)
 trae-cli run "Review this code" --provider openrouter --model "anthropic/claude-3-5-sonnet"
 trae-cli run "Generate documentation" --provider openrouter --model "openai/gpt-4o"
 

@@ -22,11 +22,25 @@ model_providers:
     anthropic:
         api_key: your_anthropic_api_key
         provider: anthropic
+    openrouter:
+        api_key: your_openrouter_api_key
+        provider: openrouter
+        base_url: https://openrouter.ai/api/v1
 
 models:
     default_model:
         model_provider: anthropic
         model: claude-4-sonnet
+        max_tokens: 4096
+        temperature: 0.5
+        top_p: 1
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    deepseek_model:
+        model_provider: openrouter
+        # Examples: deepseek/deepseek-chat, deepseek/deepseek-reasoner, deepseek/deepseek-coder
+        model: deepseek/deepseek-chat
         max_tokens: 4096
         temperature: 0.5
         top_p: 1
