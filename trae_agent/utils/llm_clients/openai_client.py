@@ -50,7 +50,9 @@ class OpenAIClient(BaseLLMClient):
             model=model_config.model,
             tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
             temperature=model_config.temperature
-            if "o3" not in model_config.model and "o4-mini" not in model_config.model
+            if "o3" not in model_config.model
+            and "o4-mini" not in model_config.model
+            and "gpt-5" not in model_config.model
             else openai.NOT_GIVEN,
             top_p=model_config.top_p,
             max_output_tokens=model_config.max_tokens,
