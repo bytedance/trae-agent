@@ -43,7 +43,7 @@ struct Config {
 #[derive(Parser, Debug)]
 #[command(name = "trae-agent-rs", version, about = "Rust MVP of Trae Agent")]
 struct Cli {
-    /// Path to YAML config file (default: ./trae_config.yaml)
+    /// Path to YAML config file (default: ./spark_config.yaml or ./trae_config.yaml)
     #[arg(long, global = true)]
     config: Option<PathBuf>,
 
@@ -96,15 +96,28 @@ fn init_tracing() {
 }
 
 fn load_config(path_opt: Option<PathBuf>) -> Result<Option<Config>> {
-    let path = path_opt.unwrap_or_else(|| PathBuf::from("trae_config.yaml"));
-    if !path.exists() {
-        return Ok(None);
+    if let Some(p) = path_opt {
+        if p.exists() {
+            let content = fs::read_to_string(&p)
+                .with_context(|| format!("Failed to read config file: {}", p.display()))?;
+            let cfg: Config = serde_yaml::from_str(&content)
+                .with_context(|| format!("Failed to parse YAML from: {}", p.display()))?;
+            return Ok(Some(cfg));
+        }
     }
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read config file: {}", path.display()))?;
-    let cfg: Config = serde_yaml::from_str(&content)
-        .with_context(|| format!("Failed to parse YAML from: {}", path.display()))?;
-    Ok(Some(cfg))
+
+    let candidates = [PathBuf::from("spark_config.yaml"), PathBuf::from("trae_config.yaml")];
+    for path in candidates {
+        if path.exists() {
+            let content = fs::read_to_string(&path)
+                .with_context(|| format!("Failed to read config file: {}", path.display()))?;
+            let cfg: Config = serde_yaml::from_str(&content)
+                .with_context(|| format!("Failed to parse YAML from: {}", path.display()))?;
+            return Ok(Some(cfg));
+        }
+    }
+
+    Ok(None)
 }
 
 fn record_trajectory(path_opt: &Option<PathBuf>, entry: serde_json::Value) -> Result<()> {
@@ -292,7 +305,7 @@ fn main() -> Result<()> {
                 println!("{}", serde_yaml::to_string(cfg)?);
             }
             None => {
-                println!("No config file found (looked for trae_config.yaml or --config)");
+                println!("No config file found (looked for spark_config.yaml / trae_config.yaml or --config)");
             }
         },
         Commands::Bash { cmd } => {

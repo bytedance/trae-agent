@@ -8,8 +8,6 @@ on:
 
 jobs:
   pre-commit:
-
-    if: github.repository == 'bytedance/trae-agent'
     runs-on: ubuntu-latest
     name: Pre-commit checks
 
@@ -24,6 +22,9 @@ jobs:
 
     - name: Install uv
       uses: astral-sh/setup-uv@v6
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
 
     - name: Create virtual environment and install dependencies
       run: |

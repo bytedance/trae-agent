@@ -27,3 +27,16 @@ repos:
     - id: mypy
       additional_dependencies:
         - types-PyYAML
+
+- repo: local
+  hooks:
+    - id: cargo-fmt
+      name: cargo fmt
+      entry: bash -lc 'cd trae-agent-rs && cargo fmt --all --check'
+      language: system
+      files: ^trae-agent-rs/
+    - id: cargo-clippy
+      name: cargo clippy
+      entry: bash -lc 'cd trae-agent-rs && cargo clippy --all-targets --all-features -- -D warnings'
+      language: system
+      files: ^trae-agent-rs/
