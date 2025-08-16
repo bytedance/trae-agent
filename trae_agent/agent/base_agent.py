@@ -119,6 +119,7 @@ class BaseAgent(ABC):
         try:
             messages = self._initial_messages
             step_number = 1
+            execution.agent_state = AgentState.RUNNING
 
             while step_number <= self._max_steps:
                 step = AgentStep(step_number=step_number, state=AgentStepState.THINKING)
@@ -139,6 +140,7 @@ class BaseAgent(ABC):
 
             if step_number > self._max_steps and not execution.success:
                 execution.final_result = "Task execution exceeded maximum steps without completion."
+                execution.agent_state = AgentState.ERROR
 
         except Exception as e:
             execution.final_result = f"Agent execution failed: {str(e)}"
