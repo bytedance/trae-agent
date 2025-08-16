@@ -103,7 +103,7 @@ def run(
     agent_type: str | None = "trae_agent",
 ):
     """
-    Run is the main function of tace. it runs a task using Trae Agent.
+    Run is the main function of trae. it runs a task using Trae Agent.
     Args:
         tasks: the task that you want your agent to solve. This is required to be in the input
         model: the model expected to be use
