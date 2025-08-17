@@ -151,7 +151,7 @@ class TraeAgent(BaseAgent):
                 success=execution.success, final_result=execution.final_result
             )
 
-        if self.patch_path is not None:
+        if self.patch_path is not None and self.patch_path.strip():
             with open(self.patch_path, "w") as patch_f:
                 _ = patch_f.write(self.get_git_diff())
 

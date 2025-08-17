@@ -195,6 +195,62 @@ Trajectory files contain LLM interactions, agent steps, tool usage, and executio
 
 ## 🔧 Development
 
+For more details, see [docs/TRAJECTORY_RECORDING.md](docs/TRAJECTORY_RECORDING.md).
+
+## 🌐 API Usage
+
+The Trae Agent API provides REST endpoints for executing agent tasks programmatically.
+
+### Starting the API Server
+
+```bash
+# Using make (recommended)
+make run-api
+
+# Or directly with uv
+uv run python -m trae_api
+
+# The API will be available at http://127.0.0.1:8000
+```
+
+### Example API Request
+
+```bash
+# Create hello.py with timestamp for verification
+curl -X POST "http://127.0.0.1:8000/api/agent/run" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task": "Create a file hello.py with content: import datetime; print(f\"Hello World at {datetime.datetime.now()}\")",
+    "provider": "google",
+    "model": "models/gemini-2.0-flash-exp",
+    "timeout": 600,
+    "max_steps": 10
+  }'
+
+# Alternative with simpler timestamp
+curl -X POST "http://127.0.0.1:8000/api/agent/run" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task": "Create hello.py that prints \"Hello at \" followed by the current timestamp",
+    "provider": "google",
+    "model": "gemini-2.5-flash",
+    "timeout": 600,
+    "max_steps": 10
+  }'
+```
+
+### API Endpoints
+
+  - `POST /api/agent/run` - Synchronous agent execution
+  - `POST /api/agent/run/stream` - Real-time streaming (SSE/NDJSON)
+  - `GET /api/agent/executions/{id}/status` - Execution status tracking
+  - `GET /api/agent/executions` - List active executions
+  - `GET /api/health` - Health check endpoint
+  - `GET /api/metrics` - Prometheus metrics endpoint
+
+For full API documentation, visit `http://127.0.0.1:8000/docs` when the server is running.
+
+
 ### Contributing
 
 For contribution guidelines, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
