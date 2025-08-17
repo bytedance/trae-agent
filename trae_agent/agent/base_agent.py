@@ -5,8 +5,10 @@
 
 import contextlib
 from abc import ABC, abstractmethod
+from typing import Awaitable, Callable, Optional
 
 from trae_agent.agent.agent_basics import AgentExecution, AgentState, AgentStep, AgentStepState
+from trae_agent.schemas.responses import StreamEvent
 from trae_agent.tools import tools_registry
 from trae_agent.tools.base import Tool, ToolCall, ToolExecutor, ToolResult
 from trae_agent.tools.ckg.ckg_database import clear_older_ckg
@@ -20,7 +22,11 @@ from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 class BaseAgent(ABC):
     """Base class for LLM-based agents."""
 
-    def __init__(self, agent_config: AgentConfig):
+    def __init__(
+        self,
+        agent_config: AgentConfig,
+        stream_callback: Optional[Callable[[StreamEvent], Awaitable[None]]] = None
+    ):
         """Initialize the agent.
 
         Args:
