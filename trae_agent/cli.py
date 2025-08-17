@@ -28,23 +28,35 @@ console = Console()
 def resolve_config_file(config_file: str) -> str:
     """
     Resolve config file with backward compatibility.
-    First tries the specified file, then falls back to JSON if YAML doesn't exist.
+    Priority:
+    1) explicit path (yaml/json)
+    2) spark_config.yaml / trae_config.yaml in CWD
+    3) legacy json fallback
     """
+    # If explicit and exists, keep previous behavior
+    path = Path(config_file)
+    if path.exists():
+        return str(path)
+
+    # Try spark_config.yaml then trae_config.yaml
+    spark_yaml = Path("spark_config.yaml")
+    trae_yaml = Path("trae_config.yaml")
+    if spark_yaml.exists():
+        return str(spark_yaml)
+    if trae_yaml.exists():
+        return str(trae_yaml)
+
+    # If explicit YAML but missing, try JSON with same stem
     if config_file.endswith(".yaml") or config_file.endswith(".yml"):
-        yaml_path = Path(config_file)
         json_path = Path(config_file.replace(".yaml", ".json").replace(".yml", ".json"))
-        if yaml_path.exists():
-            return str(yaml_path)
-        elif json_path.exists():
+        if json_path.exists():
             console.print(f"[yellow]YAML config not found, using JSON config: {json_path}[/yellow]")
             return str(json_path)
-        else:
-            console.print(
-                "[red]Error: Config file not found. Please specify a valid config file in the command line option --config-file[/red]"
-            )
-            sys.exit(1)
-    else:
-        return config_file
+
+    console.print(
+        "[red]Error: Config file not found. Please specify a valid config file with --config-file[/red]"
+    )
+    sys.exit(1)
 
 
 @click.group()
@@ -67,8 +79,8 @@ def cli():
 @click.option(
     "--config-file",
     help="Path to configuration file",
-    default="trae_config.yaml",
-    envvar="TRAE_CONFIG_FILE",
+    default=lambda: os.environ.get("SPARK_CONFIG_FILE") or os.environ.get("TRAE_CONFIG_FILE") or "spark_config.yaml",
+    envvar=None,
 )
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 @click.option("--patch-path", "-pp", help="Path to patch file")
@@ -97,7 +109,7 @@ def run(
     max_steps: int | None = None,
     working_dir: str | None = None,
     must_patch: bool = False,
-    config_file: str = "trae_config.yaml",
+    config_file: str = "spark_config.yaml",
     trajectory_file: str | None = None,
     console_type: str | None = "simple",
     agent_type: str | None = "trae_agent",
@@ -220,8 +232,8 @@ def run(
 @click.option(
     "--config-file",
     help="Path to configuration file",
-    default="trae_config.yaml",
-    envvar="TRAE_CONFIG_FILE",
+    default=lambda: os.environ.get("SPARK_CONFIG_FILE") or os.environ.get("TRAE_CONFIG_FILE") or "spark_config.yaml",
+    envvar=None,
 )
 @click.option("--max-steps", help="Maximum number of execution steps", type=int, default=20)
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
@@ -243,7 +255,7 @@ def interactive(
     model: str | None = None,
     model_base_url: str | None = None,
     api_key: str | None = None,
-    config_file: str = "trae_config.yaml",
+    config_file: str = "spark_config.yaml",
     max_steps: int | None = None,
     trajectory_file: str | None = None,
     console_type: str | None = "simple",
@@ -324,18 +336,18 @@ async def _run_simple_interactive_loop(
         try:
             task = cli_console.get_task_input()
             if task is None:
-                console.print("[green]Goodbye![/green]")
+                console.print("[green]Goodbye![\/green]")
                 break
 
             if task.lower() == "help":
                 console.print(
                     Panel(
-                        """[bold]Available Commands:[/bold]
+                        """[bold]Available Commands:[\/bold]
 
-• Type any task description to execute it
-• 'status' - Show agent status
-• 'clear' - Clear the screen
-• 'exit' or 'quit' - End the session""",
+ • Type any task description to execute it
+ • 'status' - Show agent status
+ • 'clear' - Clear the screen
+ • 'exit' or 'quit' - End the session""",
                         title="Help",
                         border_style="yellow",
                     )
@@ -347,11 +359,11 @@ async def _run_simple_interactive_loop(
             if task.lower() == "status":
                 console.print(
                     Panel(
-                        f"""[bold]Provider:[/bold] {agent.agent_config.model.model_provider.provider}
-    [bold]Model:[/bold] {agent.agent_config.model.model}
-    [bold]Available Tools:[/bold] {len(agent.agent.tools)}
-    [bold]Config File:[/bold] {config_file}
-    [bold]Working Directory:[/bold] {os.getcwd()}""",
+                        f"""[bold]Provider:[\/bold] {agent.agent_config.model.model_provider.provider}
+    [bold]Model:[\/bold] {agent.agent_config.model.model}
+    [bold]Available Tools:[\/bold] {len(agent.agent.tools)}
+    [bold]Config File:[\/bold] {config_file}
+    [bold]Working Directory:[\/bold] {os.getcwd()}""",
                         title="Agent Status",
                         border_style="blue",
                     )
@@ -363,7 +375,7 @@ async def _run_simple_interactive_loop(
                 continue
 
             # Set up trajectory recording for this task
-            console.print(f"[blue]Trajectory will be saved to: {trajectory_file}[/blue]")
+            console.print(f"[blue]Trajectory will be saved to: {trajectory_file}[\/blue]")
 
             task_args = {
                 "project_path": working_dir,
@@ -372,7 +384,7 @@ async def _run_simple_interactive_loop(
             }
 
             # Execute the task
-            console.print(f"\n[blue]Executing task: {task}[/blue]")
+            console.print(f"\n[blue]Executing task: {task}[\/blue]")
 
             # Start console and execute task
             console_task = asyncio.create_task(cli_console.start())
@@ -382,15 +394,15 @@ async def _run_simple_interactive_loop(
             _ = await execution_task
             _ = await console_task
 
-            console.print(f"\n[green]Trajectory saved to: {trajectory_file}[/green]")
+            console.print(f"\n[green]Trajectory saved to: {trajectory_file}[\/green]")
 
         except KeyboardInterrupt:
-            console.print("\n[yellow]Use 'exit' or 'quit' to end the session[/yellow]")
+            console.print("\n[yellow]Use 'exit' or 'quit' to end the session[\/yellow]")
         except EOFError:
-            console.print("\n[green]Goodbye![/green]")
+            console.print("\n[green]Goodbye![\/green]")
             break
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+            console.print(f"[red]Error: {e}[\/red]")
 
 
 async def _run_rich_interactive_loop(
@@ -407,95 +419,6 @@ async def _run_rich_interactive_loop(
 
     # Start the console UI - this will handle the entire interaction
     await cli_console.start()
-
-
-@cli.command()
-@click.option(
-    "--config-file",
-    help="Path to configuration file",
-    default="trae_config.yaml",
-    envvar="TRAE_CONFIG_FILE",
-)
-@click.option("--provider", "-p", help="LLM provider to use")
-@click.option("--model", "-m", help="Specific model to use")
-@click.option("--model-base-url", help="Base URL for the model API")
-@click.option("--api-key", "-k", help="API key (or set via environment variable)")
-@click.option("--max-steps", help="Maximum number of execution steps", type=int)
-def show_config(
-    config_file: str,
-    provider: str | None,
-    model: str | None,
-    model_base_url: str | None,
-    api_key: str | None,
-    max_steps: int | None,
-):
-    """Show current configuration settings."""
-    # Apply backward compatibility for config file
-    config_file = resolve_config_file(config_file)
-
-    config_path = Path(config_file)
-    if not config_path.exists():
-        console.print(
-            Panel(
-                f"""[yellow]No configuration file found at: {config_file}[/yellow]
-
-Using default settings and environment variables.""",
-                title="Configuration Status",
-                border_style="yellow",
-            )
-        )
-
-    config = Config.create(
-        config_file=config_file,
-    ).resolve_config_values(
-        provider=provider,
-        model=model,
-        model_base_url=model_base_url,
-        api_key=api_key,
-        max_steps=max_steps,
-    )
-
-    if config.trae_agent:
-        trae_agent_config = config.trae_agent
-    else:
-        console.print("[red]Error: trae_agent configuration is required in the config file.[/red]")
-        sys.exit(1)
-
-    # Display general settings
-    general_table = Table(title="General Settings")
-    general_table.add_column("Setting", style="cyan")
-    general_table.add_column("Value", style="green")
-
-    general_table.add_row(
-        "Default Provider", str(trae_agent_config.model.model_provider.provider or "Not set")
-    )
-    general_table.add_row("Max Steps", str(trae_agent_config.max_steps or "Not set"))
-
-    console.print(general_table)
-
-    # Display provider settings
-    provider_config = trae_agent_config.model.model_provider
-    provider_table = Table(title=f"{provider_config.provider.title()} Configuration")
-    provider_table.add_column("Setting", style="cyan")
-    provider_table.add_column("Value", style="green")
-
-    provider_table.add_row("Model", trae_agent_config.model.model or "Not set")
-    provider_table.add_row("Base URL", provider_config.base_url or "Not set")
-    provider_table.add_row("API Version", provider_config.api_version or "Not set")
-    provider_table.add_row(
-        "API Key",
-        f"Set ({provider_config.api_key[:4]}...{provider_config.api_key[-4:]})"
-        if provider_config.api_key
-        else "Not set",
-    )
-    provider_table.add_row("Max Tokens", str(trae_agent_config.model.max_tokens))
-    provider_table.add_row("Temperature", str(trae_agent_config.model.temperature))
-    provider_table.add_row("Top P", str(trae_agent_config.model.top_p))
-
-    if trae_agent_config.model.model_provider.provider == "anthropic":
-        provider_table.add_row("Top K", str(trae_agent_config.model.top_k))
-
-    console.print(provider_table)
 
 
 @cli.command()
