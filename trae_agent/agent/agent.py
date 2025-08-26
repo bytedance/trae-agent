@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 from enum import Enum
 
+from trae_agent.agent.base_agent import BaseAgent
 from trae_agent.utils.cli.cli_console import CLIConsole
 from trae_agent.utils.config import AgentConfig, Config
 from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
@@ -9,6 +10,7 @@ from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 
 class AgentType(Enum):
     TraeAgent = "trae_agent"
+    SelectorAgent = "selector_agent"
 
 
 class Agent:
@@ -40,14 +42,21 @@ class Agent:
 
                 self.agent_config: AgentConfig = config.trae_agent
 
-                self.agent: TraeAgent = TraeAgent(self.agent_config)
+                self.agent: BaseAgent = TraeAgent(self.agent_config)
                 self.agent.set_cli_console(cli_console)
+                if cli_console:
+                    if config.trae_agent.enable_lakeview:
+                        cli_console.set_lakeview(config.lakeview)
+                    else:
+                        cli_console.set_lakeview(None)
+            case AgentType.SelectorAgent:
+                if config.selector_agent is None:
+                    raise ValueError("selector_agent_config is required for SelectorAgent")
+                from .selector_agent import SelectorAgent
 
-        if cli_console:
-            if config.trae_agent.enable_lakeview:
-                cli_console.set_lakeview(config.lakeview)
-            else:
-                cli_console.set_lakeview(None)
+                self.agent_config = config.selector_agent
+                self.agent = SelectorAgent(self.agent_config)
+                self.agent.set_cli_console(cli_console)
 
         self.agent.set_trajectory_recorder(self.trajectory_recorder)
 

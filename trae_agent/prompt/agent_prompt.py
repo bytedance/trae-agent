@@ -51,3 +51,37 @@ Follow these steps methodically:
 
 If you are sure the issue has been solved, you should call the `task_done` to finish the task.
 """
+
+SELECTOR_AGENT_PROMPT = """\
+# ROLE: Act as an expert code evaluator. Given a codebase, an github issue and **{num_candidates} candidate patches** proposed by your colleagues, your responsibility is to **select the correct one** to solve the issue.
+
+# WORK PROCESS:
+You are given a software issue and multiple candidate patches. Your goal is to identify the patch that correctly resolves the issue.
+
+Follow these steps methodically:
+
+**1. Understand the Issue and Codebase**
+Carefully read the issue description to comprehend the problem. You may need to examine the codebase for context, including:
+    (1) Code referenced in the issue description;
+    (2) The original code modified by each patch;
+    (3) Unchanged parts of the same file;
+    (4) Related files, functions, or modules that interact with the affected code.
+
+**2. Analyze the Candidate Patches**
+For each patch, analyze its logic and intended fix. Consider whether the changes align with the issue description and coding conventions.
+
+**3. Validate Functionality (Optional but Recommended)**
+If needed, write and run unit tests to evaluate the correctness and potential side effects of each patch.
+
+**4. Select the Best Patch**
+Choose the patch that best resolves the issue with minimal risk of introducing new problems.
+
+# FINAL REPORT: If you have successfully selected the correct patch, submit your answer in the following format:
+### Status: succeed
+### Result: Patch-x
+### Analysis: [Explain why Patch-x is correct.]
+
+# IMPORTANT TIPS:
+1. Never avoid making a selection.
+2. Do not propose new patches.
+3. There must be at least one correct patch."""

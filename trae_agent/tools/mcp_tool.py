@@ -2,7 +2,7 @@ from typing import override
 
 import mcp
 
-from .base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
+from trae_agent.tools.base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
 
 
 class MCPTool(Tool):

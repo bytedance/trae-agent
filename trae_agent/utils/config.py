@@ -159,7 +159,32 @@ class TraeAgentConfig(AgentConfig):
     ):
         resolved_value = resolve_config_value(cli_value=max_steps, config_value=self.max_steps)
         if resolved_value:
-            self.max_steps = int(resolved_value)
+            self.max_steps: int = int(resolved_value)
+
+
+@dataclass
+class SelectorAgentConfig(AgentConfig):
+    """
+    Selector agent configuration.
+    """
+
+    max_retry: int = 10
+    enable_lakeview: bool = False
+    tools: list[str] = field(
+        default_factory=lambda: [
+            "bash",
+            "str_replace_based_edit_tool",
+        ]
+    )
+
+    def resolve_config_values(
+        self,
+        *,
+        max_steps: int | None = None,
+    ):
+        resolved_value = resolve_config_value(cli_value=max_steps, config_value=self.max_steps)
+        if resolved_value:
+            self.max_steps: int = int(resolved_value)
 
 
 @dataclass
@@ -182,6 +207,7 @@ class Config:
     models: dict[str, ModelConfig] | None = None
 
     trae_agent: TraeAgentConfig | None = None
+    selector_agent: SelectorAgentConfig | None = None
 
     @classmethod
     def create(
@@ -274,6 +300,14 @@ class Config:
                         if trae_agent_config.enable_lakeview and config.lakeview is None:
                             raise ConfigError("Lakeview is enabled but no lakeview config provided")
                         config.trae_agent = trae_agent_config
+                    case "selector_agent":
+                        selector_agent_config = SelectorAgentConfig(
+                            **agent_config,
+                            mcp_servers_config=mcp_servers_config,
+                            allow_mcp_servers=allow_mcp_servers,
+                        )
+                        selector_agent_config.model = agent_model
+                        config.selector_agent = selector_agent_config
                     case _:
                         raise ConfigError(f"Unknown agent: {agent_name}")
         else:

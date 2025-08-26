@@ -33,38 +33,62 @@ def docker_exec(container: Container, command: str):
     return return_code, output
 
 
-class SWEBenchEvaluation:
+class SWEBenchPatchSelection:
     def __init__(
         self,
+        *,
         working_dir: str,
         trae_config_file_name: str,
-        dataset: str = "SWE-bench_Verified",
+        instances_path: str,
+        candidate_file: str,
         docker_env_config: str = "",
-        swebench_harness_path: str = "",
-        run_id: str = "trae-agent",
+        num_candidate: int,
+        group_size: int,
+        max_retry: int,
+        max_turn: int,
+        majority_voting: bool,
     ):
         """
-        Initialize the SWEBenchEvaluation class. The initialisation includes checking the existence of required Docker images and downloading missing images.
+        Initialize the SWEBenchPatchSelection class. The initialisation includes checking the existence of required Docker images and downloading missing images.
 
         Args:
             working_dir: The working directory.
             trae_config_file_name: The path to the Trae config file.
             dataset: The dataset to evaluate.
+            candidate_file: The path to the candidate file.
             docker_env_config: The path to the docker environment config file.
-            swebench_harness_path: The path to the SWEBench harness.
-            run_id: The run id.
+            num_candidate: The number of candidate patches.
+            group_size: The group size of candidate patches.
+            max_retry: The maximum number of retries.
+            max_turn: The maximum number of turns.
+            majority_voting: Whether to use majority voting.
         """
-        assert dataset in ["SWE-bench", "SWE-bench_Lite", "SWE-bench_Verified"], (
-            f"Invalid dataset name: {dataset}"
-        )
-        self.dataset = load_dataset(f"princeton-nlp/{dataset}", split="test")
-        self.dataset_name = dataset
-
         self.docker_client: DockerClient = from_env()
         self.image_status: dict[Any, Any] = {}
         self.working_dir = Path(working_dir)
-        self.swebench_harness_path = swebench_harness_path
-        self.run_id = run_id
+        self.num_candidate = num_candidate
+        self.group_size = group_size
+        self.max_retry = max_retry
+        self.max_turn = max_turn
+        self.majority_voting = majority_voting
+
+        if not Path(candidate_file).exists():
+            raise FileNotFoundError(f"Candidate file {candidate_file} not found.")
+        self.candidate_dict = {}
+        with open(candidate_file, "r") as f:
+            for line in f.readlines():
+                candidate = json.loads(line.strip())
+                if "regressions" not in candidate:
+                    candidate["regressions"] = []
+                    for _ in range(len(candidate["patches"])):
+                        candidate["regressions"].append([])
+                self.candidate_dict[candidate["instance_id"]] = candidate
+
+        self.dataset = []
+        with open(instances_path, "r") as f:
+            for line in f.readlines():
+                instance = json.loads(line.strip())
+                self.dataset.append(instance)
 
         if docker_env_config != "":
             with open(docker_env_config, "r") as f:
@@ -77,7 +101,9 @@ class SWEBenchEvaluation:
 
         self.trae_config_file_name = trae_config_file_name
 
-        shutil.copyfile(self.trae_config_file_name, self.working_dir / "trae_config_local.json")
+        shutil.copyfile(self.trae_config_file_name, self.working_dir / "trae_config.yaml")
+        shutil.copyfile(instances_path, self.working_dir / "instances.jsonl")
+        shutil.copyfile(candidate_file, self.working_dir / "candidate.jsonl")
 
         self.pull_images()
 
@@ -275,10 +301,9 @@ class SWEBenchEvaluation:
 
         container = self.prepare_experiment_container(instance)
         instance_dir = instance["instance_id"]
-        problem_statement_path = instance_dir + "/problem_statement.txt"
-        patch_file_path = instance_dir + f"/{instance['instance_id']}.patch"
-        traj_path = instance_dir + f"/{instance['instance_id']}.json"
-        command = f'source trae-agent/.venv/bin/activate && trae-cli run --file {problem_statement_path} --working-dir="/testbed/" --config-file trae_config_local.json --max-steps 200 --must-patch --patch-path {patch_file_path} --trajectory-file {traj_path}'
+        command = f'source trae-agent/.venv/bin/activate && python3 trae_agent/patch_selection.py --instances_path {self.working_dir / "instances.jsonl"} --candidate_path {self.working_dir / "candidate.jsonl"} --result_path {instance_dir} --num_candidate {self.num_candidate} --group_size {self.group_size} --max_retry {self.max_retry} --max_turn {self.max_turn} --config_file {self.working_dir / "trae_config.yaml"} --instance_id {instance_id}'
+        if self.majority_voting:
+            command += " --majority_voting"
         new_command = f"/bin/bash -c '{command}'"
 
         try:
@@ -298,124 +323,49 @@ class SWEBenchEvaluation:
         for instance in tqdm(self.dataset, desc="Running all instances"):  # pyright: ignore
             self.run_one_instance(instance["instance_id"])  # pyright: ignore
 
-    def run_eval(self):
-        """
-        Run evaluation using the SWE-bench harness.
-        """
-        swebench_harness_path = Path(self.swebench_harness_path)
-        swebench_python_path = "swebench_venv/bin/python"
-
-        cmd = [
-            swebench_python_path,
-            "-m",
-            "swebench.harness.run_evaluation",
-            "--dataset_name",
-            f"princeton-nlp/{self.dataset_name}",
-            "--predictions_path",
-            (self.working_dir / "predictions.json").absolute().as_posix(),
-            "--run_id",
-            self.run_id,
-            "--cache_level",
-            "instance",
-            "--instance_image_tag",
-            "latest",
-        ]
-
-        process = subprocess.run(cmd, capture_output=True, cwd=swebench_harness_path.as_posix())
-        print(process.stdout.decode())
-        print(process.stderr.decode())
-
-        result_filename = f"trae-agent.{self.run_id}.json"
-        print(f"Evaluation completed and file saved to {result_filename}")
-
-    def get_all_preds(self, instance_ids: list[str] | None = None):
-        """
-        Get all predictions for a list of instance IDs.
-
-        Args:
-            instance_ids: A list of instance IDs. If None, all instances in the dataset will be used.
-        """
-        preds: list[dict[str, str]] = []
-        if not instance_ids:
-            instance_ids = [instance["instance_id"] for instance in self.dataset]  # pyright: ignore
-        for instance_id in instance_ids:
-            patch_path = self.working_dir / instance_id / f"{instance_id}.patch"
-            if not patch_path.exists():
-                continue
-            with open(patch_path, "r") as f:
-                patch = f.read()
-            preds.append(
-                {
-                    "instance_id": instance_id,
-                    "model_name_or_path": "trae-agent",
-                    "model_patch": patch,
-                }
-            )
-        with open(self.working_dir / "predictions.json", "w") as f:
-            json.dump(preds, f)
-
 
 def main():
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument("--dataset", type=str, default="SWE-bench_Verified")
+    argument_parser.add_argument("--instances-path", type=str, required=True)
+    argument_parser.add_argument("--candidate-file", type=str, required=True)
     argument_parser.add_argument("--working-dir", type=str, default="./trae-workspace")
-    argument_parser.add_argument("--config-file", type=str, default="trae_config_local.json")
+    argument_parser.add_argument("--config-file", type=str, default="trae_config.yaml")
     argument_parser.add_argument(
         "--instance_ids",
         nargs="+",
         type=str,
         help="Instance IDs to run (space separated)",
     )
-    argument_parser.add_argument(
-        "--swebench-harness-path",
-        type=str,
-        default="",
-        required=False,
-        help="Only used for evaluation.",
-    )
     argument_parser.add_argument("--docker-env-config", type=str, default="", required=False)
-    argument_parser.add_argument(
-        "--run-id",
-        type=str,
-        required=False,
-        default="trae-agent",
-        help="Run ID for SWE-bench evaluation.",
-    )
-    # expr: only generate patches
-    # eval: only evaluate patches
-    # e2e: both expr and eval
-    argument_parser.add_argument(
-        "--mode",
-        type=str,
-        choices=["e2e", "expr", "eval"],
-        default="e2e",
-        help="e2e: both expr and eval, expr: only generate patches, eval: only evaluate patches",
-    )
+    argument_parser.add_argument("--num-candidate", type=int, default=10)
+    argument_parser.add_argument("--group-size", type=int, default=10)
+    argument_parser.add_argument("--max-retry", type=int, default=3)
+    argument_parser.add_argument("--max-turn", type=int, default=50)
+    argument_parser.add_argument("--majority-voting", action="store_true")
 
     args = argument_parser.parse_args()
-    evaluation = SWEBenchEvaluation(
-        args.working_dir,
-        args.config_file,
-        args.dataset,
-        args.docker_env_config,
-        args.swebench_harness_path,
-        args.run_id,
+    patch_selection = SWEBenchPatchSelection(
+        working_dir=args.working_dir,
+        trae_config_file_name=args.config_file,
+        instances_path=args.instances_path,
+        candidate_file=args.candidate_file,
+        docker_env_config=args.docker_env_config,
+        num_candidate=args.num_candidate,
+        group_size=args.group_size,
+        max_retry=args.max_retry,
+        max_turn=args.max_turn,
+        majority_voting=args.majority_voting,
     )
 
-    if args.mode == "e2e" or args.mode == "expr":
-        evaluation.prepare_trae_agent()
+    patch_selection.prepare_trae_agent()
 
-        if args.instance_ids:
-            print(f"Running instance {args.instance_ids}")
-            for instance_id in tqdm(args.instance_ids, desc="Running instances"):
-                evaluation.run_one_instance(instance_id)
-        else:
-            print("Running all instances")
-            evaluation.run_all()
-
-    if args.mode == "e2e" or args.mode == "eval":
-        evaluation.get_all_preds(args.instance_ids)
-        evaluation.run_eval()
+    if args.instance_ids:
+        print(f"Running instance {args.instance_ids}")
+        for instance_id in tqdm(args.instance_ids, desc="Running instances"):
+            patch_selection.run_one_instance(instance_id)
+    else:
+        print("Running all instances")
+        patch_selection.run_all()
 
 
 if __name__ == "__main__":

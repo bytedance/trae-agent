@@ -39,6 +39,7 @@ class TraeAgent(BaseAgent):
             llm_client: Optional pre-configured LLMClient instance.
                        If provided, it will be used instead of creating a new one from config.
         """
+        super().__init__(agent_config=trae_agent_config)
         self.project_path: str = ""
         self.base_commit: str | None = None
         self.must_patch: str = "false"
@@ -51,8 +52,8 @@ class TraeAgent(BaseAgent):
         )
         self.mcp_tools: list[Tool] = []
         self.mcp_clients: list[MCPClient] = []  # Keep track of MCP clients for cleanup
-        super().__init__(agent_config=trae_agent_config)
 
+    @override
     async def initialise_mcp(self):
         """Async factory to create and initialize TraeAgent."""
         await self.discover_mcp_tools()

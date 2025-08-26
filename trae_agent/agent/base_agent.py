@@ -37,6 +37,7 @@ class BaseAgent(ABC):
         ]
         self._tool_caller: ToolExecutor = ToolExecutor([])
         self._cli_console: CLIConsole | None = None
+        self.allow_mcp_servers: list[str] | None = None
 
         # Trajectory recorder
         self._trajectory_recorder: TrajectoryRecorder | None = None
@@ -222,6 +223,11 @@ class BaseAgent(ABC):
     def task_incomplete_message(self) -> str:
         """Return a message indicating that the task is incomplete. Override for custom logic."""
         return "The task is incomplete. Please try again."
+
+    @abstractmethod
+    async def initialise_mcp(self) -> None:
+        """Initialise MCP clients. Override in subclasses that use MCP."""
+        pass
 
     @abstractmethod
     async def cleanup_mcp_clients(self) -> None:
