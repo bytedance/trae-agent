@@ -35,7 +35,9 @@ test = [
 ]
 evaluation = [
     "datasets>=3.6.0",
-    "docker>=7.1.0"
+    "docker>=7.1.0",
+    "pexpect>=4.9.0",
+    "unidiff>=0.7.5",
 ]
 
 [project.scripts]
