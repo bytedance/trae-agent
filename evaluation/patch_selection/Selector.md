@@ -7,7 +7,7 @@ It formulates our goal as an optimal solution search problem and addresses two k
 ## 📖 Demo
 
 ### Regression Testing
-For regression testing, please refer to [Agentless](https://github.com/OpenAutoCoder/Agentless/blob/main/README_swebench.md). 
+For regression testing, please refer to [Agentless](https://github.com/OpenAutoCoder/Agentless/blob/main/README_swebench.md).
 
 Each result entry contains a `regression` field that indicates test outcomes:
    - An empty array [] signifies the patch successfully passed all regression tests;
@@ -90,7 +90,7 @@ After running with [example.jsonl](example/example.jsonl), in the result_path, w
         └── astropy__astropy-14369.json
 ```
 
-* The file in the log directory stores LLM interation history.
+* The file in the log directory stores LLM interaction history.
 * The file in the output directory stores raw standard output and standard error.
 * Patch directory stores selected patches.
 * Statistics directory stores whether the selected patch is correct or not.

@@ -1,13 +1,13 @@
 import os
 import sys
-from pathlib import Path
-from run import maybe_truncate, run
 from collections import defaultdict
+from pathlib import Path
 from typing import Literal, get_args
+
 from base import CLIResult, ToolError, ToolResult
+from run import maybe_truncate, run
 
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 Command = Literal[
     "view",
     "create",
@@ -19,12 +19,11 @@ SNIPPET_LINES: int = 4
 
 
 def write_text(filename, content):
-    with open(str(filename), "w", encoding='utf-8') as f:
+    with open(str(filename), "w", encoding="utf-8") as f:
         f.write(content)
 
 
-class EditTool():
-
+class EditTool:
     api_type: Literal["text_editor_2025"] = "text_editor_2025"
     name: Literal["str_replace_editor"] = "str_replace_editor"
 
@@ -64,22 +63,18 @@ class EditTool():
             return ToolResult(output=f"File created successfully at: {_path}")
         elif command == "str_replace":
             if old_str is None:
-                raise ToolError(
-                    "Parameter `old_str` is required for command: str_replace"
-                )
+                raise ToolError("Parameter `old_str` is required for command: str_replace")
             return self.str_replace(_path, old_str, new_str)
         elif command == "insert":
             if insert_line is None:
-                raise ToolError(
-                    "Parameter `insert_line` is required for command: insert"
-                )
+                raise ToolError("Parameter `insert_line` is required for command: insert")
             if new_str is None:
                 raise ToolError("Parameter `new_str` is required for command: insert")
             return self.insert(_path, insert_line, new_str)
         elif command == "undo_edit":
             return self.undo_edit(_path)
         raise ToolError(
-            f'Unrecognized command {command}. The allowed commands for the {self.name} tool are: {", ".join(get_args(Command))}'
+            f"Unrecognized command {command}. The allowed commands for the {self.name} tool are: {', '.join(get_args(Command))}"
         )
 
     def validate_path(self, command: str, path: Path):
@@ -89,18 +84,15 @@ class EditTool():
                 f"The path {path} is not an absolute path, it should start with `/`. Maybe you meant {suggested_path}?"
             )
         if not path.exists() and command != "create":
-            raise ToolError(
-                f"The path {path} does not exist. Please provide a valid path."
-            )
+            raise ToolError(f"The path {path} does not exist. Please provide a valid path.")
         if path.exists() and command == "create":
             raise ToolError(
                 f"File already exists at: {path}. Cannot overwrite files using command `create`."
             )
-        if path.is_dir():
-            if command != "view":
-                raise ToolError(
-                    f"The path {path} is a directory and only the `view` command can be used on directories"
-                )
+        if path.is_dir() and command != "view":
+            raise ToolError(
+                f"The path {path} is a directory and only the `view` command can be used on directories"
+            )
 
     async def view(self, path: Path, view_range: list[int] | None = None):
         if path.is_dir():
@@ -109,9 +101,7 @@ class EditTool():
                     "The `view_range` parameter is not allowed when `path` points to a directory."
                 )
 
-            _, stdout, stderr = await run(
-                rf"find {path} -maxdepth 2 -not -path '*/\.*'"
-            )
+            _, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
             if not stderr:
                 stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
             return CLIResult(output=stdout, error=stderr)
@@ -120,9 +110,7 @@ class EditTool():
         init_line = 1
         if view_range:
             if len(view_range) != 2 or not all(isinstance(i, int) for i in view_range):
-                raise ToolError(
-                    "Invalid `view_range`. It should be a list of two integers."
-                )
+                raise ToolError("Invalid `view_range`. It should be a list of two integers.")
             file_lines = file_content.split("\n")
             n_lines_file = len(file_lines)
             init_line, final_line = view_range
@@ -144,9 +132,7 @@ class EditTool():
             else:
                 file_content = "\n".join(file_lines[init_line - 1 : final_line])
 
-        return CLIResult(
-            output=self._make_output(file_content, str(path), init_line=init_line)
-        )
+        return CLIResult(output=self._make_output(file_content, str(path), init_line=init_line))
 
     def str_replace(self, path: Path, old_str: str, new_str: str | None):
         file_content = self.read_file(path).expandtabs()
@@ -160,11 +146,7 @@ class EditTool():
             )
         elif occurrences > 1:
             file_content_lines = file_content.split("\n")
-            lines = [
-                idx + 1
-                for idx, line in enumerate(file_content_lines)
-                if old_str in line
-            ]
+            lines = [idx + 1 for idx, line in enumerate(file_content_lines) if old_str in line]
             raise ToolError(
                 f"No replacement was performed. Multiple occurrences of old_str `{old_str}` in lines {lines}. Please ensure it is unique"
             )
@@ -180,9 +162,7 @@ class EditTool():
         snippet = "\n".join(new_file_content.split("\n")[start_line : end_line + 1])
 
         success_msg = f"The file {path} has been edited. "
-        success_msg += self._make_output(
-            snippet, f"a snippet of {path}", start_line + 1
-        )
+        success_msg += self._make_output(snippet, f"a snippet of {path}", start_line + 1)
         success_msg += "Review the changes and make sure they are as expected. Edit the file again if necessary."
 
         return CLIResult(output=success_msg)
@@ -200,9 +180,7 @@ class EditTool():
 
         new_str_lines = new_str.split("\n")
         new_file_text_lines = (
-            file_text_lines[:insert_line]
-            + new_str_lines
-            + file_text_lines[insert_line:]
+            file_text_lines[:insert_line] + new_str_lines + file_text_lines[insert_line:]
         )
         snippet_lines = (
             file_text_lines[max(0, insert_line - SNIPPET_LINES) : insert_line]
@@ -259,13 +237,8 @@ class EditTool():
         if expand_tabs:
             file_content = file_content.expandtabs()
         file_content = "\n".join(
-            [
-                f"{i + init_line:6}\t{line}"
-                for i, line in enumerate(file_content.split("\n"))
-            ]
+            [f"{i + init_line:6}\t{line}" for i, line in enumerate(file_content.split("\n"))]
         )
         return (
-            f"Here's the result of running `cat -n` on {file_descriptor}:\n"
-            + file_content
-            + "\n"
+            f"Here's the result of running `cat -n` on {file_descriptor}:\n" + file_content + "\n"
         )

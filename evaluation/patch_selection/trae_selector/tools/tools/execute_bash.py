@@ -1,7 +1,8 @@
-import sys
 import asyncio
-from bash import BashTool
+import sys
+
 from base import ToolError
+from bash import BashTool
 
 
 async def execute_command(**kwargs):
@@ -15,10 +16,7 @@ async def execute_command(**kwargs):
         kwargs["restart"] = False
 
     try:
-        result = await tool(
-            command=kwargs.get("command"),
-            restart=kwargs.get("restart")
-        )
+        result = await tool(command=kwargs.get("command"), restart=kwargs.get("restart"))
         return_content = ""
         if result.output is not None:
             return_content += result.output
@@ -34,8 +32,8 @@ if __name__ == "__main__":
     kwargs = {}
     it = iter(args)
     for arg in it:
-        if arg.startswith('--'):
-            key = arg.lstrip('--')
+        if arg.startswith("--"):
+            key = arg.lstrip("-")
             try:
                 value = next(it)
                 kwargs[key] = value

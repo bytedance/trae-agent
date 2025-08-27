@@ -1,32 +1,34 @@
-import os
-import sys
-import json
-import pickle
 import asyncio
+import contextlib
+import json
+import os
+import pickle
+import sys
 from pathlib import Path
-from edit import EditTool
+
 from base import ToolError
+from edit import EditTool
 
 
 async def execute_command(**kwargs):
     tool = EditTool()
 
-    if os.path.exists('file_history.pkl'):
-        with open('file_history.pkl', 'rb') as file:
-            tool._file_history = pickle.load(file)    
+    if os.path.exists("file_history.pkl"):
+        with open("file_history.pkl", "rb") as file:
+            tool._file_history = pickle.load(file)
 
     kwargs["path"] = Path(kwargs["path"]) if "path" in kwargs and kwargs["path"] else None
-    
-    try:
-        kwargs["view_range"] = json.loads(kwargs["view_range"]) if kwargs.get("view_range") is not None else None
-    except json.JSONDecodeError:
-        pass
-    
-    try:
-        kwargs["insert_line"] = int(kwargs["insert_line"]) if kwargs.get("insert_line") is not None else None
-    except:
-        pass
-    
+
+    with contextlib.suppress(json.JSONDecodeError):
+        kwargs["view_range"] = (
+            json.loads(kwargs["view_range"]) if kwargs.get("view_range") is not None else None
+        )
+
+    with contextlib.suppress(ValueError):
+        kwargs["insert_line"] = (
+            int(kwargs["insert_line"]) if kwargs.get("insert_line") is not None else None
+        )
+
     try:
         result = await tool(
             command=kwargs.get("command"),
@@ -35,9 +37,9 @@ async def execute_command(**kwargs):
             view_range=kwargs.get("view_range"),
             insert_line=kwargs.get("insert_line"),
             old_str=kwargs.get("old_str"),
-            new_str=kwargs.get("new_str")
+            new_str=kwargs.get("new_str"),
         )
-        with open('file_history.pkl', 'wb') as file:
+        with open("file_history.pkl", "wb") as file:
             pickle.dump(tool._file_history, file)
         return_content = ""
         if result.output is not None:
@@ -54,8 +56,8 @@ if __name__ == "__main__":
     kwargs = {}
     it = iter(args)
     for arg in it:
-        if arg.startswith('--'):
-            key = arg.lstrip('--')
+        if arg.startswith("--"):
+            key = arg.lstrip("-")
             try:
                 value = next(it)
                 kwargs[key] = value

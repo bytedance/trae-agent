@@ -20,10 +20,15 @@ repos:
   rev: v2.4.1
   hooks:
   - id: codespell
+    exclude: >
+            (?x)^(
+                .*\.jsonl
+            )$
 
 - repo: https://github.com/pre-commit/mirrors-mypy
   rev: v1.16.1
   hooks:
     - id: mypy
+      exclude: ^(evaluation/patch_selection)
       additional_dependencies:
         - types-PyYAML

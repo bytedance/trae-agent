@@ -1,6 +1,7 @@
-import os
 import asyncio
+import os
 from typing import ClassVar, Literal
+
 from base import CLIResult, ToolError, ToolResult
 
 
@@ -57,9 +58,7 @@ class _BashSession:
         assert self._process.stdout
         assert self._process.stderr
 
-        self._process.stdin.write(
-            command.encode() + f"; echo '{self._sentinel}'\n".encode()
-        )
+        self._process.stdin.write(command.encode() + f"; echo '{self._sentinel}'\n".encode())
         await self._process.stdin.drain()
 
         try:
@@ -89,7 +88,7 @@ class _BashSession:
         return CLIResult(output=output, error=error)
 
 
-class BashTool():
+class BashTool:
     _session: _BashSession | None
     name: ClassVar[Literal["bash"]] = "bash"
     api_type: ClassVar[Literal["bash_2025"]] = "bash_2025"
@@ -98,9 +97,7 @@ class BashTool():
         self._session = None
         super().__init__()
 
-    async def __call__(
-        self, command: str | None = None, restart: bool = False, **kwargs
-    ):
+    async def __call__(self, command: str | None = None, restart: bool = False, **kwargs):
         if restart:
             if self._session:
                 self._session.stop()

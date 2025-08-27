@@ -1,11 +1,12 @@
-from pathlib import Path
-import tokenize
 import io
-import re
-import os
 import json
+import os
+import re
+import tokenize
+from pathlib import Path
 
 from unidiff import PatchSet
+
 
 def remove_comments_from_line(line: str) -> str:
     try:
@@ -18,14 +19,14 @@ def remove_comments_from_line(line: str) -> str:
                 break
             (srow, scol) = tok_start
             if srow == 1 and scol > prev_end[1]:
-                result_parts.append(line[prev_end[1]:scol])
+                result_parts.append(line[prev_end[1] : scol])
             result_parts.append(tok_str)
             prev_end = tok_end
 
-        return ''.join(result_parts).rstrip()
+        return "".join(result_parts).rstrip()
     except tokenize.TokenError:
-        if '#' in line:
-            return line.split('#', 1)[0].rstrip()
+        if "#" in line:
+            return line.split("#", 1)[0].rstrip()
         return line
 
 
@@ -55,20 +56,20 @@ def clean_patch(ori_patch_text):
         for hunk in patched_file:
             for line in hunk:
                 if line.is_added:
-                    content = line.value.lstrip('+')
-                    if content.strip() and not re.match(r'^\s*#', content):
+                    content = line.value.lstrip("+")
+                    if content.strip() and not re.match(r"^\s*#", content):
                         content = remove_comments_from_line(content.rstrip())
-                        extracted_lines.append('+' + content)
+                        extracted_lines.append("+" + content)
                         add_lines.append(content)
                 elif line.is_removed:
-                    content = line.value.lstrip('-')
-                    if content.strip() and not re.match(r'^\s*#', content):
+                    content = line.value.lstrip("-")
+                    if content.strip() and not re.match(r"^\s*#", content):
                         content = remove_comments_from_line(content.rstrip())
-                        extracted_lines.append('-' + content)
+                        extracted_lines.append("-" + content)
                         delete_lines.append(content)
-    new_patch_text = '\n'.join(extracted_lines)
+    new_patch_text = "\n".join(extracted_lines)
 
-    new_patch_text = re.sub(r'\s+', '', new_patch_text)
+    new_patch_text = re.sub(r"\s+", "", new_patch_text)
 
     return new_patch_text
 
@@ -89,17 +90,17 @@ def save_patches(instance_id, patches_path, patches, group_id=1):
     patch_file = get_unique_filename(patches_path, trial_index)
 
     clean_patch = patches
-    with open(dir_path / patch_file, 'w') as file:
+    with open(dir_path / patch_file, "w") as file:
         file.write(clean_patch)
 
     print(f"Patches saved in {dir_path / patch_file}")
 
 
 def get_trajectory_filename(instance_id, traj_dir, group_id=1, voting_id=1):
-
     dir_path = Path(traj_dir) / f"group_{group_id}"
     dir_path.mkdir(parents=True, exist_ok=True)
     print("dir_path", dir_path)
+
     def get_unique_filename():
         trial_index = 1
         filename = f"{instance_id}_voting_{voting_id}_trail_{trial_index}.json"
@@ -112,16 +113,31 @@ def get_trajectory_filename(instance_id, traj_dir, group_id=1, voting_id=1):
     return filename.absolute().as_posix()
 
 
-def save_selection_success(instance_id: str, statistics_path: str, patch_id: int, is_success: int, group_id=1, is_all_success=False, is_all_failed=False):
+def save_selection_success(
+    instance_id: str,
+    statistics_path: str,
+    patch_id: int,
+    is_success: int,
+    group_id=1,
+    is_all_success=False,
+    is_all_failed=False,
+):
     dir_path = Path(statistics_path) / f"group_{group_id}"
     dir_path.mkdir(parents=True, exist_ok=True)
     file_path = dir_path / f"{instance_id}.json"
 
     with open(file_path, "w") as statistics_file:
-        statistics_file.write(json.dumps({
-            "instance_id": instance_id,
-            "patch_id": patch_id,
-            "is_success": is_success,
-            "is_all_success": is_all_success,
-            "is_all_failed": is_all_failed
-        }, indent=4, sort_keys=True, ensure_ascii=False))
+        statistics_file.write(
+            json.dumps(
+                {
+                    "instance_id": instance_id,
+                    "patch_id": patch_id,
+                    "is_success": is_success,
+                    "is_all_success": is_all_success,
+                    "is_all_failed": is_all_failed,
+                },
+                indent=4,
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+        )
