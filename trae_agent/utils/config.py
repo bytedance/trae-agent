@@ -34,12 +34,12 @@ class ModelConfig:
 
     model: str
     model_provider: ModelProvider
-    max_tokens: int | None = None  # Legacy max_tokens parameter, optional
     temperature: float
     top_p: float
     top_k: int
     parallel_tool_calls: bool
     max_retries: int
+    max_tokens: int | None = None  # Legacy max_tokens parameter, optional
     supports_tool_calling: bool = True
     candidate_count: int | None = None  # Gemini specific field
     stop_sequences: list[str] | None = None
