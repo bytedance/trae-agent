@@ -125,7 +125,7 @@ class BaseAgent(ABC):
                 step = AgentStep(step_number=step_number, state=AgentStepState.THINKING)
                 try:
                     messages = await self._run_llm_step(step, messages, execution)
-                    self._finalize_step(
+                    await self._finalize_step(
                         step, messages, execution
                     )  # record trajectory for this step and update the CLI console
                     if execution.agent_state == AgentState.COMPLETED:
@@ -135,15 +135,17 @@ class BaseAgent(ABC):
                     execution.agent_state = AgentState.ERROR
                     step.state = AgentStepState.ERROR
                     step.error = str(error)
-                    self._finalize_step(step, messages, execution)
+                    await self._finalize_step(step, messages, execution)
                     break
-
             if step_number > self._max_steps and not execution.success:
                 execution.final_result = "Task execution exceeded maximum steps without completion."
                 execution.agent_state = AgentState.ERROR
 
         except Exception as e:
             execution.final_result = f"Agent execution failed: {str(e)}"
+
+        # Ensure tool resources are released whether an exception occurs or not.
+        await self._close_tools()
 
         execution.execution_time = time.time() - start_time
 
@@ -153,6 +155,13 @@ class BaseAgent(ABC):
 
         self._update_cli_console(step, execution)
         return execution
+
+    async def _close_tools(self):
+        """Release tool resources, mainly about BashTool object."""
+        if self._tool_caller:
+            # Ensure all tool resources are properly released.
+            res = await self._tool_caller.close_tools()
+            return res
 
     async def _run_llm_step(
         self, step: "AgentStep", messages: list["LLMMessage"], execution: "AgentExecution"
@@ -183,7 +192,7 @@ class BaseAgent(ABC):
             tool_calls = llm_response.tool_calls
             return await self._tool_call_handler(tool_calls, step)
 
-    def _finalize_step(
+    async def _finalize_step(
         self, step: "AgentStep", messages: list["LLMMessage"], execution: "AgentExecution"
     ) -> None:
         step.state = AgentStepState.COMPLETED
