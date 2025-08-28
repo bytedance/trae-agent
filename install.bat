@@ -38,7 +38,7 @@ if %errorlevel% equ 0 (
     echo [SUCCESS] UV is already installed (version: !UV_VERSION!)
 ) else (
     echo [INFO] UV not found. Installing UV...
-    
+
     REM Check if PowerShell is available
     where powershell >nul 2>&1
     if %errorlevel% neq 0 (
@@ -47,13 +47,13 @@ if %errorlevel% equ 0 (
         pause
         exit /b 1
     )
-    
+
     REM Install UV using PowerShell
     powershell -Command "& {Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression}"
-    
+
     REM Refresh environment variables
     call refreshenv >nul 2>&1
-    
+
     REM Check if UV is now available
     where uv >nul 2>&1
     if %errorlevel% equ 0 (
@@ -62,7 +62,7 @@ if %errorlevel% equ 0 (
         echo [WARNING] UV installation may have succeeded but is not immediately available.
         echo [WARNING] You may need to restart your command prompt or add UV to your PATH.
         echo [WARNING] UV is typically installed to: %USERPROFILE%\.cargo\bin\uv.exe
-        
+
         REM Try to find UV in common locations
         if exist "%USERPROFILE%\.cargo\bin\uv.exe" (
             set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
@@ -169,7 +169,7 @@ echo [INFO] Verifying installation...
 REM Check if the CLI is available in the virtual environment
 if exist ".venv\Scripts\trae-cli.exe" (
     echo [SUCCESS] Trae Agent CLI is available!
-    
+
     REM Test the CLI
     .venv\Scripts\trae-cli.exe --help >nul 2>&1
     if %errorlevel% equ 0 (

@@ -1597,7 +1597,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.54.0" },
+    { name = "anthropic", specifier = ">=0.54.0,<=0.60.0" },
     { name = "asyncclick", specifier = ">=8.0.0" },
     { name = "click", specifier = ">=8.0.0" },
     { name = "datasets", marker = "extra == 'evaluation'", specifier = ">=3.6.0" },

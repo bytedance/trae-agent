@@ -87,7 +87,7 @@ main() {
                 source "$HOME/.cargo/env"
             fi
             export PATH="$HOME/.cargo/bin:$PATH"
-            
+
             if command_exists uv; then
                 log_success "UV installed successfully!"
             else
@@ -119,7 +119,7 @@ main() {
 
     # Step 3: Create virtual environment and install dependencies
     log_header "🔧 Setting up virtual environment and dependencies..."
-    
+
     # Check if virtual environment already exists
     if [[ -d ".venv" ]]; then
         log_warning "Virtual environment already exists. Updating dependencies..."
@@ -156,7 +156,7 @@ main() {
     log_header "✅ Verifying installation..."
     if source .venv/bin/activate && command_exists trae-cli; then
         log_success "Trae Agent CLI is available!"
-        
+
         # Test the CLI
         if .venv/bin/trae-cli --help >/dev/null 2>&1; then
             log_success "Installation verification passed!"

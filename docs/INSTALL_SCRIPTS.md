@@ -74,7 +74,7 @@ install.bat
 - With Python 3.12+ ✅
 - Various shell environments ✅
 
-### ✅ Linux Users  
+### ✅ Linux Users
 - With UV installed ✅
 - Without UV installed ✅
 - With Python 3.12+ ✅
