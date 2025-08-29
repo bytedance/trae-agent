@@ -1,0 +1,28 @@
+[package]
+name = "trae-core"
+edition = "2024"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+description = "Core functionality for Trae Agent - agents, tools, and utilities"
+keywords = { workspace = true }
+categories = { workspace = true }
+
+[lib]
+name = "trae_core"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.143"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1"
+thiserror = "1.0"
+url = "2.5"
+log = "0.4"
+backoff = { version = "0.4", features = ["futures", "tokio"] }
+futures = "0.3"
+
+[dev-dependencies]
