@@ -17,6 +17,7 @@ from trae_agent.tools.base import Tool, ToolExecutor, ToolResult
 from trae_agent.utils.config import MCPServerConfig, TraeAgentConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 from trae_agent.utils.mcp_client import MCPClient
+from trae_agent.utils.project_rules import ProjectRulesLoader
 
 TraeAgentToolNames = [
     "str_replace_based_edit_tool",
@@ -43,6 +44,8 @@ class TraeAgent(BaseAgent):
         self.base_commit: str | None = None
         self.must_patch: str = "false"
         self.patch_path: str | None = None
+        self.project_rules_enabled: bool = trae_agent_config.project_rules_enabled
+        self.project_rules_path: str = trae_agent_config.project_rules_path
         self.mcp_servers_config: dict[str, MCPServerConfig] | None = (
             trae_agent_config.mcp_servers_config if trae_agent_config.mcp_servers_config else None
         )
@@ -157,9 +160,30 @@ class TraeAgent(BaseAgent):
 
         return execution
 
+    def _get_project_rules(self) -> str:
+        """Get the project rules content for TraeAgent.
+        Returns:
+            str: Formatted project rules content, or empty string if disabled or loading failed
+        """
+        if not self.project_rules_enabled or not self.project_path:
+            return ""
+            
+        rules_content = ProjectRulesLoader.load_project_rules(
+            self.project_path, 
+            self.project_rules_path
+        )
+        
+        if rules_content:
+            return ProjectRulesLoader.format_rules_for_prompt(rules_content)
+        
+        return ""
+    
     def get_system_prompt(self) -> str:
         """Get the system prompt for TraeAgent."""
-        return TRAE_AGENT_SYSTEM_PROMPT
+        base_prompt = TRAE_AGENT_SYSTEM_PROMPT
+        project_rules = self._get_project_rules()
+        
+        return base_prompt + project_rules
 
     @override
     def reflect_on_result(self, tool_results: list[ToolResult]) -> str | None:

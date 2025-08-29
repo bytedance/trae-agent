@@ -160,6 +160,8 @@ class TraeAgentConfig(AgentConfig):
     """
 
     enable_lakeview: bool = True
+    project_rules_enabled: bool = False
+    project_rules_path: str = "Project_rules.md"
     tools: list[str] = field(
         default_factory=lambda: [
             "bash",
