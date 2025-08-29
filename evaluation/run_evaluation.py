@@ -181,8 +181,8 @@ class BenchmarkEvaluation:
                 break
             if return_code is not None and return_code != 0:
                 print("Docker exec error. Error message: {}".format(output))
-                # container.stop()
-                # container.remove()
+                container.stop()
+                container.remove()
                 exit(-1)
 
         for tar_name, src_path in [
