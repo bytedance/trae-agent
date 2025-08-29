@@ -97,11 +97,11 @@ You can also configure API keys using environment variables and store them in th
 
 ```bash
 export OPENAI_API_KEY="your-openai-api-key"
-export OPENAI_BASE_URL="your-openai-api-base-url"
+export OPENAI_BASE_URL="your-openai-base-url"
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
-export ANTHROPIC_BASE_URL="your-anthropic-api-base-url"
+export ANTHROPIC_BASE_URL="your-anthropic-base-url"
 export GOOGLE_API_KEY="your-google-api-key"
-export GOOGLE_BASE_URL="your-google-api-base-url"
+export GOOGLE_BASE_URL="your-google-base-url"
 export OPENROUTER_API_KEY="your-openrouter-api-key"
 export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
 export DOUBAO_API_KEY="your-doubao-api-key"
