@@ -46,6 +46,8 @@ class TraeAgent(BaseAgent):
         self.patch_path: str | None = None
         self.project_rules_enabled: bool = trae_agent_config.project_rules_enabled
         self.project_rules_path: str = trae_agent_config.project_rules_path
+        self.user_rules_enabled: bool = trae_agent_config.user_rules_enabled
+        self.user_rules_path: str = trae_agent_config.user_rules_path
         self.mcp_servers_config: dict[str, MCPServerConfig] | None = (
             trae_agent_config.mcp_servers_config if trae_agent_config.mcp_servers_config else None
         )
@@ -161,22 +163,25 @@ class TraeAgent(BaseAgent):
         return execution
 
     def _get_project_rules(self) -> str:
-        """Get the project rules content for TraeAgent.
+        """Get the combined project rules and user rules content for TraeAgent.
+        
         Returns:
-            str: Formatted project rules content, or empty string if disabled or loading failed
+            str: Formatted combined rules content, or empty string if disabled or loading failed
         """
-        if not self.project_rules_enabled or not self.project_path:
+        if not self.project_path:
+            return ""
+        
+        # Check if any rules are enabled
+        if not self.project_rules_enabled and not self.user_rules_enabled:
             return ""
             
-        rules_content = ProjectRulesLoader.load_project_rules(
-            self.project_path, 
-            self.project_rules_path
+        return ProjectRulesLoader.load_combined_rules(
+            project_path=self.project_path,
+            project_rules_path=self.project_rules_path,
+            user_rules_path=self.user_rules_path,
+            project_rules_enabled=self.project_rules_enabled,
+            user_rules_enabled=self.user_rules_enabled
         )
-        
-        if rules_content:
-            return ProjectRulesLoader.format_rules_for_prompt(rules_content)
-        
-        return ""
     
     def get_system_prompt(self) -> str:
         """Get the system prompt for TraeAgent."""

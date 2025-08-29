@@ -187,3 +187,4 @@ trae_config.yaml
 # markdown files
 *.md.example
 Project_rules.md
+user_rules.md

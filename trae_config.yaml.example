@@ -1,8 +1,10 @@
 agents:
     trae_agent:
         enable_lakeview: true
-        project_rules_enabled: false 
-        project_rules_path: "Project_rules.md" 
+        project_rules_enabled: true  
+        project_rules_path: "Project_rules.md"  
+        user_rules_enabled: true  
+        user_rules_path: "user_rules.md"  
         model: trae_agent_model
         max_steps: 200
         tools:
