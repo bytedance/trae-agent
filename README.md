@@ -80,6 +80,16 @@ models:
 
 **Note:** The `trae_config.yaml` file is ignored by git to protect your API keys.
 
+### Using Base URL
+In some cases, we need to use a custom URL for the api. Just add the `base_url` field after `provider`, take the following config as an example:
+
+```
+openai:
+    api_key: your_openai_api_key
+    provider: openai
+    base_url: your_openai_compatible_url
+```
+
 ### Environment Variables (Alternative)
 
 You can also configure API keys using environment variables and store them in the .env file:
