@@ -1,0 +1,19 @@
+[workspace]
+members = [
+    "core",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["ByteDance"]
+license = "MIT"
+repository = "https://github.com/ByteDance/trae-agent"
+description = "Trae Agent - A Rust implementation of the intelligent coding assistant"
+keywords = ["ai", "coding", "assistant", "agent", "llm"]
+categories = ["command-line-utilities", "development-tools"]
+
+[profile.release]
+opt-level = 3
+lto = true
