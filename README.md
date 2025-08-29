@@ -85,10 +85,11 @@ In some cases, we need to use a custom URL for the api. Just add the `base_url` 
 
 ```
 openai:
-    api_key: your_openai_api_key
+    api_key: your_openrouter_api_key
     provider: openai
-    base_url: your_openai_compatible_url
+    base_url: https://openrouter.ai/api/v1
 ```
+**Note:** For field formatting, use spaces only. Tabs (\t) are not allowed.
 
 ### Environment Variables (Alternative)
 
@@ -96,9 +97,13 @@ You can also configure API keys using environment variables and store them in th
 
 ```bash
 export OPENAI_API_KEY="your-openai-api-key"
+export OPENAI_BASE_URL="your-openai-api-base-url"
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
+export ANTHROPIC_BASE_URL="your-anthropic-api-base-url"
 export GOOGLE_API_KEY="your-google-api-key"
+export GOOGLE_BASE_URL="your-google-api-base-url"
 export OPENROUTER_API_KEY="your-openrouter-api-key"
+export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
 export DOUBAO_API_KEY="your-doubao-api-key"
 export DOUBAO_BASE_URL="https://ark.cn-beijing.volces.com/api/v3/"
 ```
