@@ -68,10 +68,21 @@ class _BashSession:
             return
         if self._process.returncode is not None:
             return
-        self._process.terminate()
+        try:
+            self._process.terminate()
 
-        # Wait until the process has truly terminated.
-        stdout, stderr = await self._process.communicate()
+            # Wait until the process has truly terminated.
+            stdout, stderr = await asyncio.wait_for(self._process.communicate(), timeout=5.0)
+        except asyncio.TimeoutError:
+            self._process.kill()
+            try:
+                # Set a shorter timeout for the cleanup process
+                stdout, stderr = await asyncio.wait_for(self._process.communicate(), timeout=2.0)
+            except asyncio.TimeoutError:
+                # If it still timeout, return None.
+                return None
+        except Exception:
+            return None
 
     async def run(self, command: str) -> ToolExecResult:
         """Execute a command in the bash shell."""
