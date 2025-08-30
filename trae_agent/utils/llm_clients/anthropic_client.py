@@ -208,6 +208,10 @@ class AnthropicClient(BaseLLMClient):
             result += tool_call_result.error
         result = result.strip()
 
+        # Provide a default error message if the tool failed but didn't provide details
+        if not tool_call_result.success and not result:
+            result = "Tool execution failed without providing error details."
+
         return anthropic.types.ToolResultBlockParam(
             tool_use_id=tool_call_result.call_id,
             type="tool_result",

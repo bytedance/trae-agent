@@ -183,3 +183,6 @@ trae_config.yaml
 # VS Code settings
 .vscode/
 !.vscode/launch.template.json
+
+# Patch selection python binary
+py312/

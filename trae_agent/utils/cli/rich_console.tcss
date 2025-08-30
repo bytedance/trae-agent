@@ -1,0 +1,36 @@
+Screen {
+    layout: vertical;
+}
+
+#execution_container {
+    height: 1fr;
+    border: solid $primary;
+}
+
+#input_container {
+    height: auto;
+    max-height: 5;
+    border: solid $secondary;
+}
+
+#footer_container {
+    height: 1;
+    background: $background 50%;
+}
+
+RichLog {
+    scrollbar-size: 1 1;
+    scrollbar-size-horizontal: 1;
+}
+
+Input {
+    height: 3;
+}
+
+.task_display {
+    background: $surface;
+    color: $text;
+    padding: 1;
+    height: auto;
+    max-height: 3;
+}

@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "openai>=1.86.0",
-    "anthropic>=0.54.0",
+    "anthropic>=0.54.0,<=0.60.0",
     "click>=8.0.0",
     "google-genai>=1.24.0",
     "jsonpath-ng>=1.7.0",
@@ -35,7 +35,9 @@ test = [
 ]
 evaluation = [
     "datasets>=3.6.0",
-    "docker>=7.1.0"
+    "docker>=7.1.0",
+    "pexpect>=4.9.0",
+    "unidiff>=0.7.5",
 ]
 
 [project.scripts]
