@@ -18,6 +18,7 @@ from rich.table import Table
 from trae_agent.agent import Agent
 from trae_agent.utils.cli import CLIConsole, ConsoleFactory, ConsoleMode, ConsoleType
 from trae_agent.utils.config import Config, TraeAgentConfig
+from trae_agent.utils.rules_manager import RulesManager
 
 # Load environment variables
 _ = load_dotenv()
@@ -515,6 +516,138 @@ def tools():
             tools_table.add_row(tool_name, f"[red]Error loading: {e}[/red]")
 
     console.print(tools_table)
+
+
+@cli.group()
+def rules():
+    """Manage project and user rules files."""
+    pass
+
+
+@rules.command()
+@click.argument("file_type", type=click.Choice(["project", "user"], case_sensitive=False))
+@click.option("--working-dir", "-w", help="Working directory for the rules files")
+def list(file_type: str, working_dir: str | None = None):
+    """List all rules in the specified file.
+    
+    FILE_TYPE: Type of rules file to list (project or user)
+    """
+    try:
+        manager = RulesManager(working_dir)
+        if not manager.validate_permissions(file_type.lower()):
+            sys.exit(1)
+        manager.list_rules(file_type.lower())
+    except Exception as e:
+        console.print(f"[red]Error listing rules: {e}[/red]")
+        sys.exit(1)
+
+
+@rules.command()
+@click.argument("file_type", type=click.Choice(["project", "user"], case_sensitive=False))
+@click.argument("section")
+@click.argument("rule")
+@click.option("--working-dir", "-w", help="Working directory for the rules files")
+def add(file_type: str, section: str, rule: str, working_dir: str | None = None):
+    """Add a new rule to the specified section.
+    
+    FILE_TYPE: Type of rules file (project or user)
+    SECTION: Section name to add the rule to
+    RULE: Rule text to add
+    """
+    try:
+        manager = RulesManager(working_dir)
+        if not manager.validate_permissions(file_type.lower()):
+            sys.exit(1)
+        manager.add_rule(file_type.lower(), section, rule)
+    except Exception as e:
+        console.print(f"[red]Error adding rule: {e}[/red]")
+        sys.exit(1)
+
+
+@rules.command()
+@click.argument("file_type", type=click.Choice(["project", "user"], case_sensitive=False))
+@click.argument("section")
+@click.argument("rule_pattern")
+@click.option("--working-dir", "-w", help="Working directory for the rules files")
+def remove(file_type: str, section: str, rule_pattern: str, working_dir: str | None = None):
+    """Remove a rule from the specified section.
+    
+    FILE_TYPE: Type of rules file (project or user)
+    SECTION: Section name to remove the rule from
+    RULE_PATTERN: Pattern to match the rule to remove
+    """
+    try:
+        manager = RulesManager(working_dir)
+        if not manager.validate_permissions(file_type.lower()):
+            sys.exit(1)
+        manager.remove_rule(file_type.lower(), section, rule_pattern)
+    except Exception as e:
+        console.print(f"[red]Error removing rule: {e}[/red]")
+        sys.exit(1)
+
+
+@rules.command()
+@click.argument("file_type", type=click.Choice(["project", "user"], case_sensitive=False))
+@click.argument("section")
+@click.argument("old_pattern")
+@click.argument("new_rule")
+@click.option("--working-dir", "-w", help="Working directory for the rules files")
+def update(file_type: str, section: str, old_pattern: str, new_rule: str, working_dir: str | None = None):
+    """Update an existing rule in the specified section.
+    
+    FILE_TYPE: Type of rules file (project or user)
+    SECTION: Section name containing the rule
+    OLD_PATTERN: Pattern to match the rule to update
+    NEW_RULE: New rule text
+    """
+    try:
+        manager = RulesManager(working_dir)
+        if not manager.validate_permissions(file_type.lower()):
+            sys.exit(1)
+        manager.update_rule(file_type.lower(), section, old_pattern, new_rule)
+    except Exception as e:
+        console.print(f"[red]Error updating rule: {e}[/red]")
+        sys.exit(1)
+
+
+@rules.command(name="add-section")
+@click.argument("file_type", type=click.Choice(["project", "user"], case_sensitive=False))
+@click.argument("section")
+@click.option("--working-dir", "-w", help="Working directory for the rules files")
+def add_section(file_type: str, section: str, working_dir: str | None = None):
+    """Add a new section to the rules file.
+    
+    FILE_TYPE: Type of rules file (project or user)
+    SECTION: Section name to add
+    """
+    try:
+        manager = RulesManager(working_dir)
+        if not manager.validate_permissions(file_type.lower()):
+            sys.exit(1)
+        manager.add_section(file_type.lower(), section)
+    except Exception as e:
+        console.print(f"[red]Error adding section: {e}[/red]")
+        sys.exit(1)
+
+
+@rules.command(name="remove-section")
+@click.argument("file_type", type=click.Choice(["project", "user"], case_sensitive=False))
+@click.argument("section")
+@click.option("--working-dir", "-w", help="Working directory for the rules files")
+def remove_section(file_type: str, section: str, working_dir: str | None = None):
+    """Remove a section from the rules file.
+    
+    FILE_TYPE: Type of rules file (project or user)
+    SECTION: Section name to remove
+    """
+    try:
+        manager = RulesManager(working_dir)
+        if not manager.validate_permissions(file_type.lower()):
+            sys.exit(1)
+        manager.remove_section(file_type.lower(), section)
+    except Exception as e:
+        console.print(f"[red]Error removing section: {e}[/red]")
+        sys.exit(1)
 
 
 def main():
