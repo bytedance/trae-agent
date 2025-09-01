@@ -498,7 +498,19 @@ impl<P: ProviderConfig + Send + Sync> LLMProvider for OpenAICompatibleClient<P> 
         };
         
         let response = self.make_api_call(request).await?;
-        self.parse_response(response)
+        let llm_response = self.parse_response(response.clone())?;
+        
+        // Add the assistant's response to chat history
+        if let Some(choice) = response.choices.first() {
+            let assistant_message = OpenAIMessage {
+                role: choice.message.role.clone(),
+                content: choice.message.content.as_ref().map(|c| serde_json::Value::String(c.clone())),
+                tool_calls: choice.message.tool_calls.clone(),
+            };
+            self.chat_history.push(assistant_message);
+        }
+        
+        Ok(llm_response)
     }
 
     fn get_provider_name(&self) -> &str {
@@ -516,6 +528,9 @@ impl<P: ProviderConfig + Send + Sync> LLMProvider for OpenAICompatibleClient<P> 
         tools: Option<Vec<Box<dyn Tool>>>,
         reuse_history: Option<bool>,
     ) -> LLMResult<crate::llm::LLMStream> {
+        // Note: For streaming responses, chat history is not automatically updated.
+        // The caller should accumulate the complete response from the stream and 
+        // manually add it to chat history using set_chat_history() if needed.
         let parsed_messages = self.convert_messages(&messages);
         
         let mut all_messages = Vec::new();

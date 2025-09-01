@@ -373,7 +373,8 @@ impl LLMProvider for OpenAIClient {
             reasoning_tokens: 0,
         });
 
-        Ok(LLMResponse {
+        // Create the response
+        let llm_response = LLMResponse {
             content: choice.message.content.as_ref()
                 .map(|c| vec![ContentItem::text(c.clone())])
                 .unwrap_or_default(),
@@ -385,7 +386,18 @@ impl LLMProvider for OpenAIClient {
             },
             model: Some(response.model),
             usage,
-        })
+        };
+
+        // Add the assistant's response to chat history
+        let assistant_message = OpenAIMessage {
+            role: "assistant".to_string(),
+            content: choice.message.content.clone(),
+            tool_calls: choice.message.tool_calls.clone(),
+            tool_call_id: None,
+        };
+        self.message_history.push(assistant_message);
+
+        Ok(llm_response)
     }
 
     async fn chat_stream(
@@ -395,6 +407,9 @@ impl LLMProvider for OpenAIClient {
         tools: Option<Vec<Box<dyn Tool>>>,
         reuse_history: Option<bool>,
     ) -> LLMResult<LLMStream> {
+        // Note: For streaming responses, chat history is not automatically updated.
+        // The caller should accumulate the complete response from the stream and 
+        // manually add it to chat history using set_chat_history() if needed.
         let parsed_messages = self.parse_messages(&messages);
         
         let mut all_messages = Vec::new();
