@@ -6,22 +6,21 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use futures::{Stream, StreamExt, stream};
-use std::pin::Pin;
+
 
 use crate::{
     llm::{
         llm_provider::LLMProvider,
         error::{LLMError, LLMResult},
         retry_utils::{retry_with_backoff, RetryConfig},
-        LLMMessage, LLMResponse, LLMUsage, LLMStream, StreamChunk,
+        LLMMessage, LLMResponse, LLMUsage, LLMStream, StreamChunk, FinishReason,
     },
     config::ModelConfig,
 };
 use crate::tools::{Tool, ToolCall, ToolResult, ToolSchema};
 
 #[derive(Debug, Clone, Serialize)]
-struct OpenAIRequest {
+struct OpenAIResponsesRequest {
     model: String,
     messages: Vec<OpenAIMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,7 +70,7 @@ struct OpenAIResponse {
 #[derive(Debug, Deserialize)]
 struct OpenAIChoice {
     message: OpenAIResponseMessage,
-    finish_reason: Option<String>,
+    finish_reason: Option<FinishReason>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,7 +96,7 @@ struct OpenAIStreamResponse {
 #[derive(Debug, Deserialize)]
 struct OpenAIStreamChoice {
     delta: OpenAIStreamDelta,
-    finish_reason: Option<String>,
+    finish_reason: Option<FinishReason>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,8 +136,8 @@ impl OpenAIClient {
         })
     }
 
-    async fn create_response(&self, request: OpenAIRequest) -> LLMResult<OpenAIResponse> {
-        let url = format!("{}/chat/completions", self.base_url);
+    async fn create_response(&self, request: OpenAIResponsesRequest) -> LLMResult<OpenAIResponse> {
+        let url = format!("{}/responses", self.base_url);
         
         let response = self
             .client
@@ -162,8 +161,8 @@ impl OpenAIClient {
         response.json().await.map_err(LLMError::HttpError)
     }
 
-    async fn create_stream_response(&self, request: OpenAIRequest) -> LLMResult<LLMStream> {
-        let url = format!("{}/chat/completions", self.base_url);
+    async fn create_stream_response(&self, request: OpenAIResponsesRequest) -> LLMResult<LLMStream> {
+        let url = format!("{}/responses", self.base_url);
         
         let response = self
             .client
@@ -184,21 +183,26 @@ impl OpenAIClient {
             });
         }
 
-        let stream = response.bytes_stream().map(|chunk_result| {
-            match chunk_result {
-                Ok(chunk) => {
-                    let chunk_str = String::from_utf8_lossy(&chunk);
-                    self.parse_sse_chunk(&chunk_str)
-                },
-                Err(e) => Err(LLMError::HttpError(e))
+        use futures::stream;
+        
+        let text = response.text().await.map_err(LLMError::HttpError)?;
+        let chunks: Vec<_> = text.lines().filter_map(|line| {
+            if line.starts_with("data: ") {
+                let data = &line[6..];
+                if data == "[DONE]" {
+                    return None;
+                }
+                match self.parse_sse_chunk(line) {
+                    Ok(Some(chunk)) => Some(Ok(chunk)),
+                    Ok(None) => None,
+                    Err(e) => Some(Err(e))
+                }
+            } else {
+                None
             }
-        }).filter_map(|result| async move {
-            match result {
-                Ok(Some(chunk)) => Some(Ok(chunk)),
-                Ok(None) => None,
-                Err(e) => Some(Err(e))
-            }
-        });
+        }).collect();
+        
+        let stream = stream::iter(chunks);
 
         Ok(Box::pin(stream))
     }
@@ -215,8 +219,12 @@ impl OpenAIClient {
                     Ok(response) => {
                         if let Some(choice) = response.choices.first() {
                             return Ok(Some(StreamChunk {
-                                content: choice.delta.content.clone(),
-                                finish_reason: choice.finish_reason.clone(),
+                                content: choice.delta.content.as_ref().map(|c| vec![HashMap::from([("text".to_string(), c.clone())])]),
+                                finish_reason: choice.finish_reason.as_ref().map(|fr| match fr {
+                                    FinishReason::Stop => FinishReason::Stop,
+                                    FinishReason::ToolCalls => FinishReason::ToolCalls,
+                                    _ => FinishReason::Stop,
+                                }),
                                 model: response.model.clone(),
                                 tool_calls: choice.delta.tool_calls.as_ref().map(|calls| {
                                     calls.iter().map(|call| {
@@ -254,7 +262,9 @@ impl OpenAIClient {
                 "tool" => self.parse_tool_result(msg.tool_result.as_ref().unwrap()),
                 _ => OpenAIMessage {
                     role: msg.role.clone(),
-                    content: msg.content.as_ref().and_then(|c| c.get("text")).cloned(),
+                    content: msg.content.as_ref().and_then(|content_vec| {
+                        content_vec.first().and_then(|content_map| content_map.get("text")).cloned()
+                    }),
                     tool_calls: msg.tool_call.as_ref().map(|tc| vec![OpenAIToolCall {
                         id: tc.call_id.clone(),
                         tool_type: "function".to_string(),
@@ -270,9 +280,14 @@ impl OpenAIClient {
     }
 
     fn parse_tool_result(&self, tool_result: &ToolResult) -> OpenAIMessage {
+        let content_str = if tool_result.success {
+            tool_result.result.clone().unwrap_or_default()
+        } else {
+            tool_result.error.clone().unwrap_or_default()
+        };
         OpenAIMessage {
             role: "tool".to_string(),
-            content: Some(tool_result.content.clone()),
+            content: Some(content_str),
             tool_calls: None,
             tool_call_id: Some(tool_result.call_id.clone()),
         }
@@ -307,18 +322,18 @@ impl LLMProvider for OpenAIClient {
                 .collect()
         });
 
-        let request = OpenAIRequest {
+        let request = OpenAIResponsesRequest {
             model: model_config.model.clone(),
             messages: all_messages,
             tools: tool_schemas,
-            temperature: Some(model_config.temperature),
-            top_p: Some(model_config.top_p),
-            max_tokens: Some(model_config.max_tokens),
+            temperature: model_config.temperature,
+            top_p: model_config.top_p,
+            max_tokens: model_config.max_tokens,
             stream: None,
         };
 
         let retry_config = RetryConfig {
-            max_retries: model_config.max_retries,
+            max_retries: model_config.max_retries.unwrap_or(3),
             ..Default::default()
         };
 
@@ -359,9 +374,13 @@ impl LLMProvider for OpenAIClient {
         });
 
         Ok(LLMResponse {
-            content: choice.message.content.unwrap_or_default(),
+            content: choice.message.content.as_ref().map(|c| vec![HashMap::from([("text".to_string(), c.clone())])]).unwrap_or_default(),
             tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
-            finish_reason: choice.finish_reason,
+            finish_reason: match choice.finish_reason.unwrap_or(FinishReason::Stop) {
+                FinishReason::Stop => FinishReason::Stop,
+                FinishReason::ToolCalls => FinishReason::ToolCalls,
+                _ => FinishReason::Stop,
+            },
             model: Some(response.model),
             usage,
         })
@@ -389,13 +408,13 @@ impl LLMProvider for OpenAIClient {
                 .collect()
         });
 
-        let request = OpenAIRequest {
+        let request = OpenAIResponsesRequest {
             model: model_config.model.clone(),
             messages: all_messages,
             tools: tool_schemas,
-            temperature: Some(model_config.temperature),
-            top_p: Some(model_config.top_p),
-            max_tokens: Some(model_config.max_tokens),
+            temperature: model_config.temperature,
+            top_p: model_config.top_p,
+            max_tokens: model_config.max_tokens,
             stream: Some(true),
         };
 

@@ -4,7 +4,6 @@
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -13,7 +12,7 @@ use crate::config::ModelConfig;
 use crate::llm::error::{LLMError, LLMResult};
 use crate::llm::retry_utils::retry_with_backoff;
 use crate::llm::{LLMMessage, LLMResponse, LLMUsage};
-use crate::tools::{Tool, ToolCall, ToolResult};
+use crate::tools::{Tool, ToolCall};
 
 /// Provider configuration trait for OpenAI-compatible clients
 pub trait ProviderConfig {
@@ -36,6 +35,8 @@ struct OpenAIRequest {
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -88,6 +89,26 @@ struct OpenAIUsage {
     total_tokens: i32,
 }
 
+/// OpenAI-compatible streaming response structures
+#[derive(Debug, Deserialize)]
+struct OpenAIStreamResponse {
+    choices: Vec<OpenAIStreamChoice>,
+    model: Option<String>,
+    usage: Option<OpenAIUsage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIStreamChoice {
+    delta: OpenAIStreamDelta,
+    finish_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIStreamDelta {
+    content: Option<String>,
+    tool_calls: Option<Vec<OpenAIToolCall>>,
+}
+
 /// Generic OpenAI-compatible client
 pub struct OpenAICompatibleClient<P: ProviderConfig> {
     client: Client,
@@ -135,32 +156,36 @@ impl<P: ProviderConfig> OpenAICompatibleClient<P> {
         
         // Add provider-specific headers
         for (key, value) in self.provider.get_extra_headers() {
-            let header_name = reqwest::header::HeaderName::from_str(&key).unwrap();
-            let header_value = reqwest::header::HeaderValue::from_str(&value).unwrap();
-            headers.insert(header_name, header_value);
+            if let (Ok(header_name), Ok(header_value)) = (
+                key.parse::<reqwest::header::HeaderName>(),
+                value.parse::<reqwest::header::HeaderValue>()
+            ) {
+                headers.insert(header_name, header_value);
+            }
         }
         
         // Add extra headers from config
          for (key, value) in &self.config.extra_headers {
              headers.insert(
-                 key.parse().map_err(|e| LLMError::HttpError(format!("Invalid header key: {}", e)))?,
-                 value.parse().map_err(|e| LLMError::HttpError(format!("Invalid header value: {}", e)))?,
+                 key.parse::<reqwest::header::HeaderName>().map_err(|e| LLMError::ConfigError(format!("Invalid header key: {}", e)))?,
+                 value.parse::<reqwest::header::HeaderValue>().map_err(|e| LLMError::ConfigError(format!("Invalid header value: {}", e)))?,
              );
          }
 
-         let response = retry_with_backoff(
-             || async {
-                 self.client
-                     .post(&url)
-                     .headers(headers.clone())
-                     .json(&request)
-                     .send()
-                     .await
-             },
-             &crate::llm::retry_utils::RetryConfig::default(),
-             self.config.max_retries,
-         )
-         .await?;
+                 let response = retry_with_backoff(
+            || async {
+                self.client
+                    .post(&url)
+                    .headers(headers.clone())
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(LLMError::HttpError)
+            },
+            crate::llm::retry_utils::RetryConfig::default(),
+            self.provider.get_provider_name(),
+        )
+        .await?;
 
          if !response.status().is_success() {
              let status = response.status();
@@ -171,23 +196,144 @@ impl<P: ProviderConfig> OpenAICompatibleClient<P> {
              });
          }
 
-         let response_text = response.text().await?;
-         
-         serde_json::from_str::<OpenAIResponse>(&response_text)
-             .map_err(LLMError::JsonError)
+                 let response_text = response.text().await?;
+        
+        serde_json::from_str::<OpenAIResponse>(&response_text)
+            .map_err(LLMError::JsonError)
+    }
+
+    async fn make_streaming_api_call(&self, request: OpenAIRequest) -> LLMResult<reqwest::Response> {
+        let base_url = self.config.model_provider.base_url
+            .as_ref()
+            .ok_or_else(|| LLMError::ConfigError("Base URL not configured".to_string()))?;
+        
+        let url = format!("{}/chat/completions", base_url);
+        
+        let mut headers = reqwest::header::HeaderMap::new();
+        let api_key = self.config.model_provider.api_key
+            .as_ref()
+            .ok_or_else(|| LLMError::AuthError("API key not configured".to_string()))?;
+        headers.insert(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {}", api_key)
+                .parse()
+                .map_err(|e| LLMError::AuthError(format!("Invalid API key: {}", e)))?,
+        );
+        headers.insert(
+            reqwest::header::CONTENT_TYPE,
+            "application/json".parse().unwrap(),
+        );
+        
+        // Add provider-specific headers
+        for (key, value) in self.provider.get_extra_headers() {
+            if let (Ok(header_name), Ok(header_value)) = (
+                key.parse::<reqwest::header::HeaderName>(),
+                value.parse::<reqwest::header::HeaderValue>()
+            ) {
+                headers.insert(header_name, header_value);
+            }
+        }
+        
+        // Add extra headers from config
+        for (key, value) in &self.config.extra_headers {
+            headers.insert(
+                key.parse::<reqwest::header::HeaderName>().map_err(|e| LLMError::ConfigError(format!("Invalid header key: {}", e)))?,
+                value.parse::<reqwest::header::HeaderValue>().map_err(|e| LLMError::ConfigError(format!("Invalid header value: {}", e)))?,
+            );
+        }
+
+        let response = retry_with_backoff(
+            || async {
+                self.client
+                    .post(&url)
+                    .headers(headers.clone())
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(LLMError::HttpError)
+            },
+            crate::llm::retry_utils::RetryConfig::default(),
+            self.provider.get_provider_name(),
+        )
+        .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(LLMError::ApiError {
+                status_code: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        Ok(response)
+    }
+
+    fn parse_sse_chunk(&self, chunk: &str) -> LLMResult<Option<crate::llm::StreamChunk>> {
+        for line in chunk.lines() {
+            if line.starts_with("data: ") {
+                let data = &line[6..];
+                if data == "[DONE]" {
+                    return Ok(None);
+                }
+                
+                match serde_json::from_str::<OpenAIStreamResponse>(data) {
+                    Ok(response) => {
+                        if let Some(choice) = response.choices.first() {
+                            return Ok(Some(crate::llm::StreamChunk {
+                                content: choice.delta.content.as_ref().map(|c| vec![HashMap::from([("text".to_string(), c.clone())])]),
+                                finish_reason: choice.finish_reason.as_ref().map(|fr| match fr.as_str() {
+                                    "stop" => crate::llm::FinishReason::Stop,
+                                    "tool_calls" => crate::llm::FinishReason::ToolCalls,
+                                    "content_filter" => crate::llm::FinishReason::ContentFilter,
+                                    _ => crate::llm::FinishReason::Stop,
+                                }),
+                                model: response.model.clone(),
+                                tool_calls: choice.delta.tool_calls.as_ref().map(|calls| {
+                                    calls.iter().map(|call| {
+                                        let arguments: HashMap<String, serde_json::Value> = 
+                                            serde_json::from_str(&call.function.arguments)
+                                                .unwrap_or_default();
+                                        ToolCall {
+                                            name: call.function.name.clone(),
+                                            call_id: call.id.clone(),
+                                            arguments,
+                                            id: Some(call.id.clone()),
+                                        }
+                                    }).collect()
+                                }),
+                                usage: response.usage.map(|u| crate::llm::LLMUsage {
+                                    input_tokens: u.prompt_tokens,
+                                    output_tokens: u.completion_tokens,
+                                    cache_creation_input_tokens: 0,
+                                    cache_read_input_tokens: 0,
+                                    reasoning_tokens: 0,
+                                }),
+                            }));
+                        }
+                    },
+                    Err(_) => continue,
+                }
+            }
+        }
+        Ok(None)
     }
 
     fn convert_messages(&self, messages: &[LLMMessage]) -> Vec<OpenAIMessage> {
         messages.iter().map(|msg| {
             let content = msg.content
                 .as_ref()
-                .and_then(|c| c.get("text"))
-                .cloned()
+                .and_then(|content_vec| {
+                    content_vec.iter()
+                        .find(|item| item.contains_key("text"))
+                        .and_then(|item| item.get("text"))
+                        .cloned()
+                })
                 .unwrap_or_default();
             
             let tool_calls = msg.tool_call.as_ref().map(|tc| {
                 vec![OpenAIToolCall {
-                    id: tc.id.clone(),
+                    id: tc.id.clone().unwrap_or_else(|| tc.call_id.clone()),
                     call_type: "function".to_string(),
                     function: OpenAIFunction {
                         name: tc.name.clone(),
@@ -232,11 +378,26 @@ impl<P: ProviderConfig> OpenAICompatibleClient<P> {
             reasoning_tokens: 0,
         });
         
+        // Convert content string to Vec<HashMap<String, String>>
+        let content_vec = if content.is_empty() {
+            vec![]
+        } else {
+            vec![HashMap::from([("text".to_string(), content)])]
+        };
+        
+        // Convert finish_reason string to FinishReason enum
+        let finish_reason = match choice.finish_reason.as_deref() {
+            Some("stop") => crate::llm::FinishReason::Stop,
+            Some("tool_calls") => crate::llm::FinishReason::ToolCalls,
+            Some("content_filter") => crate::llm::FinishReason::ContentFilter,
+            _ => crate::llm::FinishReason::Stop,
+        };
+        
         Ok(LLMResponse {
-            content,
+            content: content_vec,
             usage,
             model: response.model,
-            finish_reason: choice.finish_reason,
+            finish_reason,
             tool_calls,
         })
     }
@@ -286,6 +447,7 @@ impl<P: ProviderConfig + Send + Sync> LLMProvider for OpenAICompatibleClient<P> 
             temperature: model_config.temperature,
             top_p: model_config.top_p,
             max_tokens: model_config.max_tokens,
+            stream: None, // Non-streaming for regular chat
         };
         
         let response = self.make_api_call(request).await?;
@@ -298,5 +460,156 @@ impl<P: ProviderConfig + Send + Sync> LLMProvider for OpenAICompatibleClient<P> 
 
     fn supports_tool_calling(&self, model_name: &str) -> bool {
         self.provider.supports_tool_calling(model_name)
+    }
+
+    async fn chat_stream(
+        &mut self,
+        messages: Vec<LLMMessage>,
+        model_config: &ModelConfig,
+        tools: Option<Vec<Box<dyn Tool>>>,
+        reuse_history: Option<bool>,
+    ) -> LLMResult<crate::llm::LLMStream> {
+        if reuse_history.unwrap_or(true) {
+            self.chat_history.clear();
+        }
+        self.chat_history.extend(messages);
+        
+        let openai_messages = self.convert_messages(&self.chat_history);
+        
+        let tool_schemas = if self.provider.supports_tool_calling(&model_config.model) {
+            tools.map(|tools| {
+                tools.iter().map(|tool| {
+                    serde_json::json!({
+                        "type": "function",
+                        "function": {
+                            "name": tool.get_name(),
+                            "description": tool.get_description(),
+                            "parameters": tool.get_input_schema()
+                        }
+                    })
+                }).collect::<Vec<_>>()
+            })
+        } else {
+            None
+        };
+        
+        let request = OpenAIRequest {
+            model: model_config.model.clone(),
+            messages: openai_messages,
+            tools: tool_schemas,
+            temperature: model_config.temperature,
+            top_p: model_config.top_p,
+            max_tokens: model_config.max_tokens,
+            stream: Some(true), // Enable streaming
+        };
+        
+        let response = self.make_streaming_api_call(request).await?;
+        
+        use futures::stream;
+        
+        // Read the entire response body first
+        let response_text = response.text().await.map_err(LLMError::HttpError)?;
+        
+        // Parse lines and collect chunks
+        let mut chunks = Vec::new();
+        
+        for line in response_text.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            
+            if line.starts_with("data: ") {
+                let data = &line[6..];
+                if data == "[DONE]" {
+                    break;
+                }
+                
+                match self.parse_sse_chunk(line) {
+                    Ok(Some(chunk)) => chunks.push(Ok(chunk)),
+                    Ok(None) => continue,
+                    Err(e) => chunks.push(Err(e)),
+                }
+            } else if line.starts_with(": ") {
+                // Comment line (keepalive), ignore per SSE spec
+                continue;
+            }
+        }
+        
+        let chunk_stream = stream::iter(chunks);
+        Ok(Box::pin(chunk_stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::ModelProvider;
+    
+    #[derive(Debug)]
+    struct TestProvider;
+    
+    impl ProviderConfig for TestProvider {
+        fn get_service_name(&self) -> &str {
+            "test"
+        }
+        
+        fn get_provider_name(&self) -> &str {
+            "test_provider"
+        }
+        
+        fn get_extra_headers(&self) -> HashMap<String, String> {
+            HashMap::new()
+        }
+        
+        fn supports_tool_calling(&self, _model_name: &str) -> bool {
+            true
+        }
+    }
+    
+    #[test]
+    fn test_parse_sse_chunk() {
+        let provider = TestProvider;
+        let model_provider = ModelProvider::new("test".to_string())
+            .with_api_key("test_key".to_string())
+            .with_base_url("https://api.test.com/v1".to_string());
+        let config = ModelConfig::new("test-model".to_string(), model_provider);
+        
+        let client = OpenAICompatibleClient::new(&config, provider).unwrap();
+        
+        // Test parsing a valid SSE chunk
+        let chunk_data = r#"data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}],"model":"test-model"}"#;
+        let result = client.parse_sse_chunk(chunk_data).unwrap();
+        
+        assert!(result.is_some());
+        let chunk = result.unwrap();
+        assert!(chunk.content.is_some());
+        assert_eq!(chunk.content.as_ref().unwrap()[0].get("text"), Some(&"Hello".to_string()));
+        
+        // Test parsing [DONE] marker
+        let done_data = "data: [DONE]";
+        let result = client.parse_sse_chunk(done_data).unwrap();
+        assert!(result.is_none());
+        
+        // Test invalid JSON
+        let invalid_data = "data: {invalid json}";
+        let result = client.parse_sse_chunk(invalid_data).unwrap();
+        assert!(result.is_none());
+    }
+    
+    #[test]
+    fn test_streaming_request_structure() {
+        let request = OpenAIRequest {
+            model: "test-model".to_string(),
+            messages: vec![],
+            tools: None,
+            temperature: Some(0.7),
+            top_p: None,
+            max_tokens: Some(100),
+            stream: Some(true),
+        };
+        
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"stream\":true"));
+        assert!(json.contains("\"model\":\"test-model\""));
     }
 }
