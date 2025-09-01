@@ -16,15 +16,32 @@
 */
 
 use crate::llm;
+use crate::tools;
+use crate::config;
 
 // The follow is an agent base class
-pub struct Agent{
-    llm_client: Box<dyn llm::LLMProvider>,
-    max_step: u32,
+// Base agent is a struct for every agnet
+// for example: a trae agent should have a base agent & implement the method of 
+// the agents
+pub struct BaeAgent{
 
-    task: String, 
-    
+    pub task: String,
+    pub execution_record: AgentRecord, //an agent record that save the result
+
+    llm_client: Box<dyn llm::LLMProvider>,
+    model_config: config::ModelConfig,
+    max_step: u32,
+    tools: Vec<Box<dyn tools::Tool>>,
+
+
 
 }
 
+struct AgentRecord {
 
+} 
+
+
+pub trait Agent{
+    fn run(&mut self) -> AgentRecord;
+}
