@@ -3,29 +3,30 @@
 
 use std::collections::HashMap;
 use crate::llm::openai_compatible_base::{OpenAICompatibleClient, ProviderConfig};
-use crate::llm::config::ModelConfig;
+use crate::config::ModelConfig;
 use crate::llm::error::LLMResult;
 
-/// OpenRouter provider configuration
-pub struct OpenRouterProvider;
+/// OpenAI compatible provider configuration
+pub struct OpenAICompatibleProvider;
 
-impl ProviderConfig for OpenRouterProvider {
+impl ProviderConfig for OpenAICompatibleProvider {
     fn get_service_name(&self) -> &str {
-        "OpenRouter"
+        "OpenAI Compatible"
     }
 
     fn get_provider_name(&self) -> &str {
-        "openrouter"
+        "openai_compatible"
     }
 
     fn get_extra_headers(&self) -> HashMap<String, String> {
         let mut headers = HashMap::new();
         
-        if let Ok(site_url) = std::env::var("OPENROUTER_SITE_URL") {
+        // Add common OpenAI compatible headers if available
+        if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL") {
             headers.insert("HTTP-Referer".to_string(), site_url);
         }
         
-        if let Ok(site_name) = std::env::var("OPENROUTER_SITE_NAME") {
+        if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME") {
             headers.insert("X-Title".to_string(), site_name);
         }
         
@@ -43,15 +44,18 @@ impl ProviderConfig for OpenRouterProvider {
     }
 }
 
-/// OpenRouter client
-pub type OpenRouterClient = OpenAICompatibleClient<OpenRouterProvider>;
+/// OpenAI compatible client
+pub type OpenAICompatibleGenericClient = OpenAICompatibleClient<OpenAICompatibleProvider>;
 
-impl OpenRouterClient {
-    pub fn with_config(mut model_config: ModelConfig) -> LLMResult<Self> {
-        // Set default base URL if not provided
+impl OpenAICompatibleGenericClient {
+    pub fn with_config(model_config: ModelConfig) -> LLMResult<Self> {
+        // Set default base URL if not provided (this is just an example, should be set by user)
         if model_config.model_provider.base_url.is_none() {
-            model_config.model_provider.base_url = Some("https://openrouter.ai/api/v1".to_string());
+            // No default URL - user must provide one
+            return Err(crate::llm::error::LLMError::ConfigError(
+                "Base URL must be provided for OpenAI compatible client".to_string()
+            ));
         }
-        OpenAICompatibleClient::new(&model_config, OpenRouterProvider)
+        OpenAICompatibleClient::new(&model_config, OpenAICompatibleProvider)
     }
 }

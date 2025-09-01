@@ -12,21 +12,21 @@ pub mod llm_provider;
 pub mod retry_utils;
 pub mod openai_client;
 pub mod openai_compatible_base;
-pub mod openrouter_client;
+pub mod openai_compatible_client;
 
 // Re-exports
 pub use error::{LLMError, LLMResult};
 pub use llm_provider::{LLMProvider};
 pub use openai_client::OpenAIClient;
 pub use openai_compatible_base::{OpenAICompatibleClient, ProviderConfig};
-pub use openrouter_client::{OpenRouterClient, OpenRouterProvider};
+pub use openai_compatible_client::{OpenAICompatibleGenericClient, OpenAICompatibleProvider};
 
 
 /// Standard message format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMMessage {
     pub role: String,
-    pub content: Option<HashMap<String, String>>,
+    pub content: Option<Vec<HashMap<String, String>>>,
     pub tool_call: Option<ToolCall>,
     pub tool_result: Option<ToolResult>,
 }
@@ -99,21 +99,30 @@ impl fmt::Display for LLMUsage {
     }
 }
 
+///Enum of finish reason
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FinishReason {
+    Stop,
+    ToolCalls,
+    Error,
+    ContentFilter,
+}
+
 /// Standard LLM response format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMResponse {
-    pub content: String,
+    pub content: Vec<HashMap<String, String>>,
     pub usage: Option<LLMUsage>,
     pub model: Option<String>,
-    pub finish_reason: Option<String>,
+    pub finish_reason: FinishReason,
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
 /// Stream chunk for streaming responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamChunk {
-    pub content: Option<String>,
-    pub finish_reason: Option<String>,
+    pub content: Option<Vec<HashMap<String, String>>>,
+    pub finish_reason: Option<FinishReason>,
     pub model: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub usage: Option<LLMUsage>,
@@ -156,7 +165,7 @@ mod tests {
     fn test_serialization() {
         let message = LLMMessage {
             role: "user".to_string(),
-            content: Some(HashMap::from([("text".to_string(), "Hello".to_string())])),
+            content: Some(vec![HashMap::from([("text".to_string(), "Hello".to_string())])]),
             tool_call: None,
             tool_result: None,
         };
