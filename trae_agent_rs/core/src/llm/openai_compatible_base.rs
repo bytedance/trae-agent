@@ -11,7 +11,7 @@ use crate::llm::llm_provider::LLMProvider;
 use crate::config::ModelConfig;
 use crate::llm::error::{LLMError, LLMResult};
 use crate::llm::retry_utils::retry_with_backoff;
-use crate::llm::{LLMMessage, LLMResponse, LLMUsage};
+use crate::llm::{LLMMessage, LLMResponse, LLMUsage, ContentItem, MessageRole};
 use crate::tools::{Tool, ToolCall};
 
 /// Provider configuration trait for OpenAI-compatible clients
@@ -39,15 +39,16 @@ struct OpenAIRequest {
     stream: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct OpenAIMessage {
     role: String,
-    content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCall>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct OpenAIToolCall {
     id: String,
     #[serde(rename = "type")]
@@ -55,34 +56,34 @@ struct OpenAIToolCall {
     function: OpenAIFunction,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct OpenAIFunction {
     name: String,
     arguments: String,
 }
 
 /// OpenAI-compatible response structure
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct OpenAIResponse {
     choices: Vec<OpenAIChoice>,
     usage: Option<OpenAIUsage>,
     model: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct OpenAIChoice {
     message: OpenAIResponseMessage,
     finish_reason: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct OpenAIResponseMessage {
     role: String,
     content: Option<String>,
     tool_calls: Option<Vec<OpenAIToolCall>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct OpenAIUsage {
     prompt_tokens: i32,
     completion_tokens: i32,
@@ -90,20 +91,20 @@ struct OpenAIUsage {
 }
 
 /// OpenAI-compatible streaming response structures
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct OpenAIStreamResponse {
     choices: Vec<OpenAIStreamChoice>,
     model: Option<String>,
     usage: Option<OpenAIUsage>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct OpenAIStreamChoice {
     delta: OpenAIStreamDelta,
     finish_reason: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct OpenAIStreamDelta {
     content: Option<String>,
     tool_calls: Option<Vec<OpenAIToolCall>>,
@@ -114,7 +115,7 @@ pub struct OpenAICompatibleClient<P: ProviderConfig> {
     client: Client,
     config: ModelConfig,
     provider: P,
-    chat_history: Vec<LLMMessage>,
+    chat_history: Vec<OpenAIMessage>,
 }
 
 impl<P: ProviderConfig> OpenAICompatibleClient<P> {
@@ -281,7 +282,7 @@ impl<P: ProviderConfig> OpenAICompatibleClient<P> {
                     Ok(response) => {
                         if let Some(choice) = response.choices.first() {
                             return Ok(Some(crate::llm::StreamChunk {
-                                content: choice.delta.content.as_ref().map(|c| vec![HashMap::from([("text".to_string(), c.clone())])]),
+                                content: choice.delta.content.as_ref().map(|c| vec![ContentItem::text(c.clone())]),
                                 finish_reason: choice.finish_reason.as_ref().map(|fr| match fr.as_str() {
                                     "stop" => crate::llm::FinishReason::Stop,
                                     "tool_calls" => crate::llm::FinishReason::ToolCalls,
@@ -321,15 +322,25 @@ impl<P: ProviderConfig> OpenAICompatibleClient<P> {
 
     fn convert_messages(&self, messages: &[LLMMessage]) -> Vec<OpenAIMessage> {
         messages.iter().map(|msg| {
-            let content = msg.content
-                .as_ref()
-                .and_then(|content_vec| {
-                    content_vec.iter()
-                        .find(|item| item.contains_key("text"))
-                        .and_then(|item| item.get("text"))
-                        .cloned()
-                })
-                .unwrap_or_default();
+            let content = msg.content.as_ref().map(|content_vec| {
+                if content_vec.len() == 1 {
+                    // Single content item - could be simple text string or complex object
+                    match &content_vec[0] {
+                        ContentItem::Text(text_content) => {
+                            serde_json::Value::String(text_content.text.clone())
+                        }
+                        ContentItem::Image(_) => {
+                            // For images, create array format for OpenAI compatible
+                            self.convert_content_to_openai_array(content_vec)
+                        }
+                    }
+                } else if content_vec.is_empty() {
+                    serde_json::Value::String(String::new())
+                } else {
+                    // Multiple content items - always use array format
+                    self.convert_content_to_openai_array(content_vec)
+                }
+            });
             
             let tool_calls = msg.tool_call.as_ref().map(|tc| {
                 vec![OpenAIToolCall {
@@ -343,11 +354,46 @@ impl<P: ProviderConfig> OpenAICompatibleClient<P> {
             });
             
             OpenAIMessage {
-                role: msg.role.clone(),
+                role: msg.role.as_str().to_string(),
                 content,
                 tool_calls,
             }
         }).collect()
+    }
+    
+    fn convert_content_to_openai_array(&self, content_vec: &[ContentItem]) -> serde_json::Value {
+        let content_array: Vec<serde_json::Value> = content_vec.iter().map(|item| {
+            match item {
+                ContentItem::Text(text_content) => {
+                    serde_json::json!({
+                        "type": "text",
+                        "text": text_content.text
+                    })
+                }
+                ContentItem::Image(image_content) => {
+                    match &image_content.source {
+                        crate::llm::ImageSource::Base64 { media_type, data } => {
+                            serde_json::json!({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": format!("data:{};base64,{}", media_type, data)
+                                }
+                            })
+                        }
+                        crate::llm::ImageSource::Url { url } => {
+                            serde_json::json!({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": url
+                                }
+                            })
+                        }
+                    }
+                }
+            }
+        }).collect();
+        
+        serde_json::Value::Array(content_array)
     }
 
     fn parse_response(&self, response: OpenAIResponse) -> LLMResult<LLMResponse> {
@@ -378,11 +424,11 @@ impl<P: ProviderConfig> OpenAICompatibleClient<P> {
             reasoning_tokens: 0,
         });
         
-        // Convert content string to Vec<HashMap<String, String>>
+        // Convert content string to Vec<ContentItem>
         let content_vec = if content.is_empty() {
             vec![]
         } else {
-            vec![HashMap::from([("text".to_string(), content)])]
+            vec![ContentItem::text(content)]
         };
         
         // Convert finish_reason string to FinishReason enum
@@ -406,7 +452,7 @@ impl<P: ProviderConfig> OpenAICompatibleClient<P> {
 #[async_trait]
 impl<P: ProviderConfig + Send + Sync> LLMProvider for OpenAICompatibleClient<P> {
     fn set_chat_history(&mut self, messages: Vec<LLMMessage>) {
-        self.chat_history = messages;
+        self.chat_history = self.convert_messages(&messages);
     }
 
     async fn chat(
@@ -416,12 +462,13 @@ impl<P: ProviderConfig + Send + Sync> LLMProvider for OpenAICompatibleClient<P> 
         tools: Option<Vec<Box<dyn Tool>>>,
         reuse_history: Option<bool>,
     ) -> LLMResult<LLMResponse> {
+        let parsed_messages = self.convert_messages(&messages);
+
+        let mut all_messages = Vec::new();
         if reuse_history.unwrap_or(true) {
-            self.chat_history.clear();
+            all_messages.extend(self.chat_history.clone());
         }
-        self.chat_history.extend(messages);
-        
-        let openai_messages = self.convert_messages(&self.chat_history);
+        all_messages.extend(parsed_messages);
         
         let tool_schemas = if self.provider.supports_tool_calling(&model_config.model) {
             tools.map(|tools| {
@@ -442,7 +489,7 @@ impl<P: ProviderConfig + Send + Sync> LLMProvider for OpenAICompatibleClient<P> 
         
         let request = OpenAIRequest {
             model: model_config.model.clone(),
-            messages: openai_messages,
+            messages: all_messages,
             tools: tool_schemas,
             temperature: model_config.temperature,
             top_p: model_config.top_p,
@@ -469,13 +516,14 @@ impl<P: ProviderConfig + Send + Sync> LLMProvider for OpenAICompatibleClient<P> 
         tools: Option<Vec<Box<dyn Tool>>>,
         reuse_history: Option<bool>,
     ) -> LLMResult<crate::llm::LLMStream> {
+        let parsed_messages = self.convert_messages(&messages);
+        
+        let mut all_messages = Vec::new();
         if reuse_history.unwrap_or(true) {
-            self.chat_history.clear();
+            all_messages.extend(self.chat_history.clone());
         }
-        self.chat_history.extend(messages);
-        
-        let openai_messages = self.convert_messages(&self.chat_history);
-        
+        all_messages.extend(parsed_messages);
+
         let tool_schemas = if self.provider.supports_tool_calling(&model_config.model) {
             tools.map(|tools| {
                 tools.iter().map(|tool| {
@@ -495,7 +543,7 @@ impl<P: ProviderConfig + Send + Sync> LLMProvider for OpenAICompatibleClient<P> 
         
         let request = OpenAIRequest {
             model: model_config.model.clone(),
-            messages: openai_messages,
+            messages: all_messages,
             tools: tool_schemas,
             temperature: model_config.temperature,
             top_p: model_config.top_p,
@@ -583,7 +631,7 @@ mod tests {
         assert!(result.is_some());
         let chunk = result.unwrap();
         assert!(chunk.content.is_some());
-        assert_eq!(chunk.content.as_ref().unwrap()[0].get("text"), Some(&"Hello".to_string()));
+        assert_eq!(chunk.content.as_ref().unwrap()[0].as_text(), Some("Hello"));
         
         // Test parsing [DONE] marker
         let done_data = "data: [DONE]";
