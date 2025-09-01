@@ -18,6 +18,8 @@ class Agent:
         config: Config,
         trajectory_file: str | None = None,
         cli_console: CLIConsole | None = None,
+        docker_config: dict | None = None,
+        docker_keep: bool = True,
     ):
         if isinstance(agent_type, str):
             agent_type = AgentType(agent_type)
@@ -40,7 +42,8 @@ class Agent:
 
                 self.agent_config: AgentConfig = config.trae_agent
 
-                self.agent: TraeAgent = TraeAgent(self.agent_config)
+                self.agent: TraeAgent = TraeAgent(self.agent_config, docker_config=docker_config, docker_keep=docker_keep)
+                
                 self.agent.set_cli_console(cli_console)
 
         if cli_console:

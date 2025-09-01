@@ -30,7 +30,7 @@ TraeAgentToolNames = [
 class TraeAgent(BaseAgent):
     """Trae Agent specialized for software engineering tasks."""
 
-    def __init__(self, trae_agent_config: TraeAgentConfig):
+    def __init__(self, trae_agent_config: TraeAgentConfig, docker_config: dict | None = None, docker_keep: bool = True):
         """Initialize TraeAgent.
 
         Args:
@@ -38,6 +38,7 @@ class TraeAgent(BaseAgent):
                    Required if llm_client is not provided.
             llm_client: Optional pre-configured LLMClient instance.
                        If provided, it will be used instead of creating a new one from config.
+            docker_config: Optional configuration for running in a Docker environment.
         """
         self.project_path: str = ""
         self.base_commit: str | None = None
@@ -51,7 +52,8 @@ class TraeAgent(BaseAgent):
         )
         self.mcp_tools: list[Tool] = []
         self.mcp_clients: list[MCPClient] = []  # Keep track of MCP clients for cleanup
-        super().__init__(agent_config=trae_agent_config)
+        self.docker_config = docker_config
+        super().__init__(agent_config=trae_agent_config, docker_config=docker_config, docker_keep=docker_keep)
 
     async def initialise_mcp(self):
         """Async factory to create and initialize TraeAgent."""
@@ -108,7 +110,7 @@ class TraeAgent(BaseAgent):
             self._tools: list[Tool] = [
                 tools_registry[tool_name](model_provider=provider) for tool_name in tool_names
             ]
-        self._tool_caller: ToolExecutor = ToolExecutor(self._tools)
+        # self._tool_caller: ToolExecutor = ToolExecutor(self._tools)
 
         self._initial_messages: list[LLMMessage] = []
         self._initial_messages.append(LLMMessage(role="system", content=self.get_system_prompt()))
@@ -120,7 +122,10 @@ class TraeAgent(BaseAgent):
             raise AgentError("Project path is required")
 
         self.project_path = extra_args.get("project_path", "")
-        user_message += f"[Project root path]:\n{self.project_path}\n\n"
+        if self.docker_config:
+            user_message += f"[Project root path]:\workspace\n\n"
+        else:
+            user_message += f"[Project root path]:\n{self.project_path}\n\n"
 
         if "issue" in extra_args:
             user_message += f"[Problem statement]: We're currently solving the following issue within our repository. Here's the issue text:\n{extra_args['issue']}\n"
