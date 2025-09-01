@@ -18,6 +18,7 @@ from rich.table import Table
 from trae_agent.agent import Agent
 from trae_agent.utils.cli import CLIConsole, ConsoleFactory, ConsoleMode, ConsoleType
 from trae_agent.utils.config import Config, TraeAgentConfig
+from trae_agent.utils.command_queue import CommandQueue, QueuedCommand, get_command_queue
 
 # Load environment variables
 _ = load_dotenv()
@@ -86,6 +87,12 @@ def cli():
     help="Type of agent to use (trae_agent)",
     default="trae_agent",
 )
+@click.option(
+    "--queue",
+    "-q",
+    is_flag=True,
+    help="Add command to queue for sequential execution",
+)
 def run(
     task: str | None,
     file_path: str | None,
@@ -101,6 +108,7 @@ def run(
     trajectory_file: str | None = None,
     console_type: str | None = "simple",
     agent_type: str | None = "trae_agent",
+    queue: bool = False,
 ):
     """
     Run is the main function of trae. it runs a task using Trae Agent.
@@ -132,6 +140,26 @@ def run(
             "[red]Error: Must provide either a task string or use the --file argument.[/red]"
         )
         sys.exit(1)
+
+    # 处理队列模式
+    if queue:
+        return _handle_queue_mode(
+            task=task,
+            working_dir=working_dir or os.getcwd(),
+            options={
+                "provider": provider,
+                "model": model,
+                "model_base_url": model_base_url,
+                "api_key": api_key,
+                "max_steps": max_steps,
+                "must_patch": must_patch,
+                "config_file": config_file,
+                "trajectory_file": trajectory_file,
+                "console_type": console_type,
+                "agent_type": agent_type,
+                "patch_path": patch_path,
+            }
+        )
 
     config = Config.create(
         config_file=config_file,
@@ -515,6 +543,196 @@ def tools():
             tools_table.add_row(tool_name, f"[red]Error loading: {e}[/red]")
 
     console.print(tools_table)
+
+
+@cli.command()
+def queue_status():
+    """显示命令队列状态"""
+    command_queue = get_command_queue()
+    status = command_queue.get_queue_status()
+    
+    # 创建状态表格
+    status_table = Table(title="命令队列状态")
+    status_table.add_column("状态", style="cyan")
+    status_table.add_column("数量", style="green")
+    
+    status_table.add_row("总计", str(status['total']))
+    status_table.add_row("待执行", str(status['pending']))
+    status_table.add_row("执行中", str(status['running']))
+    status_table.add_row("已完成", str(status['completed']))
+    status_table.add_row("失败", str(status['failed']))
+    status_table.add_row("处理器运行中", "是" if status['is_processing'] else "否")
+    
+    if status['current_command']:
+        status_table.add_row("当前命令", status['current_command'])
+    
+    console.print(status_table)
+    
+    # 显示命令列表
+    commands = command_queue.get_commands()
+    if commands:
+        commands_table = Table(title="命令列表")
+        commands_table.add_column("ID", style="cyan")
+        commands_table.add_column("状态", style="yellow")
+        commands_table.add_column("任务", style="green")
+        commands_table.add_column("工作目录", style="blue")
+        commands_table.add_column("创建时间", style="magenta")
+        
+        for cmd in commands[-10:]:  # 只显示最近10个命令
+            from datetime import datetime
+            created_time = datetime.fromtimestamp(cmd.created_at).strftime("%Y-%m-%d %H:%M:%S")
+            task_preview = cmd.task[:50] + "..." if len(cmd.task) > 50 else cmd.task
+            commands_table.add_row(
+                cmd.id,
+                cmd.status.value,
+                task_preview,
+                cmd.working_dir,
+                created_time
+            )
+        
+        console.print(commands_table)
+
+
+@cli.command()
+@click.argument("command_id")
+def cancel_command(command_id: str):
+    """取消指定的队列命令"""
+    command_queue = get_command_queue()
+    
+    if command_queue.cancel_command(command_id):
+        console.print(f"[green]成功取消命令: {command_id}[/green]")
+    else:
+        console.print(f"[red]无法取消命令: {command_id} (命令不存在或已在执行中)[/red]")
+
+
+@cli.command()
+def clear_completed():
+    """清除已完成的队列命令"""
+    command_queue = get_command_queue()
+    cleared_count = command_queue.clear_completed()
+    
+    if cleared_count > 0:
+        console.print(f"[green]已清除 {cleared_count} 个已完成的命令[/green]")
+    else:
+        console.print("[yellow]没有需要清除的已完成命令[/yellow]")
+
+
+@cli.command()
+def process_queue():
+    """手动启动队列处理器"""
+    command_queue = get_command_queue()
+    status = command_queue.get_queue_status()
+    
+    if status['is_processing']:
+        console.print("[yellow]队列处理器已在运行中[/yellow]")
+        return
+    
+    if status['pending'] == 0:
+        console.print("[yellow]队列中没有待执行的命令[/yellow]")
+        return
+    
+    console.print("[blue]启动队列处理器...[/blue]")
+    asyncio.run(command_queue.process_queue(_execute_queued_command))
+
+
+def _handle_queue_mode(task: str, working_dir: str, options: dict) -> None:
+    """处理队列模式的命令
+    
+    Args:
+        task: 任务描述
+        working_dir: 工作目录
+        options: 命令选项
+    """
+    command_queue = get_command_queue()
+    
+    # 添加命令到队列
+    command_id = command_queue.add_command(task, working_dir, options)
+    console.print(f"[green]命令已添加到队列: {command_id}[/green]")
+    console.print(f"[blue]任务: {task}[/blue]")
+    
+    # 检查队列状态
+    status = command_queue.get_queue_status()
+    
+    # 如果处理器没有运行且有待执行的命令，启动队列处理器
+    if not status['is_processing'] and status['pending'] > 0:
+        console.print("[yellow]启动队列处理器...[/yellow]")
+        asyncio.run(command_queue.process_queue(_execute_queued_command))
+    else:
+        # 显示队列状态
+        console.print(f"[cyan]队列状态: {status['pending']} 待执行, {status['running']} 执行中, {status['completed']} 已完成[/cyan]")
+
+
+async def _execute_queued_command(queued_command: QueuedCommand) -> None:
+    """执行队列中的命令
+    
+    Args:
+        queued_command: 队列中的命令对象
+    """
+    # 从队列命令中提取参数
+    task = queued_command.task
+    working_dir = queued_command.working_dir
+    options = queued_command.options
+    
+    # 切换到指定工作目录
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(working_dir)
+        
+        # 创建配置
+        config = Config.create(
+            config_file=options.get('config_file', 'trae_config.yaml'),
+        ).resolve_config_values(
+            provider=options.get('provider'),
+            model=options.get('model'),
+            model_base_url=options.get('model_base_url'),
+            api_key=options.get('api_key'),
+            max_steps=options.get('max_steps'),
+        )
+        
+        # 创建控制台
+        console_type = options.get('console_type', 'simple')
+        selected_console_type = (
+            ConsoleType.SIMPLE if console_type.lower() == "simple" else ConsoleType.RICH
+        )
+        cli_console = ConsoleFactory.create_console(
+            console_type=selected_console_type, mode=ConsoleMode.RUN
+        )
+        
+        # 设置初始任务（如果是rich控制台）
+        if selected_console_type == ConsoleType.RICH and hasattr(cli_console, "set_initial_task"):
+            cli_console.set_initial_task(task)
+        
+        # 创建代理
+        agent = Agent(
+            options.get('agent_type', 'trae_agent'),
+            config,
+            options.get('trajectory_file'),
+            cli_console
+        )
+        
+        # 准备任务参数
+        task_args = {
+            "project_path": working_dir,
+            "issue": task,
+            "must_patch": "true" if options.get('must_patch', False) else "false",
+            "patch_path": options.get('patch_path', ''),
+        }
+        
+        # 设置代理上下文（如果是rich控制台）
+        if selected_console_type == ConsoleType.RICH and hasattr(cli_console, "set_agent_context"):
+            cli_console.set_agent_context(
+                agent, 
+                config.trae_agent, 
+                options.get('config_file', 'trae_config.yaml'), 
+                options.get('trajectory_file')
+            )
+        
+        # 执行任务
+        await agent.run(task, task_args)
+        
+    finally:
+        # 恢复原始工作目录
+        os.chdir(original_cwd)
 
 
 def main():
