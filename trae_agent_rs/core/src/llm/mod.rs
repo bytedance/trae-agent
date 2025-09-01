@@ -128,7 +128,7 @@ pub struct LLMResponse {
 
 
 impl LLMResponse{
-    fn new(
+    pub fn new(
         content:String, 
         usage: Option<LLMUsage>, 
         model: Option<String>,
@@ -158,7 +158,7 @@ pub struct StreamChunk {
 
 
 impl StreamChunk {
-    fn new(
+    pub fn new(
         content: Option<String>, 
         finished_reason: Option<String>,
         model: Option<String>,
