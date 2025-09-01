@@ -118,7 +118,8 @@ pub struct AgentStep{
     pub state:AgentStepState,
     pub thought: Option<String>,
 
-    pub llm_response: Option<LLMResponse>
+    pub llm_response: Option<LLMResponse>,
+    pub tool_calls: Option<Vec<ToolCall>>, 
 
 } 
 
@@ -129,6 +130,7 @@ impl AgentStep {
             state: state, 
             thought: None,
             llm_response: None,
+            tool_calls: None,
         }
     }
 }
@@ -229,15 +231,48 @@ impl BaseAgent{
 
         let tool_call = &unwrap_response.tool_calls;
         
-        self.tool_call_handler(&tool_call,&step)
+        self.tool_call_handler(&tool_call,step)
 
     }
 
 
-    fn tool_call_handler(&self, tool_calls: &Option<Vec<ToolCall>>, step: &AgentStep) -> 
-        Result<Vec<LLMMessage> , &'static str>
+    fn tool_call_handler(
+        &mut self, 
+        tool_calls: &Option<Vec<ToolCall>>, 
+        step: &mut AgentStep) 
+        ->  Result<Vec<LLMMessage> , &'static str>
     {
-        todo!()
+
+
+        let unfinished_message = vec![
+                    LLMMessage{
+                        role:"user".to_string(),
+                        content:None, // implement content here
+                        tool_call:None,
+                        tool_result:None,
+                    }
+                ];
+        
+        match tool_calls {
+            Some(tools) => {
+                if tools.len() == 0 {
+                    return Ok(unfinished_message)
+                }
+                
+                step.state = AgentStepState::CALLINGTOOL;
+                step.tool_calls = tool_calls.clone();
+
+                // console work here TODO
+
+                // TODO need to handle tool call ?
+
+                // handle tool caller_sequential_tool_call
+               todo!("we need to finish tool call first") ;
+
+                Ok(unfinished_message)
+            },
+            None => Ok(unfinished_message)
+        }
     }
 
 }
