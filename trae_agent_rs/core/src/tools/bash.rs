@@ -69,8 +69,21 @@ impl Tool for Bash{
         v
     }
 
-    fn execute(&self, arguments: std::collections::HashMap<String, serde_json::Value>) -> std::pin::Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
+    async fn execute(&self, arguments: std::collections::HashMap<String, serde_json::Value>) -> std::pin::Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
         todo!()
     }
+}
 
+
+// set the bash process to be private field
+struct bashprocess;
+
+
+impl bashprocess{
+    async fn start(&self){}
+
+    async fn stop(&self){}
+
+    async fn run(&self, command:&str){
+    }
 }
