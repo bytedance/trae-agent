@@ -138,10 +138,10 @@ pub struct LLMResponse {
 
 impl LLMResponse{
     pub fn new(
-        content:String, 
+        content:Vec<HashMap<String, String>>, 
         usage: Option<LLMUsage>, 
         model: Option<String>,
-        finish_reason: Option<String>,
+        finish_reason: FinishReason,
         tool_calls: Option<Vec<ToolCall>>,
     )-> Self{
         LLMResponse { 
@@ -168,8 +168,8 @@ pub struct StreamChunk {
 
 impl StreamChunk {
     pub fn new(
-        content: Option<String>, 
-        finished_reason: Option<String>,
+        content:Option<Vec<HashMap<String, String>>>, 
+        finished_reason: Option<FinishReason>,
         model: Option<String>,
         tool_calls: Option<Vec<ToolCall>>,
         usage: Option<LLMUsage>
