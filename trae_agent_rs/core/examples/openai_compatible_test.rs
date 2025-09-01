@@ -17,7 +17,7 @@ use std::future::Future;
 use std::pin::Pin;
 use trae_core::{
     config::{ModelConfig, ModelProvider},
-    llm::{LLMMessage, LLMProvider, OpenAICompatibleGenericClient},
+    llm::{LLMMessage, LLMProvider, OpenAICompatibleGenericClient, MessageRole, ContentItem},
     tools::Tool,
 };
 
@@ -133,10 +133,8 @@ async fn test_basic_chat(client: &mut OpenAICompatibleGenericClient, model_confi
     
     let messages = vec![
         LLMMessage {
-            role: "user".to_string(),
-            content: Some(vec![HashMap::from([
-                ("text".to_string(), "Hello! Can you tell me a short joke?".to_string())
-            ])]),
+            role: MessageRole::User,
+            content: Some(vec![ContentItem::text("Hello! Can you tell me a short joke?".to_string())]),
             tool_call: None,
             tool_result: None,
         }
@@ -151,7 +149,7 @@ async fn test_basic_chat(client: &mut OpenAICompatibleGenericClient, model_confi
                 println!("Usage: {}", usage);
             }
             if !response.content.is_empty() {
-                if let Some(text) = response.content[0].get("text") {
+                if let Some(text) = response.content[0].as_text() {
                     println!("Response: {}", text);
                 }
             }
@@ -175,10 +173,8 @@ async fn test_tool_calling(client: &mut OpenAICompatibleGenericClient, model_con
 
     let messages = vec![
         LLMMessage {
-            role: "user".to_string(),
-            content: Some(vec![HashMap::from([
-                ("text".to_string(), "What's 15 + 27? Also, what's the weather like in Tokyo, Japan?".to_string())
-            ])]),
+            role: MessageRole::User,
+            content: Some(vec![ContentItem::text("What's 15 + 27? Also, what's the weather like in Tokyo, Japan?".to_string())]),
             tool_call: None,
             tool_result: None,
         }
@@ -214,7 +210,7 @@ async fn test_tool_calling(client: &mut OpenAICompatibleGenericClient, model_con
             }
             
             if !response.content.is_empty() {
-                if let Some(text) = response.content[0].get("text") {
+                if let Some(text) = response.content[0].as_text() {
                     println!("Response: {}", text);
                 }
             }
@@ -233,10 +229,8 @@ async fn test_streaming(client: &mut OpenAICompatibleGenericClient, model_config
     
     let messages = vec![
         LLMMessage {
-            role: "user".to_string(),
-            content: Some(vec![HashMap::from([
-                ("text".to_string(), "Tell me a short story about a robot learning to cook.".to_string())
-            ])]),
+            role: MessageRole::User,
+            content: Some(vec![ContentItem::text("Tell me a short story about a robot learning to cook.".to_string())]),
             tool_call: None,
             tool_result: None,
         }
@@ -257,7 +251,7 @@ async fn test_streaming(client: &mut OpenAICompatibleGenericClient, model_config
                         
                         if let Some(content) = &chunk.content {
                             if !content.is_empty() {
-                                if let Some(text) = content[0].get("text") {
+                                if let Some(text) = content[0].as_text() {
                                     print!("{}", text);
                                 }
                             }
@@ -302,10 +296,8 @@ async fn test_error_handling() -> Result<(), Box<dyn std::error::Error>> {
         Ok(mut client) => {
             let messages = vec![
                 LLMMessage {
-                    role: "user".to_string(),
-                    content: Some(vec![HashMap::from([
-                        ("text".to_string(), "Hello".to_string())
-                    ])]),
+                    role: MessageRole::User,
+                    content: Some(vec![ContentItem::text("Hello".to_string())]),
                     tool_call: None,
                     tool_result: None,
                 }
