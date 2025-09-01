@@ -1,22 +1,24 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-import os
 import argparse
+import io
 import json
 import shutil
 import subprocess
-import traceback
 import tarfile
-import io
-from tqdm import tqdm
+import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
+
 from docker import DockerClient, from_env
 from docker.errors import ImageNotFound
-from docker.models.containers import Container, ExecResult
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from utils import docker_exec, BENCHMARK_CONFIG
+from docker.models.containers import Container
+from tqdm import tqdm
+
+from .utils import BENCHMARK_CONFIG, docker_exec
+
 
 class BenchmarkEvaluation:
     """
@@ -34,7 +36,7 @@ class BenchmarkEvaluation:
         benchmark_harness_path: str = "",
         run_id: str = "trae-agent",
         max_workers: int = 4,
-        instance_ids: list = [],
+        instance_ids: list[str] | None = None,
     ):
         """
         Initialize the BenchmarkEvaluation class.
@@ -53,7 +55,9 @@ class BenchmarkEvaluation:
         assert benchmark in BENCHMARK_CONFIG, f"Invalid benchmark name: {benchmark}"
         self.config = BENCHMARK_CONFIG[benchmark]
         self.dataset_name = dataset
-        assert self.dataset_name in self.config.valid_datasets, f"Invalid dataset name: {self.dataset_name}"
+        assert self.dataset_name in self.config.valid_datasets, (
+            f"Invalid dataset name: {self.dataset_name}"
+        )
 
         self.benchmark = benchmark
         self.dataset = self.config.load_dataset(self.dataset_name)
@@ -64,7 +68,10 @@ class BenchmarkEvaluation:
         self.benchmark_harness_path = benchmark_harness_path
         self.run_id = run_id
         self.max_workers = max_workers
-        self.instance_ids = instance_ids
+        if instance_ids is None:
+            instance_ids = [instance["instance_id"] for instance in self.dataset]
+        else:
+            self.instance_ids = instance_ids
 
         if docker_env_config != "":
             with open(docker_env_config, "r") as f:
@@ -78,7 +85,7 @@ class BenchmarkEvaluation:
         shutil.copyfile(self.trae_config_file_name, self.working_dir / "trae_config.yaml")
 
         self.results_dir = Path("results")
-        self.task_id = f"{self.benchmark}_{self.dataset_name}_{self.run_id}".replace('/','_')
+        self.task_id = f"{self.benchmark}_{self.dataset_name}_{self.run_id}".replace("/", "_")
         self.task_results_dir = self.results_dir / self.task_id
         self.task_results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -161,7 +168,7 @@ class BenchmarkEvaluation:
             },
             environment=self.docker_env_config.get("preparation_env", None),
         )
-        
+
         build_commands = [
             "apt-get update",
             "apt-get install -y curl",
@@ -171,7 +178,9 @@ class BenchmarkEvaluation:
             "cd /trae-workspace/trae-agent && source $HOME/.local/bin/env && uv sync",
         ]
 
-        for command in tqdm(build_commands, desc="Building trae-agent inside base Docker container"):
+        for command in tqdm(
+            build_commands, desc="Building trae-agent inside base Docker container"
+        ):
             try:
                 new_command = f'/bin/bash -c "{command}"'
                 return_code, output = docker_exec(container, new_command)
@@ -224,7 +233,7 @@ class BenchmarkEvaluation:
             detach=True,
             tty=True,
             stdin_open=True,
-            volumes = {
+            volumes={
                 instance_result_dir.absolute().as_posix(): {"bind": "/instance-data", "mode": "rw"},
             },
             working_dir="/trae-workspace",
@@ -234,7 +243,7 @@ class BenchmarkEvaluation:
 
         for fname in ["trae-agent.tar", "uv.tar", "uv_shared.tar", "trae_config.yaml"]:
             tar_stream = io.BytesIO()
-            with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+            with tarfile.open(fileobj=tar_stream, mode="w") as tar:
                 tar.add(self.working_dir / fname, arcname=fname)
             tar_stream.seek(0)
             container.put_archive("/trae-workspace", tar_stream.getvalue())
@@ -271,7 +280,7 @@ class BenchmarkEvaluation:
         if instance is None:
             print(f"Instance {instance_id} not found.")
             return
-        
+
         working_dir = self.config.working_dir(instance_id)
 
         container_problem_statement_path = "/instance-data/problem_statement.txt"
@@ -304,8 +313,13 @@ class BenchmarkEvaluation:
         """
         instance_ids = [instance["instance_id"] for instance in self.dataset]
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {executor.submit(self.run_one_instance, instance_id): instance_id for instance_id in instance_ids}
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Running all instances"):
+            futures = {
+                executor.submit(self.run_one_instance, instance_id): instance_id
+                for instance_id in instance_ids
+            }
+            for future in tqdm(
+                as_completed(futures), total=len(futures), desc="Running all instances"
+            ):
                 instance_id = futures[future]
                 try:
                     future.result()
@@ -317,10 +331,14 @@ class BenchmarkEvaluation:
         Run evaluation using the benchmark harness.
         Evaluation results and predictions.json are stored in the task results directory.
         """
-        self.config.evaluate_harness_before(self.task_results_dir, self.dataset_name, self.max_workers)
+        self.config.evaluate_harness_before(
+            self.task_results_dir, self.dataset_name, self.max_workers
+        )
 
         benchmark_harness_path = Path(self.benchmark_harness_path)
-        cmd = self.config.evaluate_harness(self.dataset_name, self.task_results_dir, self.task_id, self.max_workers)
+        cmd = self.config.evaluate_harness(
+            self.dataset_name, self.task_results_dir, self.task_id, self.max_workers
+        )
         process = subprocess.run(cmd, capture_output=True, cwd=benchmark_harness_path.as_posix())
         print(process.stdout.decode())
         print(process.stderr.decode())
@@ -328,10 +346,8 @@ class BenchmarkEvaluation:
         result_filename = "results.json"
         result_path = self.task_results_dir / result_filename
         print(f"Evaluation completed and file saved to {result_path}")
-        
+
         self.config.evaluate_harness_after(self.benchmark_harness_path, self.task_id)
-
-
 
     def get_all_preds(self, instance_ids: list[str] | None = None):
         """
@@ -349,13 +365,16 @@ class BenchmarkEvaluation:
                 continue
             with open(patch_path, "r") as f:
                 patch = f.read()
-            preds.append({
-                "instance_id": instance_id,
-                "model_name_or_path": "trae-agent",
-                "model_patch": patch,
-            })
+            preds.append(
+                {
+                    "instance_id": instance_id,
+                    "model_name_or_path": "trae-agent",
+                    "model_patch": patch,
+                }
+            )
         with open(self.task_results_dir / "predictions.json", "w") as f:
             json.dump(preds, f)
+
 
 def main():
     """
@@ -363,11 +382,21 @@ def main():
     Parses command-line arguments and runs patch generation and/or evaluation.
     """
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument("--benchmark", type=str, default="SWE-bench", help="Benchmark name.")
-    argument_parser.add_argument("--dataset", type=str, default="SWE-bench_Verified", help="Dataset name.")
-    argument_parser.add_argument("--working-dir", type=str, default="./trae-workspace", help="Workspace directory.")
-    argument_parser.add_argument("--config-file", type=str, default="trae_config.yaml", help="Trae agent config file path.")
-    argument_parser.add_argument("--docker-env-config", type=str, default="", required=False, help="Docker env config file.")
+    argument_parser.add_argument(
+        "--benchmark", type=str, default="SWE-bench", help="Benchmark name."
+    )
+    argument_parser.add_argument(
+        "--dataset", type=str, default="SWE-bench_Verified", help="Dataset name."
+    )
+    argument_parser.add_argument(
+        "--working-dir", type=str, default="./trae-workspace", help="Workspace directory."
+    )
+    argument_parser.add_argument(
+        "--config-file", type=str, default="trae_config.yaml", help="Trae agent config file path."
+    )
+    argument_parser.add_argument(
+        "--docker-env-config", type=str, default="", required=False, help="Docker env config file."
+    )
     argument_parser.add_argument(
         "--instance_ids",
         nargs="+",
@@ -396,10 +425,7 @@ def main():
         help="e2e: both patch generation and evaluation; expr: only patch generation; eval: only evaluation.",
     )
     argument_parser.add_argument(
-        "--max_workers", 
-        type=int, 
-        default=4, 
-        help="Maximum number of parallel workers."
+        "--max_workers", type=int, default=4, help="Maximum number of parallel workers."
     )
 
     args = argument_parser.parse_args()
@@ -412,7 +438,7 @@ def main():
         args.benchmark_harness_path,
         args.run_id,
         args.max_workers,
-        args.instance_ids
+        args.instance_ids,
     )
 
     evaluation.prepare_trae_agent()
@@ -422,8 +448,13 @@ def main():
         if args.instance_ids:
             print(f"Running specified instances: {args.instance_ids}")
             with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-                futures = {executor.submit(evaluation.run_one_instance, instance_id): instance_id for instance_id in args.instance_ids}
-                for future in tqdm(as_completed(futures), total=len(futures), desc="Running instances"):
+                futures = {
+                    executor.submit(evaluation.run_one_instance, instance_id): instance_id
+                    for instance_id in args.instance_ids
+                }
+                for future in tqdm(
+                    as_completed(futures), total=len(futures), desc="Running instances"
+                ):
                     instance_id = futures[future]
                     try:
                         future.result()
@@ -437,6 +468,7 @@ def main():
     if args.mode in ("e2e", "eval"):
         evaluation.get_all_preds(args.instance_ids)
         evaluation.run_eval()
+
 
 if __name__ == "__main__":
     main()

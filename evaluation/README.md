@@ -60,7 +60,7 @@ Ensure your `trae_config.yaml` file is properly configured with valid API keys:
 ```
 agents:
   trae_agent:
-    enable_lakeview: flase
+    enable_lakeview: false
     model: trae_agent_model  # the model configuration name for Trae Agent
     max_steps: 200  # max number of agent steps
     tools:  # tools used with Trae Agent
@@ -227,11 +227,10 @@ results/{benchmark}_{dataset}_{run_id}/
 │   ├── problem_statement.txt     # GitHub issue description
 │   ├── {instance_id}.patch       # Generated patch
 │   ├── {instance_id}.json        # Trajectory file
-│   └── ...                     
+│   └── ...
 trae-workspace/
 ├── trae_config.yaml              # Trae Agent configuration file
 ├── trae-agent.tar                # Trae Agent build artifacts
 ├── uv.tar                        # UV binary
 └── uv_shared.tar                 # UV shared files
 ```
-

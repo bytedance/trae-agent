@@ -38,4 +38,3 @@ case "$1" in
     echo "Usage: ./setup.sh [multi_swe_bench|swe_bench|swe_bench_live]"
     ;;
 esac
-
