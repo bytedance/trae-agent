@@ -90,7 +90,7 @@ class OpenAICompatibleClient(BaseLLMClient):
             token_params["max_completion_tokens"] = model_config.get_max_tokens_param()
         else:
             token_params["max_tokens"] = model_config.get_max_tokens_param()
-            
+
         return self.client.chat.completions.create(
             model=model_config.model,
             messages=self.message_history,
