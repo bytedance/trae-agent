@@ -13,7 +13,7 @@ use crate::{
         llm_provider::LLMProvider,
         error::{LLMError, LLMResult},
         retry_utils::{retry_with_backoff, RetryConfig},
-        LLMMessage, LLMResponse, LLMUsage, LLMStream, StreamChunk, FinishReason,
+        LLMMessage, LLMResponse, LLMUsage, LLMStream, StreamChunk, FinishReason, ContentItem, MessageRole,
     },
     config::ModelConfig,
 };
@@ -219,7 +219,7 @@ impl OpenAIClient {
                     Ok(response) => {
                         if let Some(choice) = response.choices.first() {
                             return Ok(Some(StreamChunk {
-                                content: choice.delta.content.as_ref().map(|c| vec![HashMap::from([("text".to_string(), c.clone())])]),
+                                content: choice.delta.content.as_ref().map(|c| vec![ContentItem::text(c.clone())]),
                                 finish_reason: choice.finish_reason.as_ref().map(|fr| match fr {
                                     FinishReason::Stop => FinishReason::Stop,
                                     FinishReason::ToolCalls => FinishReason::ToolCalls,
@@ -258,12 +258,12 @@ impl OpenAIClient {
 
     fn parse_messages(&self, messages: &[LLMMessage]) -> Vec<OpenAIMessage> {
         messages.iter().map(|msg| {
-            match msg.role.as_str() {
-                "tool" => self.parse_tool_result(msg.tool_result.as_ref().unwrap()),
+            match msg.role {
+                MessageRole::Tool => self.parse_tool_result(msg.tool_result.as_ref().unwrap()),
                 _ => OpenAIMessage {
-                    role: msg.role.clone(),
+                    role: msg.role.as_str().to_string(),
                     content: msg.content.as_ref().and_then(|content_vec| {
-                        content_vec.first().and_then(|content_map| content_map.get("text")).cloned()
+                        content_vec.iter().find_map(|item| item.as_text()).map(|s| s.to_string())
                     }),
                     tool_calls: msg.tool_call.as_ref().map(|tc| vec![OpenAIToolCall {
                         id: tc.call_id.clone(),
@@ -373,8 +373,11 @@ impl LLMProvider for OpenAIClient {
             reasoning_tokens: 0,
         });
 
-        Ok(LLMResponse {
-            content: choice.message.content.as_ref().map(|c| vec![HashMap::from([("text".to_string(), c.clone())])]).unwrap_or_default(),
+        // Create the response
+        let llm_response = LLMResponse {
+            content: choice.message.content.as_ref()
+                .map(|c| vec![ContentItem::text(c.clone())])
+                .unwrap_or_default(),
             tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
             finish_reason: match choice.finish_reason.unwrap_or(FinishReason::Stop) {
                 FinishReason::Stop => FinishReason::Stop,
@@ -383,7 +386,18 @@ impl LLMProvider for OpenAIClient {
             },
             model: Some(response.model),
             usage,
-        })
+        };
+
+        // Add the assistant's response to chat history
+        let assistant_message = OpenAIMessage {
+            role: "assistant".to_string(),
+            content: choice.message.content.clone(),
+            tool_calls: choice.message.tool_calls.clone(),
+            tool_call_id: None,
+        };
+        self.message_history.push(assistant_message);
+
+        Ok(llm_response)
     }
 
     async fn chat_stream(
@@ -393,6 +407,9 @@ impl LLMProvider for OpenAIClient {
         tools: Option<Vec<Box<dyn Tool>>>,
         reuse_history: Option<bool>,
     ) -> LLMResult<LLMStream> {
+        // Note: For streaming responses, chat history is not automatically updated.
+        // The caller should accumulate the complete response from the stream and 
+        // manually add it to chat history using set_chat_history() if needed.
         let parsed_messages = self.parse_messages(&messages);
         
         let mut all_messages = Vec::new();
