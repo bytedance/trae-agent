@@ -55,6 +55,23 @@ impl LLMUsage {
             reasoning_tokens: self.reasoning_tokens + other.reasoning_tokens,
         }
     }
+
+    pub fn new(
+        input_token:i32, 
+        output_token:i32,
+        cache_creation_input_tokens:i32, 
+        cache_read_input_tokens:i32, 
+        reasoing_tokens:i32)
+    -> Self{
+        LLMUsage { 
+            input_tokens: input_token, 
+            output_tokens: output_token, 
+            cache_creation_input_tokens: cache_creation_input_tokens, 
+            cache_read_input_tokens: cache_read_input_tokens, 
+            reasoning_tokens: reasoing_tokens, 
+        }
+    }
+
 }
 
 impl std::ops::Add for LLMUsage {
@@ -109,6 +126,26 @@ pub struct LLMResponse {
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
+
+impl LLMResponse{
+    fn new(
+        content:String, 
+        usage: Option<LLMUsage>, 
+        model: Option<String>,
+        finish_reason: Option<String>,
+        tool_calls: Option<Vec<ToolCall>>,
+    )-> Self{
+        LLMResponse { 
+            content: content, 
+            usage: usage, 
+            model: model, 
+            finish_reason: finish_reason, 
+            tool_calls: tool_calls 
+        }
+    }
+
+}
+
 /// Stream chunk for streaming responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamChunk {
@@ -118,6 +155,26 @@ pub struct StreamChunk {
     pub tool_calls: Option<Vec<ToolCall>>,
     pub usage: Option<LLMUsage>,
 }
+
+
+impl StreamChunk {
+    fn new(
+        content: Option<String>, 
+        finished_reason: Option<String>,
+        model: Option<String>,
+        tool_calls: Option<Vec<ToolCall>>,
+        usage: Option<LLMUsage>
+    )-> Self {
+        StreamChunk { 
+            content: content, 
+            finish_reason: finished_reason, 
+            model: model, 
+            tool_calls: tool_calls, 
+            usage: usage,
+        } 
+    }
+}
+
 
 /// Type alias for streaming response
 pub type LLMStream = Pin<Box<dyn Stream<Item = LLMResult<StreamChunk>> + Send>>;
