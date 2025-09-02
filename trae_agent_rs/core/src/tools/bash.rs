@@ -174,12 +174,24 @@ impl BashProcess {
             return Ok(());
         }
 
-        #[cfg(target_os = "macos")]
+        // For MacOS and Linux, use /bin/bash
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         let mut cmd = Command::new("/bin/bash");
+
+        // For Windows, use cmd
+        #[cfg(target_os = "windows")]
+        let mut cmd = Command::new("cmd");
 
         //TODO: add other operating system
 
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        {
+            cmd.stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        }
+
+        #[cfg(target_os = "windows")]
         {
             cmd.stdin(Stdio::piped())
                 .stdout(Stdio::piped())

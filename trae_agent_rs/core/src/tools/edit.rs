@@ -74,7 +74,7 @@ impl Tool for Edit {
     }
 
     fn execute(
-        &self,
+        &mut self,
         arguments: std::collections::HashMap<String, serde_json::Value>,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
         todo!()
