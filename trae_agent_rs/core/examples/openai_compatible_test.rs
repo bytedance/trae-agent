@@ -56,7 +56,7 @@ impl Tool for CalculatorTool {
         })
     }
 
-    fn execute(&self, arguments: HashMap<String, serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
+    fn execute(&mut self, arguments: HashMap<String, serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
         let operation = arguments.get("operation")
             .and_then(|v| v.as_str())
             .unwrap_or("");
@@ -113,7 +113,7 @@ impl Tool for WeatherTool {
         })
     }
 
-    fn execute(&self, arguments: HashMap<String, serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
+    fn execute(&mut self, arguments: HashMap<String, serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
         let location = arguments.get("location")
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown");
