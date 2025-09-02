@@ -2,6 +2,7 @@ use std::{collections::HashMap, fmt};
 use serde::{Deserialize, Serialize};
 
 pub mod base;
+pub mod edit;
 pub mod bash;
 pub use base::Tool;
 
@@ -82,4 +83,13 @@ impl ToolSchema {
             strict: Some(true),
         }
     }
+}
+
+
+
+#[derive(Debug, Default)]
+pub struct ToolExecResult{
+    pub output: Option<String>, 
+    pub error: Option<String>, 
+    pub error_code: Option<i32>,
 }
