@@ -215,7 +215,7 @@ impl AnthropicClient {
 
     async fn create_response(&self, request: AnthropicRequest) -> LLMResult<AnthropicResponse> {
         let url = format!("{}/messages", self.base_url);
-        
+
         let response = self
             .client
             .post(&url)
@@ -241,7 +241,7 @@ impl AnthropicClient {
 
     async fn create_stream_response(&self, request: AnthropicRequest) -> LLMResult<LLMStream> {
         let url = format!("{}/messages", self.base_url);
-        
+
         let response = self
             .client
             .post(&url)
@@ -280,7 +280,7 @@ impl AnthropicClient {
                 None
             }
         }).collect();
-        
+
         let stream = stream::iter(chunks);
         Ok(Box::pin(stream))
     }
@@ -292,10 +292,10 @@ impl AnthropicClient {
                 if data == "[DONE]" {
                     return Ok(None);
                 }
-                
+
                 let event: AnthropicStreamEvent = serde_json::from_str(data)
                     .map_err(LLMError::JsonError)?;
-                
+
                 match event.event_type.as_str() {
                     "message_start" => {
                         if let Some(data) = event.data {
@@ -345,7 +345,7 @@ impl AnthropicClient {
                                         _ => FinishReason::Stop,
                                     }
                                 });
-                                
+
                                 return Ok(Some(StreamChunk {
                                     content: None,
                                     finish_reason,
@@ -371,7 +371,7 @@ impl AnthropicClient {
 
     fn convert_messages(&self, messages: &[LLMMessage]) -> Vec<AnthropicMessage> {
         let mut result = Vec::new();
-        
+
         for msg in messages {
             match msg.role {
                 MessageRole::System => {
@@ -396,13 +396,13 @@ impl AnthropicClient {
                 }
             }
         }
-        
+
         result
     }
 
     fn convert_content(&self, content: &Option<Vec<ContentItem>>, tool_call: &Option<ToolCall>) -> AnthropicContent {
         let mut blocks = Vec::new();
-        
+
         // Add content items
         if let Some(content_vec) = content {
             for item in content_vec {
@@ -431,7 +431,7 @@ impl AnthropicClient {
                 }
             }
         }
-        
+
         // Add tool call if present
         if let Some(tc) = tool_call {
             blocks.push(AnthropicContentBlock::ToolUse {
@@ -440,14 +440,14 @@ impl AnthropicClient {
                 input: tc.arguments.clone(),
             });
         }
-        
+
         // If only one text block, use string format
         if blocks.len() == 1 {
             if let AnthropicContentBlock::Text { text } = &blocks[0] {
                 return AnthropicContent::String(text.clone());
             }
         }
-        
+
         AnthropicContent::Array(blocks)
     }
 
@@ -461,7 +461,7 @@ impl AnthropicClient {
             },
             is_error: Some(!tool_result.success),
         }]);
-        
+
         AnthropicMessage {
             role: "user".to_string(), // Tool results are sent as user messages in Anthropic
             content,
@@ -496,7 +496,7 @@ impl LLMProvider for AnthropicClient {
     ) -> LLMResult<LLMResponse> {
         self.extract_system_message(&messages);
         let parsed_messages = self.convert_messages(&messages);
-        
+
         let mut all_messages = Vec::new();
         if reuse_history.unwrap_or(true) {
             all_messages.extend(self.message_history.clone());
@@ -598,11 +598,11 @@ impl LLMProvider for AnthropicClient {
         reuse_history: Option<bool>,
     ) -> LLMResult<LLMStream> {
         // Note: For streaming responses, chat history is not automatically updated.
-        // The caller should accumulate the complete response from the stream and 
+        // The caller should accumulate the complete response from the stream and
         // manually add it to chat history using set_chat_history() if needed.
         self.extract_system_message(&messages);
         let parsed_messages = self.convert_messages(&messages);
-        
+
         let mut all_messages = Vec::new();
         if reuse_history.unwrap_or(true) {
             all_messages.extend(self.message_history.clone());
@@ -650,10 +650,10 @@ mod tests {
             .with_api_key("test_key".to_string())
             .with_base_url("https://api.anthropic.com/v1".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
-        
+
         let client = AnthropicClient::new(&config);
         assert!(client.is_ok());
-        
+
         let client = client.unwrap();
         assert_eq!(client.get_provider_name(), "anthropic");
     }
@@ -663,10 +663,10 @@ mod tests {
         let model_provider = ModelProvider::new("anthropic".to_string())
             .with_base_url("https://api.anthropic.com/v1".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
-        
+
         let client = AnthropicClient::new(&config);
         assert!(client.is_err());
-        
+
         if let Err(LLMError::ConfigError(msg)) = client {
             assert_eq!(msg, "API key is required");
         } else {
@@ -680,23 +680,23 @@ mod tests {
             .with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let client = AnthropicClient::new(&config).unwrap();
-        
+
         // Test simple text content
         let content = vec![ContentItem::text("Hello world")];
         let result = client.convert_content(&Some(content), &None);
-        
+
         match result {
             AnthropicContent::String(text) => assert_eq!(text, "Hello world"),
             _ => panic!("Expected string content"),
         }
-        
+
         // Test multiple content items
         let content = vec![
             ContentItem::text("Hello"),
             ContentItem::text("world"),
         ];
         let result = client.convert_content(&Some(content), &None);
-        
+
         match result {
             AnthropicContent::Array(blocks) => {
                 assert_eq!(blocks.len(), 2);
@@ -715,21 +715,21 @@ mod tests {
             .with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let client = AnthropicClient::new(&config).unwrap();
-        
+
         let messages = vec![
             LLMMessage::user("Hello"),
             LLMMessage::assistant("Hi there!"),
         ];
-        
+
         let converted = client.convert_messages(&messages);
         assert_eq!(converted.len(), 2);
-        
+
         assert_eq!(converted[0].role, "user");
         match &converted[0].content {
             AnthropicContent::String(text) => assert_eq!(text, "Hello"),
             _ => panic!("Expected string content"),
         }
-        
+
         assert_eq!(converted[1].role, "assistant");
         match &converted[1].content {
             AnthropicContent::String(text) => assert_eq!(text, "Hi there!"),
@@ -743,15 +743,15 @@ mod tests {
             .with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let mut client = AnthropicClient::new(&config).unwrap();
-        
+
         let messages = vec![
             LLMMessage::new_text(MessageRole::System, "You are a helpful assistant"),
             LLMMessage::user("Hello"),
         ];
-        
+
         client.extract_system_message(&messages);
         assert_eq!(client.system_message, Some("You are a helpful assistant".to_string()));
-        
+
         let converted = client.convert_messages(&messages);
         // System message should be filtered out from regular messages
         assert_eq!(converted.len(), 1);
@@ -764,14 +764,14 @@ mod tests {
             .with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let client = AnthropicClient::new(&config).unwrap();
-        
+
         let mut tool_result = ToolResult::new("call_123".to_string(), "test_tool".to_string());
         tool_result.success = true;
         tool_result.result = Some("Success result".to_string());
-        
+
         let converted = client.convert_tool_result(&tool_result);
         assert_eq!(converted.role, "user");
-        
+
         match converted.content {
             AnthropicContent::Array(blocks) => {
                 assert_eq!(blocks.len(), 1);

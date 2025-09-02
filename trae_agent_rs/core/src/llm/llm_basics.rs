@@ -38,7 +38,7 @@ impl MessageRole {
             MessageRole::System => "system",
         }
     }
-    
+
     /// Parse from string
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s.to_lowercase().as_str() {
@@ -111,7 +111,7 @@ impl ContentItem {
     pub fn text(text: impl Into<String>) -> Self {
         ContentItem::Text(TextContent { text: text.into() })
     }
-    
+
     /// Create an image content item from base64 data
     pub fn image_base64(media_type: impl Into<String>, data: impl Into<String>) -> Self {
         ContentItem::Image(ImageContent {
@@ -121,7 +121,7 @@ impl ContentItem {
             },
         })
     }
-    
+
     /// Create an image content item from URL
     pub fn image_url(url: impl Into<String>) -> Self {
         ContentItem::Image(ImageContent {
@@ -130,7 +130,7 @@ impl ContentItem {
             },
         })
     }
-    
+
     /// Get text content if this is a text item
     pub fn as_text(&self) -> Option<&str> {
         match self {
@@ -138,7 +138,7 @@ impl ContentItem {
             _ => None,
         }
     }
-    
+
     /// Get image content if this is an image item
     pub fn as_image(&self) -> Option<&ImageContent> {
         match self {
@@ -167,7 +167,7 @@ impl LLMMessage {
             tool_result: None,
         }
     }
-    
+
     /// Create a new message with multiple content items
     pub fn new_with_content(role: MessageRole, content: Vec<ContentItem>) -> Self {
         Self {
@@ -177,38 +177,38 @@ impl LLMMessage {
             tool_result: None,
         }
     }
-    
+
     /// Create a new user message with text content
     pub fn user(text: impl Into<String>) -> Self {
         Self::new_text(MessageRole::User, text)
     }
-    
+
     /// Create a new assistant message with text content
     pub fn assistant(text: impl Into<String>) -> Self {
         Self::new_text(MessageRole::Assistant, text)
     }
-    
+
     /// Create a new tool message with text content
     pub fn tool(text: impl Into<String>) -> Self {
         Self::new_text(MessageRole::Tool, text)
     }
-    
+
     /// Create a new user message with multiple content items
     pub fn user_with_content(content: Vec<ContentItem>) -> Self {
         Self::new_with_content(MessageRole::User, content)
     }
-    
+
     /// Create a new assistant message with multiple content items
     pub fn assistant_with_content(content: Vec<ContentItem>) -> Self {
         Self::new_with_content(MessageRole::Assistant, content)
     }
-    
+
     /// Get the text content from the message (first text item)
     pub fn get_text(&self) -> Option<&str> {
         self.content.as_ref()?.iter()
             .find_map(|item| item.as_text())
     }
-    
+
     /// Get all text content items concatenated
     pub fn get_all_text(&self) -> String {
         self.content.as_ref()
@@ -248,18 +248,18 @@ impl LLMUsage {
     }
 
     pub fn new(
-        input_token:i32, 
+        input_token:i32,
         output_token:i32,
-        cache_creation_input_tokens:i32, 
-        cache_read_input_tokens:i32, 
+        cache_creation_input_tokens:i32,
+        cache_read_input_tokens:i32,
         reasoing_tokens:i32)
     -> Self{
-        LLMUsage { 
-            input_tokens: input_token, 
-            output_tokens: output_token, 
-            cache_creation_input_tokens: cache_creation_input_tokens, 
-            cache_read_input_tokens: cache_read_input_tokens, 
-            reasoning_tokens: reasoing_tokens, 
+        LLMUsage {
+            input_tokens: input_token,
+            output_tokens: output_token,
+            cache_creation_input_tokens: cache_creation_input_tokens,
+            cache_read_input_tokens: cache_read_input_tokens,
+            reasoning_tokens: reasoing_tokens,
         }
     }
 
@@ -329,8 +329,8 @@ pub struct LLMResponse {
 impl LLMResponse {
     /// Create a new response with text content
     pub fn new_text(
-        content: impl Into<String>, 
-        usage: Option<LLMUsage>, 
+        content: impl Into<String>,
+        usage: Option<LLMUsage>,
         model: Option<String>,
         finish_reason: FinishReason,
         tool_calls: Option<Vec<ToolCall>>,
@@ -341,39 +341,39 @@ impl LLMResponse {
         } else {
             vec![ContentItem::text(content_str)]
         };
-        
-        LLMResponse { 
-            content: content_vec, 
-            usage, 
-            model, 
-            finish_reason, 
-            tool_calls 
+
+        LLMResponse {
+            content: content_vec,
+            usage,
+            model,
+            finish_reason,
+            tool_calls
         }
     }
-    
+
     /// Create a new response with multiple content items
     pub fn new_with_content(
         content: Vec<ContentItem>,
-        usage: Option<LLMUsage>, 
+        usage: Option<LLMUsage>,
         model: Option<String>,
         finish_reason: FinishReason,
         tool_calls: Option<Vec<ToolCall>>,
     ) -> Self {
-        LLMResponse { 
-            content, 
-            usage, 
-            model, 
-            finish_reason, 
-            tool_calls 
+        LLMResponse {
+            content,
+            usage,
+            model,
+            finish_reason,
+            tool_calls
         }
     }
-    
+
     /// Get the text content from the response (first text item)
     pub fn get_text(&self) -> Option<&str> {
         self.content.iter()
             .find_map(|item| item.as_text())
     }
-    
+
     /// Get all text content items concatenated
     pub fn get_all_text(&self) -> String {
         self.content.iter()
@@ -396,40 +396,40 @@ pub struct StreamChunk {
 impl StreamChunk {
     /// Create a new stream chunk with text content
     pub fn new_text(
-        content: Option<String>, 
+        content: Option<String>,
         finish_reason: Option<FinishReason>,
         model: Option<String>,
         tool_calls: Option<Vec<ToolCall>>,
         usage: Option<LLMUsage>
     ) -> Self {
         let content_vec = content.map(|c| vec![ContentItem::text(c)]);
-        
-        StreamChunk { 
-            content: content_vec, 
-            finish_reason, 
-            model, 
-            tool_calls, 
+
+        StreamChunk {
+            content: content_vec,
+            finish_reason,
+            model,
+            tool_calls,
             usage,
-        } 
+        }
     }
-    
+
     /// Create a new stream chunk with multiple content items
     pub fn new_with_content(
-        content: Option<Vec<ContentItem>>, 
+        content: Option<Vec<ContentItem>>,
         finish_reason: Option<FinishReason>,
         model: Option<String>,
         tool_calls: Option<Vec<ToolCall>>,
         usage: Option<LLMUsage>
     ) -> Self {
-        StreamChunk { 
-            content, 
-            finish_reason, 
-            model, 
-            tool_calls, 
+        StreamChunk {
+            content,
+            finish_reason,
+            model,
+            tool_calls,
             usage,
-        } 
+        }
     }
-    
+
     /// Get the text content from the chunk (first text item)
     pub fn get_text(&self) -> Option<&str> {
         self.content.as_ref()?.iter()
@@ -493,27 +493,27 @@ mod tests {
         let text_content = ContentItem::text("Hello world");
         assert_eq!(text_content.as_text(), Some("Hello world"));
         assert!(text_content.as_image().is_none());
-        
+
         // Test image content with URL
         let image_url = ContentItem::image_url("https://example.com/image.jpg");
         assert!(image_url.as_text().is_none());
         assert!(image_url.as_image().is_some());
-        
+
         // Test image content with base64
         let image_b64 = ContentItem::image_base64("image/jpeg", "base64data");
         assert!(image_b64.as_text().is_none());
         assert!(image_b64.as_image().is_some());
-        
+
         // Test message with mixed content
         let message = LLMMessage::new_with_content(MessageRole::User, vec![
             ContentItem::text("What is in this image?"),
             ContentItem::image_url("https://example.com/image.jpg")
         ]);
-        
+
         assert_eq!(message.get_text(), Some("What is in this image?"));
         assert_eq!(message.content.as_ref().unwrap().len(), 2);
     }
-    
+
     #[test]
     fn test_response_helpers() {
         let response = LLMResponse::new_text(
@@ -523,11 +523,11 @@ mod tests {
             FinishReason::Stop,
             None,
         );
-        
+
         assert_eq!(response.get_text(), Some("Hello!"));
         assert_eq!(response.get_all_text(), "Hello!");
         assert_eq!(response.content.len(), 1);
-        
+
         // Test empty response
         let empty_response = LLMResponse::new_text(
             "",
@@ -536,11 +536,11 @@ mod tests {
             FinishReason::Stop,
             None,
         );
-        
+
         assert!(empty_response.content.is_empty());
         assert_eq!(empty_response.get_text(), None);
     }
-    
+
     #[test]
     fn test_message_role() {
         // Test enum variants
@@ -549,42 +549,42 @@ mod tests {
         assert_eq!(MessageRole::Tool.as_str(), "tool");
         assert_eq!(MessageRole::Function.as_str(), "function");
         assert_eq!(MessageRole::Developer.as_str(), "developer");
-        
+
         // Test from_str parsing
         assert_eq!(MessageRole::from_str("user").unwrap(), MessageRole::User);
         assert_eq!(MessageRole::from_str("ASSISTANT").unwrap(), MessageRole::Assistant);
         assert_eq!(MessageRole::from_str("Tool").unwrap(), MessageRole::Tool);
         assert!(MessageRole::from_str("invalid").is_err());
-        
+
         // Test Display trait
         assert_eq!(format!("{}", MessageRole::User), "user");
         assert_eq!(format!("{}", MessageRole::Assistant), "assistant");
-        
+
         // Test conversion to String
         let role_str: String = MessageRole::User.into();
         assert_eq!(role_str, "user");
-        
+
         // Test serialization preserves role names
         let message = LLMMessage::user("Hello");
         let json = serde_json::to_string(&message).unwrap();
         assert!(json.contains("\"role\":\"user\""));
     }
-    
+
     #[test]
     fn test_message_convenience_methods() {
         // Test convenience constructors
         let user_msg = LLMMessage::user("Hello");
         assert_eq!(user_msg.role, MessageRole::User);
         assert_eq!(user_msg.get_text(), Some("Hello"));
-        
+
         let assistant_msg = LLMMessage::assistant("Hi there!");
         assert_eq!(assistant_msg.role, MessageRole::Assistant);
         assert_eq!(assistant_msg.get_text(), Some("Hi there!"));
-        
+
         let tool_msg = LLMMessage::tool("Result");
         assert_eq!(tool_msg.role, MessageRole::Tool);
         assert_eq!(tool_msg.get_text(), Some("Result"));
-        
+
         // Test multi-content convenience methods
         let user_multimodal = LLMMessage::user_with_content(vec![
             ContentItem::text("What's in this image?"),
@@ -592,7 +592,7 @@ mod tests {
         ]);
         assert_eq!(user_multimodal.role, MessageRole::User);
         assert_eq!(user_multimodal.content.as_ref().unwrap().len(), 2);
-        
+
         let assistant_multimodal = LLMMessage::assistant_with_content(vec![
             ContentItem::text("I can see a landscape.")
         ]);

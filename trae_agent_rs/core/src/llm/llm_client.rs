@@ -2,26 +2,26 @@
 // SPDX-License-Identifier: MIT
 
 //! LLM Client wrapper for OpenAI, Anthropic, and other OpenAI compatible LLM providers.
-//! 
+//!
 //! This module provides a unified interface for different LLM providers,
 //! similar to the Python implementation in trae_agent.utils.llm_clients.llm_client.
-//! 
+//!
 //! # Example usage
-//! 
+//!
 //! ```rust
 //! use trae_core::config::{ModelConfig, ModelProvider};
 //! use trae_core::llm::{LLMClient, LLMProvider, LLMMessage};
-//! 
+//!
 //! // Create OpenAI provider configuration
 //! let model_provider = ModelProvider::new("openai".to_string())
 //!     .with_api_key("your-api-key".to_string());
-//! 
+//!
 //! // Create model configuration
 //! let model_config = ModelConfig::new("gpt-4".to_string(), model_provider);
-//! 
+//!
 //! // Create LLM client - automatically detects provider
 //! let mut client = LLMClient::new(model_config)?;
-//! 
+//!
 //! // Send a chat message
 //! let messages = vec![LLMMessage::user("Hello, world!")];
 //! let response = client.chat(messages, &client.model_config, None, true).await?;
@@ -41,7 +41,7 @@ use crate::config::ModelConfig;
 use crate::tools::Tool;
 
 /// Supported LLM providers.
-/// 
+///
 /// This enum matches the providers supported in the Python version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LLMProvider {
@@ -87,7 +87,7 @@ impl From<LLMProvider> for String {
 }
 
 /// Client wrapper that handles different LLM providers
-/// 
+///
 /// This enum holds the specific client implementation for each provider.
 pub enum ClientWrapper {
     OpenAI(OpenAIClient),
@@ -143,7 +143,7 @@ impl LLMProviderTrait for ClientWrapper {
 }
 
 /// Main LLM client that supports multiple providers.
-/// 
+///
 /// This is the primary interface for LLM interactions, providing a unified API
 /// across different providers. It automatically selects the appropriate client
 /// implementation based on the provider specified in the model configuration.
@@ -158,34 +158,34 @@ pub struct LLMClient {
 
 impl LLMClient {
     /// Create a new LLM client with the given model configuration.
-    /// 
+    ///
     /// This method automatically detects the provider from the model configuration
     /// and instantiates the appropriate client implementation.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `model_config` - The model configuration containing provider details
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a `Result` containing the initialized `LLMClient` or an error if
     /// the provider is unsupported or configuration is invalid.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// use trae_core::config::{ModelConfig, ModelProvider};
     /// use trae_core::llm::LLMClient;
-    /// 
+    ///
     /// let model_provider = ModelProvider::new("openai".to_string())
     ///     .with_api_key("sk-...".to_string());
     /// let model_config = ModelConfig::new("gpt-4".to_string(), model_provider);
-    /// 
+    ///
     /// let client = LLMClient::new(model_config)?;
     /// ```
     pub fn new(model_config: ModelConfig) -> LLMResult<Self> {
         let provider = LLMProvider::from_str(&model_config.model_provider.name)?;
-        
+
         let client = match provider {
             LLMProvider::OpenAI => {
                 let openai_client = OpenAIClient::new(&model_config)?;
@@ -209,38 +209,38 @@ impl LLMClient {
     }
 
     /// Set the chat history for the underlying client.
-    /// 
+    ///
     /// This method allows you to set a persistent chat history that will be
     /// included in subsequent chat calls when `reuse_history` is true.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `messages` - Vector of `LLMMessage` representing the chat history
     pub fn set_chat_history(&mut self, messages: Vec<LLMMessage>) {
         self.client.set_chat_history(messages);
     }
 
     /// Send chat messages to the LLM.
-    /// 
+    ///
     /// This is the main method for interacting with the LLM. It sends a sequence
     /// of messages and returns the LLM's response.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `messages` - Vector of messages to send to the LLM
     /// * `model_config` - Model configuration to use for this request
     /// * `tools` - Optional vector of tools the LLM can call
     /// * `reuse_history` - Whether to include previously set chat history
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a `Result` containing the `LLMResponse` from the provider.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// use trae_core::llm::{LLMClient, LLMMessage};
-    /// 
+    ///
     /// let messages = vec![LLMMessage::user("What is the capital of France?")];
     /// let response = client.chat(messages, &client.model_config, None, true).await?;
     /// println!("Response: {}", response.get_text().unwrap_or("No text response"));
@@ -256,19 +256,19 @@ impl LLMClient {
     }
 
     /// Send chat messages to the LLM with streaming response.
-    /// 
+    ///
     /// This method is similar to `chat` but returns a stream of response chunks
     /// instead of waiting for the complete response.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `messages` - Vector of messages to send to the LLM
     /// * `model_config` - Model configuration to use for this request
     /// * `tools` - Optional vector of tools the LLM can call
     /// * `reuse_history` - Whether to include previously set chat history
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a `Result` containing an `LLMStream` of response chunks.
     pub async fn chat_stream(
         &mut self,
@@ -281,27 +281,27 @@ impl LLMClient {
     }
 
     /// Get the provider name for this client.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a string slice containing the provider name.
     pub fn get_provider_name(&self) -> &str {
         self.client.get_provider_name()
     }
 
     /// Get the provider enum for this client.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a reference to the `LLMProvider` enum variant.
     pub fn get_provider(&self) -> &LLMProvider {
         &self.provider
     }
 
     /// Get the model configuration for this client.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Returns a reference to the `ModelConfig`.
     pub fn get_model_config(&self) -> &ModelConfig {
         &self.model_config
@@ -318,7 +318,7 @@ mod tests {
         assert_eq!(LLMProvider::from_str("openai").unwrap(), LLMProvider::OpenAI);
         assert_eq!(LLMProvider::from_str("ANTHROPIC").unwrap(), LLMProvider::Anthropic);
         assert_eq!(LLMProvider::from_str("openai_compatible").unwrap(), LLMProvider::OpenAICompatible);
-        
+
         assert!(LLMProvider::from_str("invalid").is_err());
     }
 
@@ -346,10 +346,10 @@ mod tests {
         let model_provider = ModelProvider::new("openai".to_string())
             .with_api_key("test_key".to_string());
         let model_config = ModelConfig::new("gpt-4".to_string(), model_provider);
-        
+
         let client = LLMClient::new(model_config);
         assert!(client.is_ok());
-        
+
         let client = client.unwrap();
         assert_eq!(client.get_provider(), &LLMProvider::OpenAI);
         assert_eq!(client.get_provider_name(), "openai");
@@ -359,10 +359,10 @@ mod tests {
     fn test_llm_client_creation_invalid_provider() {
         let model_provider = ModelProvider::new("invalid_provider".to_string());
         let model_config = ModelConfig::new("some-model".to_string(), model_provider);
-        
+
         let client = LLMClient::new(model_config);
         assert!(client.is_err());
-        
+
         if let Err(e) = client {
             assert!(e.to_string().contains("Unsupported provider"));
         }
@@ -373,9 +373,9 @@ mod tests {
         let model_provider = ModelProvider::new("openai".to_string())
             .with_api_key("test_key".to_string());
         let model_config = ModelConfig::new("gpt-4".to_string(), model_provider);
-        
+
         let client = LLMClient::new(model_config.clone()).unwrap();
-        
+
         assert_eq!(client.get_provider(), &LLMProvider::OpenAI);
         assert_eq!(client.get_model_config().model, "gpt-4");
         assert_eq!(client.get_model_config().model_provider.name, "openai");

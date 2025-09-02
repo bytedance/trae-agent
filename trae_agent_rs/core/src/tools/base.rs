@@ -10,13 +10,13 @@ use std::pin::Pin;
 pub trait Tool: Send + Sync {
     /// Get the name of the tool
     fn get_name(&self) -> &str;
-    
+
     /// Get the description of the tool
     fn get_description(&self) -> &str;
-    
+
     /// Get the input schema for the tool parameters
     fn get_input_schema(&self) -> Value;
-    
+
     /// Execute the tool with the given arguments
     fn execute(&self, arguments: HashMap<String, Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>>;
 }

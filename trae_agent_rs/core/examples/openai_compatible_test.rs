@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 //! OpenAI Compatible client test program
-//! 
+//!
 //! This program demonstrates how to use the OpenAI Compatible client with various configurations
 //! and test scenarios including basic chat, tool calling, and streaming.
-//! 
+//!
 //! Usage:
 //! 1. Set your API key: export OPENAI_COMPATIBLE_API_KEY="your-api-key"
 //! 2. Set your base URL: export OPENAI_COMPATIBLE_BASE_URL="https://api.your-provider.com/v1"
@@ -61,11 +61,11 @@ impl Tool for CalculatorTool {
         let operation = arguments.get("operation")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        
+
         let a = arguments.get("a")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
-        
+
         let b = arguments.get("b")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
@@ -131,7 +131,7 @@ impl Tool for WeatherTool {
 
 async fn test_basic_chat(client: &mut LLMClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 Testing basic chat functionality...");
-    
+
     let messages = vec![
         LLMMessage {
             role: MessageRole::User,
@@ -166,7 +166,7 @@ async fn test_basic_chat(client: &mut LLMClient, model_config: &ModelConfig) -> 
 
 async fn test_tool_calling(client: &mut LLMClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🔧 Testing tool calling functionality...");
-    
+
     let tools: Vec<Box<dyn Tool>> = vec![
         Box::new(CalculatorTool),
         Box::new(WeatherTool),
@@ -186,12 +186,12 @@ async fn test_tool_calling(client: &mut LLMClient, model_config: &ModelConfig) -
             println!("✅ Tool calling test successful!");
             println!("Model: {:?}", response.model);
             println!("Finish reason: {:?}", response.finish_reason);
-            
+
             if let Some(tool_calls) = &response.tool_calls {
                 println!("Tool calls made: {}", tool_calls.len());
                 for (i, call) in tool_calls.iter().enumerate() {
                     println!("  Tool call {}: {}", i + 1, call);
-                    
+
                     // Execute the tool call using the new async interface
                     let result = if call.name == "calculator" {
                         CalculatorTool.execute(call.arguments.clone()).await
@@ -200,7 +200,7 @@ async fn test_tool_calling(client: &mut LLMClient, model_config: &ModelConfig) -
                     } else {
                         Err("Unknown tool".to_string())
                     };
-                    
+
                     match result {
                         Ok(output) => println!("  Tool result: success=true, result={}", output),
                         Err(error) => println!("  Tool result: success=false, error={}", error),
@@ -209,7 +209,7 @@ async fn test_tool_calling(client: &mut LLMClient, model_config: &ModelConfig) -
             } else {
                 println!("No tool calls were made (model might not support tools or didn't decide to use them)");
             }
-            
+
             if !response.content.is_empty() {
                 if let Some(text) = response.content[0].as_text() {
                     println!("Response: {}", text);
@@ -227,7 +227,7 @@ async fn test_tool_calling(client: &mut LLMClient, model_config: &ModelConfig) -
 
 async fn test_streaming(client: &mut LLMClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📡 Testing streaming functionality...");
-    
+
     let messages = vec![
         LLMMessage {
             role: MessageRole::User,
@@ -241,24 +241,24 @@ async fn test_streaming(client: &mut LLMClient, model_config: &ModelConfig) -> R
         Ok(mut stream) => {
             println!("✅ Streaming test initiated successfully!");
             println!("🤖 Assistant: ");
-            
+
             use futures::StreamExt;
             use std::io::{self, Write};
             use tokio::time::{sleep, Duration};
-            
+
             // Get typewriter delay from environment variable (default: 15ms)
             let typewriter_delay = std::env::var("TYPEWRITER_DELAY_MS")
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(15);
-            
+
             let mut chunk_count = 0;
-            
+
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
                     Ok(chunk) => {
                         chunk_count += 1;
-                        
+
                         if let Some(content) = &chunk.content {
                             if !content.is_empty() {
                                 if let Some(text) = content[0].as_text() {
@@ -272,7 +272,7 @@ async fn test_streaming(client: &mut LLMClient, model_config: &ModelConfig) -> R
                                 }
                             }
                         }
-                        
+
                         if let Some(finish_reason) = &chunk.finish_reason {
                             println!("\n\n🏁 Stream finished with reason: {:?}", finish_reason);
                             break;
@@ -284,7 +284,7 @@ async fn test_streaming(client: &mut LLMClient, model_config: &ModelConfig) -> R
                     }
                 }
             }
-            
+
             println!("✅ Streaming test completed! Received {} chunks", chunk_count);
         }
         Err(e) => {
@@ -298,14 +298,14 @@ async fn test_streaming(client: &mut LLMClient, model_config: &ModelConfig) -> R
 
 async fn test_error_handling() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n⚠️  Testing error handling...");
-    
+
     // Test with invalid base URL that will fail quickly (non-existent domain)
     // Using .invalid TLD ensures DNS resolution fails quickly without retries
     // Alternative: use "http://localhost:99999" for immediate connection refused
     let provider = ModelProvider::new("openai_compatible".to_string())
         .with_api_key("test-key".to_string())
         .with_base_url("https://non-existent-domain-12345.invalid".to_string());
-    
+
     let config = ModelConfig::new("gpt-4o-2024-11-20".to_string(), provider)
         .with_temperature(0.7)
         .with_max_tokens(100)
@@ -322,7 +322,7 @@ async fn test_error_handling() -> Result<(), Box<dyn std::error::Error>> {
                 }
             ];
 
-            let model_config = ModelConfig::new("gpt-4o-2024-11-20".to_string(), 
+            let model_config = ModelConfig::new("gpt-4o-2024-11-20".to_string(),
                 ModelProvider::new("openai_compatible".to_string())
                     .with_api_key("test-key".to_string())
                     .with_base_url("https://non-existent-domain-12345.invalid".to_string()))
@@ -356,38 +356,38 @@ fn print_header() {
 
 fn print_configuration_info() {
     println!("📋 Configuration:");
-    
+
     if let Ok(api_key) = std::env::var("OPENAI_COMPATIBLE_API_KEY") {
-        println!("✅ API Key: {}...{}", &api_key[..8.min(api_key.len())], 
+        println!("✅ API Key: {}...{}", &api_key[..8.min(api_key.len())],
             if api_key.len() > 8 { &api_key[api_key.len()-4..] } else { "" });
     } else {
         println!("❌ API Key: Not set (set OPENAI_COMPATIBLE_API_KEY environment variable)");
     }
-    
+
     if let Ok(base_url) = std::env::var("OPENAI_COMPATIBLE_BASE_URL") {
         println!("✅ Base URL: {}", base_url);
     } else {
         println!("❌ Base URL: Not set (set OPENAI_COMPATIBLE_BASE_URL environment variable)");
     }
-    
+
     if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL") {
         println!("✅ Site URL: {}", site_url);
     } else {
         println!("ℹ️  Site URL: Not set (optional - set OPENAI_COMPATIBLE_SITE_URL)");
     }
-    
+
     if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME") {
         println!("✅ Site Name: {}", site_name);
     } else {
         println!("ℹ️  Site Name: Not set (optional - set OPENAI_COMPATIBLE_SITE_NAME)");
     }
-    
+
     let typewriter_delay = std::env::var("TYPEWRITER_DELAY_MS")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(15);
     println!("⚡ Typewriter Delay: {}ms (set TYPEWRITER_DELAY_MS to customize, 0 to disable)", typewriter_delay);
-    
+
     println!();
 }
 
@@ -399,7 +399,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get API key and base URL from environment
     let api_key = std::env::var("OPENAI_COMPATIBLE_API_KEY")
         .map_err(|_| "OPENAI_COMPATIBLE_API_KEY environment variable not set")?;
-    
+
     let base_url = std::env::var("OPENAI_COMPATIBLE_BASE_URL")
         .map_err(|_| "OPENAI_COMPATIBLE_BASE_URL environment variable not set")?;
 
@@ -417,7 +417,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🚀 Starting tests with model: {}", model_config.model);
     println!("Provider: {}", client.get_provider_name());
-    
+
     // Run all tests
     let mut test_results = Vec::new();
 
@@ -462,7 +462,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("================");
     let mut passed = 0;
     let total = test_results.len();
-    
+
     for (test_name, success) in test_results {
         let status = if success { "✅ PASS" } else { "❌ FAIL" };
         println!("{}: {}", test_name, status);
@@ -470,9 +470,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             passed += 1;
         }
     }
-    
+
     println!("\nOverall: {}/{} tests passed", passed, total);
-    
+
     if passed == total {
         println!("🎉 All tests passed!");
     } else {
