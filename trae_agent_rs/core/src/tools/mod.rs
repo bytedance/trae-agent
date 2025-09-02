@@ -2,6 +2,7 @@ use std::{collections::HashMap, fmt};
 use serde::{Deserialize, Serialize};
 
 pub mod base;
+pub mod edit;
 pub use base::Tool;
 
 /// Tool call arguments type alias
