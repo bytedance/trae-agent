@@ -24,8 +24,8 @@ pub struct Bash {
 
 impl Bash{
     fn new(model_provider:String)-> Self{
-        Bash { 
-            model_provider: model_provider, 
+        Bash {
+            model_provider: model_provider,
             bash: BashProcess::new(),
         }
     }
@@ -88,7 +88,7 @@ impl Tool for Bash {
             }
         };
 
-        let v: Value = serde_json::from_str(data).unwrap(); // since it is fixed so theoritically is should always be the same
+        let v: Value = serde_json::from_str(data).unwrap(); // since it is fixed so theoretically it should always be the same
         v
     }
 
@@ -96,7 +96,7 @@ impl Tool for Bash {
         &mut self,
         arguments: std::collections::HashMap<String, serde_json::Value>,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
-        
+
             Box::pin(async move {
                         let cmd = arguments.get("command")
                             .and_then(|x| x.as_str())
@@ -113,9 +113,9 @@ impl Tool for Bash {
                         if let Err(e) = starterr{
                             return Err(format!("fail to start the bash {}", e.to_string()))
                         }
-                        
 
-                        // run the command 
+
+                        // run the command
                         let exec_result = self.bash.run(cmd).await;
 
                         if let Err(e) = exec_result{
@@ -124,9 +124,9 @@ impl Tool for Bash {
 
                         if restart {
                             let restart_result = self.bash.stop().await;
-                            
+
                             if let Err(e) = restart_result{
-                                return Err(format!("retart fail error: {}" , e));
+                                return Err(format!("restart fail error: {}" , e));
                             }
 
                             let rebot_result = self.bash.start().await;
@@ -135,18 +135,18 @@ impl Tool for Bash {
                                 return Err(format!("rebot fail error: {}" , e));
                             }
                         }
-                        
+
                         match exec_result{
                             Ok(res)=>{
                                 if res.error != "" || res.error.len() != 0 || res.error_code != 0 {
-                                    return Err(format!("Error: {} , Error code: {} " , res.error , res.error_code))    
+                                    return Err(format!("Error: {} , Error code: {} " , res.error , res.error_code))
                                 }
 
                                 return Ok(res.output);
 
                             },
                             Err(e) => {
-                                return Err(format!("Unexpected Error {}" , e));// this should never happend due to previous check
+                                return Err(format!("Unexpected Error {}" , e));// this should never happen due to previous check
                             }
                         }
                     })

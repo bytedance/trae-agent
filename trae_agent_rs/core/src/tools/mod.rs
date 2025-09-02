@@ -89,7 +89,7 @@ impl ToolSchema {
 
 #[derive(Debug, Default)]
 pub struct ToolExecResult{
-    pub output: Option<String>, 
-    pub error: Option<String>, 
+    pub output: Option<String>,
+    pub error: Option<String>,
     pub error_code: Option<i32>,
 }

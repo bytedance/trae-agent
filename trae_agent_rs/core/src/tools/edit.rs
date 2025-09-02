@@ -394,7 +394,7 @@ async fn view(path: &str, view_range: Option<&[i32; 2]>) -> Result<ToolExecResul
     if Path::new(path).is_dir() {
         if view_range.is_none() {
             return Err(EditToolError::Other(
-                "view range parameter is not allowed when path points to a directorys".to_string(),
+                "view range parameter is not allowed when path points to a directories".to_string(),
             ));
         }
 
@@ -428,7 +428,7 @@ async fn view(path: &str, view_range: Option<&[i32; 2]>) -> Result<ToolExecResul
                 if let Ok(error_msg) = res_err {
                     Some(error_msg);
                 }
-                None // fail to parse 
+                None // fail to parse
             };
             // Example: map ExitStatus to an error code if non-success
             let error_code = if res.status.success() {
@@ -478,7 +478,7 @@ async fn view(path: &str, view_range: Option<&[i32; 2]>) -> Result<ToolExecResul
             file_slice = file_lines[range[0] as usize..range[1] as usize].join("\n");
         }
 
-        //TODO: haven't hande cases like file_content and file_content tab
+        //TODO: haven't handle cases like file_content and file_content tab
 
         return Ok(ToolExecResult {
             output: Some(format!(
@@ -509,7 +509,7 @@ enum EditToolError {
     #[error("invalid index number: {0}")]
     IndexError(String),
 
-    #[error("fail to read the fiel")]
+    #[error("fail to read the file")]
     FailReadFile,
 
     #[error("Parameter 'file_text' is required and must be a string for command: create")]
@@ -528,7 +528,7 @@ enum EditToolError {
     Io,
 
     #[error(
-        "No replacement was performed. Multiple occurences of old_str `{0}` in lines {0}. Please ensure it is unique"
+        "No replacement was performed. Multiple occurrences of old_str `{0}` in lines {0}. Please ensure it is unique"
     )]
     MultipleOccurrences(String, u64),
 
