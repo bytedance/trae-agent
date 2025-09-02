@@ -80,8 +80,24 @@ impl Tool for Edit {
     }
 }
 
-async fn view_handler(args: HashMap<String, serde_json::Value>) {
-    todo!()
+async fn view_handler(path: &str ,args: HashMap<String, serde_json::Value>) -> Result<ToolExecResult , EditToolError> {
+    let view_range: Option<[i32; 2]> = args.get("view_range").and_then(|v| {
+        match v {
+            serde_json::Value::Array(arr) if arr.len() == 2 => {
+                let a = arr[0].as_i64()? as i32;
+                let b = arr[1].as_i64()? as i32;
+                Some([a, b])
+            }
+            _ => None
+        }
+    });
+
+    if let Some(range) = view_range{
+        return view(path, Some(&range)).await;
+    }
+    // assume can't match
+    return view(path,  None).await;
+
 }
 
 fn create_handler() {
@@ -96,7 +112,7 @@ fn insert_handler() {
     todo!()
 }
 
-async fn view(path: &str, view_range: Option<&[&i32; 2]>) -> Result<ToolExecResult, EditToolError> {
+async fn view(path: &str, view_range: Option<&[i32; 2]>) -> Result<ToolExecResult, EditToolError> {
     if Path::new(path).is_dir() {
         if view_range.is_none() {
             return Err(EditToolError::Other(
@@ -164,13 +180,13 @@ async fn view(path: &str, view_range: Option<&[&i32; 2]>) -> Result<ToolExecResu
     let number_line = file_content.chars().filter(|&c| c == '\n').count() + 1;
 
     if let Some(range) = view_range {
-        if *range[0] > *range[1] && *range[1] != -1 {
+        if range[0] > range[1] && range[1] != -1 {
             return Err(EditToolError::IndexError(
                 "Index one must be larger than index zero".to_string(),
             ));
         }
 
-        if *range[1] > number_line as i32 || *range[0] > number_line as i32 {
+        if range[1] > number_line as i32 || range[0] > number_line as i32 {
             return Err(EditToolError::IndexError(
                 "Index is larger than the total number of lines in the file".to_string(),
             ));
@@ -180,10 +196,10 @@ async fn view(path: &str, view_range: Option<&[&i32; 2]>) -> Result<ToolExecResu
 
         let file_slice: String;
 
-        if *range[1] == -1 {
-            file_slice = file_lines[*range[0] as usize..].join("\n");
+        if range[1] == -1 {
+            file_slice = file_lines[range[0] as usize..].join("\n");
         } else {
-            file_slice = file_lines[*range[0] as usize..*range[1] as usize].join("\n");
+            file_slice = file_lines[range[0] as usize..range[1] as usize].join("\n");
         }
 
         //TODO: haven't hande cases like file_content and file_content tab
@@ -210,6 +226,7 @@ async fn view(path: &str, view_range: Option<&[&i32; 2]>) -> Result<ToolExecResu
     Err(EditToolError::Other("Unexpected Error".to_string()))
 }
 
+
 #[derive(Error, Debug)]
 enum EditToolError {
     #[error("invalid index number: {0}")]
@@ -222,11 +239,11 @@ enum EditToolError {
     Other(String),
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*; // bring view, ToolExecResult, EditToolError into scope
     use std::fs;
-    use std::path::Path;
     use tempfile::tempdir; // add `tempfile = "3"` to Cargo.toml
     use tokio::runtime::Runtime;
 
@@ -270,7 +287,7 @@ mod tests {
 
         let path_str = file_path.to_str().unwrap();
         // take lines 2..4 (zero-based indexing in your code)
-        let range_arr: [&i32; 2] = [&2, &4];
+        let range_arr: [i32; 2] = [2, 4];
         let result = run_async(view(path_str, Some(&range_arr)));
 
         match result {
@@ -292,7 +309,7 @@ mod tests {
         fs::write(&file_path, "¥\ny\nz\n").expect("write file");
 
         let path_str = file_path.to_str().unwrap();
-        let range_arr: [&i32; 2] = [&1, &-1]; // from line 1 to end
+        let range_arr: [i32; 2] = [1, -1]; // from line 1 to end
         let result = run_async(view(path_str, Some(&range_arr)));
 
         match result {
@@ -333,7 +350,7 @@ mod tests {
         fs::write(&file_path, "one\ntwo\n").expect("write file");
 
         let path_str = file_path.to_str().unwrap();
-        let range_arr: [&i32; 2] = [&2, &1]; // start > end and end != -1 -> should be IndexError
+        let range_arr: [i32; 2] = [2, 1]; // start > end and end != -1 -> should be IndexError
         let result = run_async(view(path_str, Some(&range_arr)));
 
         match result {
