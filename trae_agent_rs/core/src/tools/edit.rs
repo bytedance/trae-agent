@@ -80,28 +80,56 @@ impl Tool for Edit {
     }
 }
 
-async fn view_handler(path: &str ,args: HashMap<String, serde_json::Value>) -> Result<ToolExecResult , EditToolError> {
-    let view_range: Option<[i32; 2]> = args.get("view_range").and_then(|v| {
-        match v {
-            serde_json::Value::Array(arr) if arr.len() == 2 => {
-                let a = arr[0].as_i64()? as i32;
-                let b = arr[1].as_i64()? as i32;
-                Some([a, b])
-            }
-            _ => None
+async fn view_handler(
+    path: &str,
+    args: HashMap<String, serde_json::Value>,
+) -> Result<ToolExecResult, EditToolError> {
+    let view_range: Option<[i32; 2]> = args.get("view_range").and_then(|v| match v {
+        serde_json::Value::Array(arr) if arr.len() == 2 => {
+            let a = arr[0].as_i64()? as i32;
+            let b = arr[1].as_i64()? as i32;
+            Some([a, b])
         }
+        _ => None,
     });
 
-    if let Some(range) = view_range{
+    if let Some(range) = view_range {
         return view(path, Some(&range)).await;
     }
     // assume can't match
-    return view(path,  None).await;
-
+    return view(path, None).await;
 }
 
-fn create_handler() {
-    todo!()
+async fn create_handler(
+    path: &str,
+    args: HashMap<String, serde_json::Value>,
+) -> Result<ToolExecResult, EditToolError> {
+
+    let file_text = args.get("file_text")
+        .and_then(|v|  v.as_str())
+        .unwrap_or("");
+
+    if file_text.len() == 0{
+        return Err(EditToolError::FileTextEmpty);
+    }
+    
+    let res = fs::write(path, file_text);    
+
+    if let Ok(_) = res{
+        return Ok(ToolExecResult{
+            output: Some(format!("File created successfully at: {}" , path)),
+            error: None,
+            error_code: None
+        });
+    }
+
+    if let Err(e) = res{
+        return Err(
+            EditToolError::Other(e.to_string())
+        )
+    }
+
+    return Err(EditToolError::Other("unexpected error".to_string()))
 }
 
 fn str_replace_handler() {
@@ -166,10 +194,8 @@ async fn view(path: &str, view_range: Option<&[i32; 2]>) -> Result<ToolExecResul
         }
     }
 
-
     let file_content = {
         let content = fs::read_to_string(path);
-
         if let Ok(content) = content {
             content
         } else {
@@ -215,17 +241,18 @@ async fn view(path: &str, view_range: Option<&[i32; 2]>) -> Result<ToolExecResul
     }
 
     if view_range.is_none() {
-        return Ok(ToolExecResult { 
-            output: Some(format!("The follow is the full content of the file: {} \n content: {} \n" ,path, file_content)), 
-            error: None, 
-            error_code: None
-        })
+        return Ok(ToolExecResult {
+            output: Some(format!(
+                "The follow is the full content of the file: {} \n content: {} \n",
+                path, file_content
+            )),
+            error: None,
+            error_code: None,
+        });
     }
-
 
     Err(EditToolError::Other("Unexpected Error".to_string()))
 }
-
 
 #[derive(Error, Debug)]
 enum EditToolError {
@@ -235,10 +262,12 @@ enum EditToolError {
     #[error("fail to read the fiel")]
     FailReadFile,
 
+    #[error("'file_text' is required and must be a string for command: create")]
+    FileTextEmpty,
+
     #[error("other error {0}")]
     Other(String),
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -246,6 +275,9 @@ mod tests {
     use std::fs;
     use tempfile::tempdir; // add `tempfile = "3"` to Cargo.toml
     use tokio::runtime::Runtime;
+    use tempfile::{TempDir};
+    use serde_json::json;
+    use std::path::PathBuf;
 
     // helper to run async function synchronously in tests
     fn run_async<F, R>(f: F) -> R
@@ -356,6 +388,108 @@ mod tests {
         match result {
             Err(EditToolError::IndexError(_)) => {}
             other => panic!("expected IndexError, got {:?}", other),
+        }
+    }
+
+
+    fn temp_file_path(dir: &TempDir, name: &str) -> PathBuf {
+        dir.path().join(name)
+    }
+    #[test]
+    fn test_create_handler_success_writes_file_and_returns_ok() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = temp_file_path(&dir, "ok.txt");
+        let path_str = file_path.to_str().unwrap();
+        let mut args = HashMap::new();
+        args.insert("file_text".to_string(), json!("hello world"));
+        let result = run_async(create_handler(path_str, args));
+        match result {
+            Ok(res) => {
+                assert!(res.error.is_none());
+                assert!(res.error_code.is_none());
+                let out = res.output.unwrap_or_default();
+                assert!(out.contains("File created successfully"));
+                assert!(out.contains(path_str));
+                let contents = fs::read_to_string(path_str).expect("read back file");
+                assert_eq!(contents, "hello world");
+            }
+            other => panic!("expected Ok, got {:?}", other),
+        }
+    }
+    #[test]
+    fn test_create_handler_error_when_file_text_empty_string() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = temp_file_path(&dir, "empty.txt");
+        let path_str = file_path.to_str().unwrap();
+        let mut args = HashMap::new();
+        args.insert("file_text".to_string(), json!(""));
+        let result = run_async(create_handler(path_str, args));
+        match result {
+            Err(EditToolError::FileTextEmpty) => {}
+            other => panic!("expected FileTextEmpty, got {:?}", other),
+        }
+    }
+    #[test]
+    fn test_create_handler_error_when_file_text_missing() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = temp_file_path(&dir, "missing.txt");
+        let path_str = file_path.to_str().unwrap();
+        // No "file_text" key in args
+        let args: HashMap<String, serde_json::Value> = HashMap::new();
+        let result = run_async(create_handler(path_str, args));
+        match result {
+            Err(EditToolError::FileTextEmpty) => {}
+            other => panic!("expected FileTextEmpty when key is missing, got {:?}", other),
+        }
+    }
+    #[test]
+    fn test_create_handler_error_when_file_text_not_a_string() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = temp_file_path(&dir, "nonstring.txt");
+        let path_str = file_path.to_str().unwrap();
+        // Non-string value: as_str() -> None -> unwrap_or("") -> empty -> FileTextEmpty
+        let mut args = HashMap::new();
+        args.insert("file_text".to_string(), json!(12345));
+        let result = run_async(create_handler(path_str, args));
+        match result {
+            Err(EditToolError::FileTextEmpty) => {}
+            other => panic!("expected FileTextEmpty when value is non-string, got {:?}", other),
+        }
+    }
+    #[test]
+    fn test_create_handler_error_when_write_fails_due_to_missing_parent_dir() {
+        let dir = tempdir().expect("tempdir");
+        // Point to a path inside a subdirectory that doesn't exist
+        let nested_nonexistent = dir.path().join("no_such_dir").join("file.txt");
+        let path_str = nested_nonexistent.to_str().unwrap();
+        let mut args = HashMap::new();
+        args.insert("file_text".to_string(), json!("data"));
+        let result = run_async(create_handler(path_str, args));
+        match result {
+            Err(EditToolError::Other(msg)) => {
+                // On most platforms, this will mention "No such file or directory"
+                // or a similar permission/IO message. We just assert it's non-empty.
+                assert!(!msg.is_empty(), "expected non-empty IO error message");
+            }
+            other => panic!("expected Other(..) due to fs::write error, got {:?}", other),
+        }
+    }
+    #[test]
+    fn test_create_handler_overwrites_existing_file() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = temp_file_path(&dir, "overwrite.txt");
+        let path_str = file_path.to_str().unwrap();
+        // Pre-create with some content
+        fs::write(&file_path, "old").expect("prewrite");
+        let mut args = HashMap::new();
+        args.insert("file_text".to_string(), json!("new"));
+        let result = run_async(create_handler(path_str, args));
+        match result {
+            Ok(_) => {
+                let contents = fs::read_to_string(path_str).expect("read back file");
+                assert_eq!(contents, "new");
+            }
+            other => panic!("expected Ok overwrite, got {:?}", other),
         }
     }
 }
