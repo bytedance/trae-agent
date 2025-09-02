@@ -19,7 +19,17 @@ use crate::Tool;
 
 pub struct Bash {
     model_provider: String,
-    bash: BaseProcess,
+    bash: BashProcess,
+}
+
+impl Bash{
+    fn new(model_provider:String)-> Self{
+        Bash { 
+            model_provider: model_provider, 
+            bash: BashProcess::new(),
+        }
+    }
+
 }
 
 impl Tool for Bash {
@@ -146,7 +156,7 @@ impl Tool for Bash {
 
 
 // set the bash process to be private field
-struct BaseProcess {
+struct BashProcess {
     child: Option<Child>,
     stdin: Option<ChildStdin>,
     stdout: Option<ChildStdout>,
@@ -158,7 +168,7 @@ struct BaseProcess {
     sentinel: String,
 }
 
-impl BaseProcess {
+impl BashProcess {
     async fn start(&mut self) -> Result<(), BashError> {
         if self.started {
             return Ok(());
@@ -370,4 +380,15 @@ struct BashExecResult {
     pub output: String,
     pub error: String,
     pub error_code: i32,
+}
+
+
+#[cfg(test)]
+mod tests{
+
+    #[test]
+    fn test_new(){
+    }
+    //TODO: add test for bash tool
+
 }
