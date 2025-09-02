@@ -149,6 +149,8 @@ async fn view(path: &str, view_range: Option<&[&i32; 2]>) -> Result<ToolExecResu
             });
         }
     }
+
+
     let file_content = {
         let content = fs::read_to_string(path);
 
@@ -188,13 +190,23 @@ async fn view(path: &str, view_range: Option<&[&i32; 2]>) -> Result<ToolExecResu
 
         return Ok(ToolExecResult {
             output: Some(format!(
-                "Here's the result of running cat -n on {}\n {} \n",
+                "Here's the result of running cat -n on {} \n {} \n",
                 path, file_slice
             )),
             error: None,
             error_code: None,
         });
     }
+
+    if view_range.is_none() {
+        return Ok(ToolExecResult { 
+            output: Some(format!("The follow is the full content of the file: {} \n content: {} \n" ,path, file_content)), 
+            error: None, 
+            error_code: None
+        })
+    }
+
+
     Err(EditToolError::Other("Unexpected Error".to_string()))
 }
 
@@ -208,4 +220,125 @@ enum EditToolError {
 
     #[error("other error {0}")]
     Other(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*; // bring view, ToolExecResult, EditToolError into scope
+    use std::fs;
+    use std::path::Path;
+    use tempfile::tempdir; // add `tempfile = "3"` to Cargo.toml
+    use tokio::runtime::Runtime;
+
+    // helper to run async function synchronously in tests
+    fn run_async<F, R>(f: F) -> R
+    where
+        F: std::future::Future<Output = R>,
+    {
+        // Use a small runtime per test
+        let rt = Runtime::new().expect("create runtime");
+        rt.block_on(f)
+    }
+
+    #[test]
+    fn test_view_file_full() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("test.txt");
+        fs::write(&file_path, "line1\nline2\nline3\n").expect("write file");
+
+        let path_str = file_path.to_str().unwrap();
+
+        let result = run_async(view(path_str, None));
+
+        match result {
+            Ok(res) => {
+                assert!(res.output.is_some(), "expected output for file");
+                let out = res.output.unwrap();
+                // file output should include "cat -n" style header and the file content slice
+                assert!(out.contains("line1"));
+                assert!(out.contains("line3"));
+            }
+            Err(e) => panic!("expected Ok, got Err: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_view_file_range() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("test2.txt");
+        fs::write(&file_path, "a\nb\nc\nd\ne\nf\n").expect("write file");
+
+        let path_str = file_path.to_str().unwrap();
+        // take lines 2..4 (zero-based indexing in your code)
+        let range_arr: [&i32; 2] = [&2, &4];
+        let result = run_async(view(path_str, Some(&range_arr)));
+
+        match result {
+            Ok(res) => {
+                assert!(res.output.is_some());
+                let out = res.output.unwrap();
+
+                assert!(out.contains("c"));
+                assert!(out.contains("d"));
+            }
+            Err(e) => panic!("expected Ok, got Err: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_view_file_range_to_end_with_minus_one() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("test3.txt");
+        fs::write(&file_path, "¥\ny\nz\n").expect("write file");
+
+        let path_str = file_path.to_str().unwrap();
+        let range_arr: [&i32; 2] = [&1, &-1]; // from line 1 to end
+        let result = run_async(view(path_str, Some(&range_arr)));
+
+        match result {
+            Ok(res) => {
+                let out = res.output.expect("output present");
+                dbg!(out.clone());
+                // expect lines y and z
+                assert!(out.contains("y"));
+                assert!(out.contains("z"));
+                assert!(!out.contains("¥"));
+            }
+            Err(e) => panic!("expected Ok, got Err: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_view_directory_with_range_not_allowed() {
+        let dir = tempdir().expect("tempdir");
+        let subdir = dir.path().join("sub");
+        fs::create_dir(&subdir).expect("create subdir");
+
+        let path_str = subdir.to_str().unwrap();
+        // pass None view_range to trigger the directory + None error
+        let result = run_async(view(path_str, None));
+
+        match result {
+            Err(EditToolError::Other(msg)) => {
+                assert!(msg.contains("view range parameter is not allowed"));
+            }
+            other => panic!("expected Other error, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_view_index_error_when_start_greater_than_end() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("test4.txt");
+        fs::write(&file_path, "one\ntwo\n").expect("write file");
+
+        let path_str = file_path.to_str().unwrap();
+        let range_arr: [&i32; 2] = [&2, &1]; // start > end and end != -1 -> should be IndexError
+        let result = run_async(view(path_str, Some(&range_arr)));
+
+        match result {
+            Err(EditToolError::IndexError(_)) => {}
+            other => panic!("expected IndexError, got {:?}", other),
+        }
+    }
 }
