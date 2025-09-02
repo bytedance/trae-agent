@@ -3,8 +3,10 @@
 use std::io::{self, BufReader};
 use std::time::Duration;
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream , BufWriter};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufStream, BufWriter};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+
+use tokio::time;
 
 use thiserror::Error;
 use serde_json::Value;
@@ -85,7 +87,7 @@ impl Tool for Bash{
 
 
 // set the bash process to be private field
-struct bashprocess {
+struct BaseProcess {
     child: Option<Child>,
     stdin: Option<ChildStdin>,
     stdout: Option<ChildStdout>,
@@ -98,7 +100,7 @@ struct bashprocess {
 }
 
 
-impl bashprocess{
+impl BaseProcess{
     async fn start(&mut self)-> Result<(), BashError>{
         if self.started{
             return Ok(())
@@ -133,13 +135,152 @@ impl bashprocess{
         Ok(())
     }
 
-    async fn stop(&self){}
+    async fn stop(&mut self)-> Result<(), BashError>{
+        if !self.started {
+            return Err(BashError::SessionNotStarted);
+        }
+        if let Some(child) = &mut self.child {
+            if let Some(_) = child.try_wait()? {
+                self.started = false;
+                return Ok(());
+            }
 
-    async fn run(&self, command:&str)->Result<ToolExecResult,BashError>
+            child.kill().await.ok();
+            let _ = child.wait().await;
+            self.started = false;
+            Ok(())
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn run(&mut self, command:&str)->Result<ToolExecResult,BashError>
     {
+        if !self.started{
+            return Err(BashError::SessionNotStarted);
+        }
+
+        //WARNING ALL REFERENCE ARE NOW MUTABLE ! 
+        //CONCURRENT RUNNING IN SAME PROCESS IS NOT ALLOWED
+        let child = self.child.as_mut().ok_or_else(|| BashError::SessionNotStarted)?;
+        let stdin = self.stdin.as_mut().ok_or_else(|| BashError::Other("stdin not available".to_string()))?;
+        let stdout = self.stdout.as_mut().ok_or(BashError::SessionNotStarted)?;
+
+        if let Some(code) = child.try_wait()?{
+            return Err(BashError::BashExited(code.code().unwrap_or(-1)));
+        }
+
+        if self.timed_out{
+            return Err(BashError::Timeout);
+        }
+
+        let (sentinel_before, _, sentinel_after) = {
+            let parts: Vec<_> = self.sentinel.split("__ERROR_CODE__").collect();
+            (parts[0], "__ERROR_CODE__", parts[1])
+        };
+
+        #[cfg(windows)]
+        let errcode_retriever = "!errorlevel!";
+        #[cfg(not(windows))]
+        let errcode_retriever = "$?";
+
+        #[cfg(windows)]
+        let command_sep = "&";
+        #[cfg(not(windows))]
+        let command_sep = ";";
+
+        let full_command = format!(
+            "(\n{}){} echo {}{}{}\n",
+            command,
+            command_sep,
+            sentinel_before,
+            errcode_retriever,
+            sentinel_after
+        );
 
 
-        todo!()
+        stdin.write_all(full_command.as_bytes()).await?;
+        stdin.flush().await?;
+
+        let mut output_accum = String::new();
+        let mut error_accum = String::new();
+        let mut error_code: Option<i32> = None;
+
+        // Timeout wrapper
+        let timeout = self.timeout;
+        let mut timed_out = false;
+        let mut buffer = String::new();
+        let stdout_reader = stdout;
+
+        loop {
+
+            buffer.clear();
+            let read_fut = stdout_reader.read_to_string(&mut buffer);
+
+            match time::timeout(timeout, read_fut).await{
+                Ok(Ok(0)) => {
+                    break;
+                }
+                Ok(Ok(_)) => {
+                    // Check if sentinel is found
+                    if buffer.contains(sentinel_before) {
+                        if let Some(pos) = buffer.find(sentinel_before) {
+                            output_accum.push_str(&buffer[..pos]);
+                            let rest = &buffer[pos + sentinel_before.len()..];
+
+                            if rest.len() > sentinel_after.len() {
+                                if rest.ends_with(sentinel_after) {
+                                    let code_str = &rest[..rest.len() - sentinel_after.len()];
+                                    if let Ok(code) = code_str.trim().parse::<i32>() {
+                                        error_code = Some(code);
+                                    }
+                                }
+                            }
+                        }
+
+                        break;
+                    } else {
+                        // Accumulate output as normal
+                        output_accum.push_str(&buffer);
+                    }
+                }
+                Ok(Err(e)) => return Err(BashError::Io(e)),
+                Err(_) => {
+                    timed_out = true;
+                    break;
+                }
+            }
+        }
+
+        if timed_out{
+            self.timed_out = true;
+            return Err(BashError::Timeout);
+        }
+
+                if let Some(child) = &mut self.child {
+            if let Some(mut stderr) = child.stderr.take() {
+                let mut err_buf = Vec::new();
+                let _ = stderr.read_to_end(&mut err_buf).await;
+                error_accum = String::from_utf8_lossy(&err_buf).to_string();
+                // put stderr back (not strictly necessary here)
+                child.stderr.replace(stderr);
+            }
+        }
+
+        // Trim trailing newlines
+        if output_accum.ends_with('\n') {
+            output_accum.pop();
+        }
+        if error_accum.ends_with('\n') {
+            error_accum.pop();
+        }
+
+        Ok(ToolExecResult {
+            output: output_accum,
+            error: error_accum,
+            error_code: error_code.unwrap_or(0),
+        })
+
     }
 
     fn new()->Self{
@@ -179,3 +320,5 @@ pub struct ToolExecResult {
     pub error: String,
     pub error_code: i32,
 }
+
+
