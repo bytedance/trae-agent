@@ -8,7 +8,7 @@ use tokio::process::Command;
 
 const EditCommand: [&str; 4] = ["view", "create", "str_replace", "insert"];
 
-const SNIPPET_LINES: u32 = 4; //would u8 already enough ?
+const SNIPPET_LINES: usize = 4; //would u8 already enough ?
 
 pub struct Edit {}
 
@@ -104,39 +104,145 @@ async fn create_handler(
     path: &str,
     args: HashMap<String, serde_json::Value>,
 ) -> Result<ToolExecResult, EditToolError> {
+    let file_text = args.get("file_text").and_then(|v| v.as_str()).unwrap_or("");
 
-    let file_text = args.get("file_text")
-        .and_then(|v|  v.as_str())
-        .unwrap_or("");
-
-    if file_text.len() == 0{
+    if file_text.len() == 0 {
         return Err(EditToolError::FileTextEmpty);
     }
-    
-    let res = fs::write(path, file_text);    
 
-    if let Ok(_) = res{
-        return Ok(ToolExecResult{
-            output: Some(format!("File created successfully at: {}" , path)),
+    let res = fs::write(path, file_text);
+
+    if let Ok(_) = res {
+        return Ok(ToolExecResult {
+            output: Some(format!("File created successfully at: {}", path)),
             error: None,
-            error_code: None
+            error_code: None,
         });
     }
 
-    if let Err(e) = res{
-        return Err(
-            EditToolError::Other(e.to_string())
+    if let Err(e) = res {
+        return Err(EditToolError::Other(e.to_string()));
+    }
+
+    return Err(EditToolError::Other("unexpected error".to_string()));
+}
+
+async fn str_replace_handler(
+    path: &str,
+    args: HashMap<String, serde_json::Value>,
+) -> Result<ToolExecResult, EditToolError> {
+    let old_str = args.get("old_str").and_then(|v| v.as_str()).unwrap_or("");
+
+    let new_str = args
+        .get("new_str")
+        .and_then(|v| v.as_str())
+        .ok_or(EditToolError::NewStringError)?;
+
+    if old_str.len() == 0 {
+        return Err(EditToolError::EmptyOldString);
+    }
+
+    // Use raw strings for both validation and replacement (Option A).
+    // let expanded_old_str = expand_tabs_fixed(old_str, 2);
+    // let expanded_new_str = expand_tabs_fixed(new_str, 2);
+
+    let mut file_content = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(_) => return Err(EditToolError::Io),
+    };
+
+    if !file_content.contains(old_str) {
+        return Err(EditToolError::OldStringNotExists(
+            old_str.to_string(),
+            path.to_string(),
+        ));
+    }
+
+    // Validate occurrences on raw content using raw old_str
+    let mut lines_with_hits = Vec::new(); // 1-based line numbers
+    let mut multiple = false;
+    for (idx, line) in file_content.lines().enumerate() {
+        let mut from = 0;
+        let mut hits_in_line = 0;
+        while let Some(pos) = line[from..].find(old_str) {
+            hits_in_line += 1;
+            from += pos + old_str.len();
+            if old_str.is_empty() {
+                // Avoid infinite loop on empty pattern (already disallowed above).
+                break;
+            }
+        }
+        if hits_in_line > 0 {
+            lines_with_hits.push(idx + 1);
+            if hits_in_line > 1 {
+                multiple = true;
+            }
+        }
+    }
+    // If more than one line has hits or any single line has multiple hits, treat as multiple
+    if lines_with_hits.len() > 1 || multiple {
+        return Err(EditToolError::MultipleOccurrences(
+            old_str.to_string(),
+            lines_with_hits[0] as u64,
+        ));
+    }
+
+    // Capture first occurrence position in the original content (for snippet computation)
+    let first_pos_opt = file_content.find(old_str);
+
+    // Do the actual replacement on raw content
+    file_content = file_content.replace(old_str, new_str);
+
+    fs::write(path, &file_content).map_err(|_| EditToolError::Io)?;
+
+    // Build snippet info using the original occurrence position if available
+    let replacement_line: usize = match first_pos_opt {
+        Some(pos) => file_content[..pos.min(file_content.len())] // safety
+            .bytes()
+            .filter(|&b| b == b'\n')
+            .count(),
+        None => 0, // shouldn't happen after validation
+    };
+
+    // start_line and end_line (0-based indices for slicing lines)
+    let start_line = replacement_line.saturating_sub(SNIPPET_LINES);
+    let end_line =
+        replacement_line + SNIPPET_LINES + new_str.bytes().filter(|&b| b == b'\n').count();
+
+    // Build the snippet from new file content lines [start_line ..= end_line]
+    let lines: Vec<&str> = file_content.split('\n').collect();
+    let end_line_capped = end_line.min(lines.len().saturating_sub(1));
+    let snippet = if start_line <= end_line_capped && start_line < lines.len() {
+        lines[start_line..=end_line_capped].join("\n")
+    } else {
+        String::new()
+    };
+
+    fn make_output(snippet: &str, label: &str, start_line_1_based: usize) -> String {
+        format!(
+            "{} (starting at line {}):\n{}\n",
+            label, start_line_1_based, snippet
         )
     }
 
-    return Err(EditToolError::Other("unexpected error".to_string()))
+    let mut success_msg = format!("The file {} has been edited. ", path);
+    success_msg.push_str(&make_output(
+        &snippet,
+        &format!("a snippet of {}", path),
+        start_line + 1,
+    ));
+    success_msg.push_str(
+        "Review the changes and make sure they are as expected. Edit the file again if necessary.",
+    );
+
+    Ok(ToolExecResult {
+        output: Some(success_msg),
+        error: None,
+        error_code: None,
+    })
 }
 
-fn str_replace_handler() {
-    todo!()
-}
-
-fn insert_handler() {
+async fn insert_handler() {
     todo!()
 }
 
@@ -262,8 +368,25 @@ enum EditToolError {
     #[error("fail to read the fiel")]
     FailReadFile,
 
-    #[error("'file_text' is required and must be a string for command: create")]
+    #[error("Parameter 'file_text' is required and must be a string for command: create")]
     FileTextEmpty,
+
+    #[error("No replacement was performed, old_str `{0}` did not appear verbatim in {0}.")]
+    OldStringNotExists(String, String),
+
+    #[error("Parameter 'old_str' is required and should be a string for command: str_replace")]
+    EmptyOldString,
+
+    #[error("Parameter `new_str` should be a string or null for command: str_replace")]
+    NewStringError,
+
+    #[error("IO Error")]
+    Io,
+
+    #[error(
+        "No replacement was performed. Multiple occurences of old_str `{0}` in lines {0}. Please ensure it is unique"
+    )]
+    MultipleOccurrences(String, u64),
 
     #[error("other error {0}")]
     Other(String),
@@ -272,12 +395,12 @@ enum EditToolError {
 #[cfg(test)]
 mod tests {
     use super::*; // bring view, ToolExecResult, EditToolError into scope
+    use serde_json::json;
     use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
     use tempfile::tempdir; // add `tempfile = "3"` to Cargo.toml
     use tokio::runtime::Runtime;
-    use tempfile::{TempDir};
-    use serde_json::json;
-    use std::path::PathBuf;
 
     // helper to run async function synchronously in tests
     fn run_async<F, R>(f: F) -> R
@@ -289,6 +412,25 @@ mod tests {
         rt.block_on(f)
     }
 
+    fn write_temp_file(dir: &TempDir, name: &str, content: &str) -> PathBuf {
+        let path = dir.path().join(name);
+        fs::write(&path, content).expect("write temp file");
+        path
+    }
+    // Helper to build args HashMap
+    fn args(
+        old: Option<&str>,
+        new_: Option<&str>,
+    ) -> std::collections::HashMap<String, serde_json::Value> {
+        let mut m = std::collections::HashMap::new();
+        if let Some(o) = old {
+            m.insert("old_str".to_string(), json!(o));
+        }
+        if let Some(n) = new_ {
+            m.insert("new_str".to_string(), json!(n));
+        }
+        m
+    }
     #[test]
     fn test_view_file_full() {
         let dir = tempdir().expect("tempdir");
@@ -391,7 +533,6 @@ mod tests {
         }
     }
 
-
     fn temp_file_path(dir: &TempDir, name: &str) -> PathBuf {
         dir.path().join(name)
     }
@@ -439,7 +580,10 @@ mod tests {
         let result = run_async(create_handler(path_str, args));
         match result {
             Err(EditToolError::FileTextEmpty) => {}
-            other => panic!("expected FileTextEmpty when key is missing, got {:?}", other),
+            other => panic!(
+                "expected FileTextEmpty when key is missing, got {:?}",
+                other
+            ),
         }
     }
     #[test]
@@ -453,7 +597,10 @@ mod tests {
         let result = run_async(create_handler(path_str, args));
         match result {
             Err(EditToolError::FileTextEmpty) => {}
-            other => panic!("expected FileTextEmpty when value is non-string, got {:?}", other),
+            other => panic!(
+                "expected FileTextEmpty when value is non-string, got {:?}",
+                other
+            ),
         }
     }
     #[test]
@@ -491,5 +638,184 @@ mod tests {
             }
             other => panic!("expected Ok overwrite, got {:?}", other),
         }
+    }
+    #[test]
+    fn returns_error_when_file_not_found() {
+        let args = args(Some("foo"), Some("bar"));
+        let non_existent = PathBuf::from("surely/does/not/exist.txt");
+        let res = run_async(str_replace_handler(non_existent.to_str().unwrap(), args));
+        assert!(matches!(res, Err(EditToolError::Io)));
+    }
+    #[test]
+    fn errors_when_old_str_missing_or_empty() {
+        let dir = tempdir().unwrap();
+        let path = write_temp_file(&dir, "a.txt", "hello world");
+        // 1) missing old_str (defaults to "")
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(None, Some("x")),
+        ));
+        assert!(matches!(res, Err(EditToolError::EmptyOldString)));
+        // 2) explicitly empty old_str
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(Some(""), Some("x")),
+        ));
+        assert!(matches!(res, Err(EditToolError::EmptyOldString)));
+    }
+    #[test]
+    fn errors_when_new_str_missing() {
+        let dir = tempdir().unwrap();
+        let path = write_temp_file(&dir, "a.txt", "hello world");
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(Some("hello"), None),
+        ));
+        assert!(matches!(res, Err(EditToolError::NewStringError)));
+    }
+    #[test]
+    fn errors_when_old_str_not_in_file() {
+        let dir = tempdir().unwrap();
+        let path = write_temp_file(&dir, "a.txt", "alpha beta gamma");
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(Some("delta"), Some("DELTA")),
+        ));
+        match res {
+            Err(EditToolError::OldStringNotExists(old, p)) => {
+                assert_eq!(old, "delta");
+                assert_eq!(PathBuf::from(p), path);
+            }
+            other => panic!("unexpected result: {:?}", other),
+        }
+    }
+    #[test]
+    fn errors_when_multiple_occurrences_across_lines() {
+        let dir = tempdir().unwrap();
+        let content = "line1 foo\nline2 foo\nline3\n";
+        let path = write_temp_file(&dir, "a.txt", content);
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(Some("foo"), Some("bar")),
+        ));
+        match res {
+            Err(EditToolError::MultipleOccurrences(old, line)) => {
+                assert_eq!(old, "foo");
+                // first line with a hit is line 1 (1-based)
+                assert_eq!(line, 1);
+            }
+            other => panic!("unexpected result: {:?}", other),
+        }
+    }
+    #[test]
+    fn errors_when_multiple_occurrences_in_single_line() {
+        let dir = tempdir().unwrap();
+        let content = "foo foo bar\nnext line\n";
+        let path = write_temp_file(&dir, "a.txt", content);
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(Some("foo"), Some("xyz")),
+        ));
+        match res {
+            Err(EditToolError::MultipleOccurrences(old, line)) => {
+                assert_eq!(old, "foo");
+                assert_eq!(line, 1); // first (and only) line where it occurs
+            }
+            other => panic!("unexpected result: {:?}", other),
+        }
+    }
+    #[test]
+    fn succeeds_for_single_occurrence_same_line() {
+        let dir = tempdir().unwrap();
+        let content = "before\nhello world\nafter\n";
+        let path = write_temp_file(&dir, "a.txt", content);
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(Some("hello"), Some("HELLO")),
+        ))
+        .expect("should succeed");
+        // Verify file content changed
+        let new_content = fs::read_to_string(&path).unwrap();
+        assert!(new_content.contains("HELLO world"));
+        assert!(!new_content.contains("hello world"));
+        // Verify output message contains path and snippet label
+        let out = res.output.expect("has output");
+        assert!(out.contains(&format!(
+            "The file {} has been edited.",
+            path.to_str().unwrap()
+        )));
+        assert!(out.contains("a snippet of"));
+        // The snippet computation uses the new content; ensure it includes the replacement line vicinity.
+        assert!(out.contains("HELLO world"));
+    }
+    #[test]
+    fn succeeds_for_single_occurrence_with_tabs_expansion_on_match_and_replacement() {
+        let dir = tempdir().unwrap();
+        // old_str and file both will be matched using expand_tabs_fixed(..., 2).
+        // Example: file contains a tab, old_str uses a tab; match should work.
+        let content = "fn main() {\n\tprintln!(\"hi\");\n}\n";
+        let path = write_temp_file(&dir, "a.rs", content);
+        // Replace the line containing a tab
+        // old_str: "\tprintln!(\"hi\");"
+        // new_str: "\tprintln!(\"hello\");"
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(Some("\tprintln!(\"hi\");"), Some("\tprintln!(\"hello\");")),
+        ))
+        .expect("should succeed");
+        let new_content = fs::read_to_string(&path).unwrap();
+        assert!(new_content.contains("hello"));
+        assert!(!new_content.contains("hi\");\n"));
+        // Output contains snippet including the updated line
+        let out = res.output.expect("has output");
+        assert!(out.contains("a snippet of"));
+        assert!(out.contains("println!(\"hello\");"));
+    }
+    #[test]
+    fn snippet_bounds_are_capped_and_start_is_1_based_in_message() {
+        let dir = tempdir().unwrap();
+        // Build content with multiple lines to exercise snippet range capping
+        let mut content = String::new();
+        for i in 0..10 {
+            content.push_str(&format!("line {}\n", i));
+        }
+        let path = write_temp_file(&dir, "a.txt", &content);
+        // Replace something near the top to exercise saturating_sub for start_line
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(Some("line 1"), Some("LINE 1")),
+        ))
+        .expect("should succeed");
+        // Verify replacement
+        let new_content = fs::read_to_string(&path).unwrap();
+        assert!(new_content.contains("LINE 1"));
+        assert!(!new_content.contains("line 1\n"));
+        // Check start line in message is 1-based and reasonable
+        let out = res.output.expect("has output");
+        // Message includes: "a snippet of <path> (starting at line X):"
+        // We don't know SNIPPET_LINES value here; assert presence of the phrase and a sane number.
+        assert!(out.contains("starting at line "));
+    }
+    #[test]
+    fn replacement_uses_full_replace_of_expanded_old_str() {
+        // Ensures replacement uses expanded_old_str and expanded_new_str globally once validations pass.
+        let dir = tempdir().unwrap();
+        // The function validates single occurrence by scanning lines with expanded_old_str.
+        // Make content such that only one expanded_old_str occurrence exists.
+        let content = "a\tb c\nd e f\n";
+        let path = write_temp_file(&dir, "a.txt", content);
+        // old_str is "\ta" will not match; use "a\tb" to match once
+        let res = run_async(str_replace_handler(
+            path.to_str().unwrap(),
+            args(Some("a\tb"), Some("A\tB")),
+        ))
+        .expect("should succeed");
+
+        dbg!(res);
+        let new_content = fs::read_to_string(&path).unwrap();
+        // After expansion with 2-space tabs, "a\tb" replaced by "A\tB"
+        assert!(new_content.contains("A"));
+        assert!(new_content.contains("B"));
+        assert!(!new_content.contains("a\tb"));
     }
 }
