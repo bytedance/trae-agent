@@ -25,13 +25,13 @@ impl ToolResult {
         call_id: String,
         name: String,
     ) -> Self{
-        ToolResult { 
-            call_id: call_id, 
-            name: name, 
-            success: false, 
-            result: None, 
-            error: None, 
-            id: None 
+        ToolResult {
+            call_id: call_id,
+            name: name,
+            success: false,
+            result: None,
+            error: None,
+            id: None
         }
     }
 
@@ -47,7 +47,7 @@ pub struct ToolCall {
     pub id: Option<String>,
 }
 
-// don't implement new for tool call cause tool call actually depends on the argument which 
+// don't implement new for tool call cause tool call actually depends on the argument which
 // may cause problem when developer randomly call the Tool Call
 
 impl fmt::Display for ToolCall {
