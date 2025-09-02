@@ -1,5 +1,7 @@
 // bash tool
 
+use std::f32::consts::E;
+use std::fmt::format;
 use std::io::{self, BufReader};
 use std::time::Duration;
 
@@ -8,18 +10,19 @@ use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 
 use tokio::time;
 
-use thiserror::Error;
 use serde_json::Value;
+use thiserror::Error;
 
 use std::process::Stdio;
 
 use crate::Tool;
 
-pub struct Bash{
+pub struct Bash {
     model_provider: String,
+    bash: BaseProcess,
 }
 
-impl Tool for Bash{
+impl Tool for Bash {
     fn get_name(&self) -> &str {
         "bash"
     }
@@ -32,11 +35,10 @@ impl Tool for Bash{
         * To inspect a particular line range of a file, e.g. lines 10-25, try 'sed -n 10,25p /path/to/the/file'.
         * Please avoid commands that may produce a very large amount of output.
         * Please run long lived commands in the background, e.g. 'sleep 10 &' or start a server in the background.
-        "# 
+        "#
     }
-    
-    fn get_input_schema(&self) -> serde_json::Value {
 
+    fn get_input_schema(&self) -> serde_json::Value {
         let data = match self.model_provider.as_str() {
             "openai" => {
                 r#"
@@ -74,14 +76,71 @@ impl Tool for Bash{
                 }
                 "#
             }
-        }; 
+        };
 
-        let v: Value =serde_json::from_str(data).unwrap(); // since it is fixed so theoritically is should always be the same
+        let v: Value = serde_json::from_str(data).unwrap(); // since it is fixed so theoritically is should always be the same
         v
     }
 
-    async fn execute(&self, arguments: std::collections::HashMap<String, serde_json::Value>) -> std::pin::Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
-        todo!()
+    fn execute(
+        &mut self,
+        arguments: std::collections::HashMap<String, serde_json::Value>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
+        
+            Box::pin(async move {
+                        let cmd = arguments.get("command")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("");
+
+                        let restart = arguments.get("restart")
+                            .and_then(|x| x.as_bool())
+                            .unwrap_or(false);
+
+                        // Assuming `self.bash.start()` is an asynchronous operation
+                        let starterr = self.bash.start().await;
+
+
+                        if let Err(e) = starterr{
+                            return Err(format!("fail to start the bash {}", e.to_string()))
+                        }
+                        
+
+                        // run the command 
+                        let exec_result = self.bash.run(cmd).await;
+
+                        if let Err(e) = exec_result{
+                            return Err(format!("fail to execute command: {} , getting error: {}" ,cmd ,e));
+                        }
+
+                        if restart {
+                            let restart_result = self.bash.stop().await;
+                            
+                            if let Err(e) = restart_result{
+                                return Err(format!("retart fail error: {}" , e));
+                            }
+
+                            let rebot_result = self.bash.start().await;
+
+                            if let Err(e) = rebot_result{
+                                return Err(format!("rebot fail error: {}" , e));
+                            }
+                        }
+                        
+                        match exec_result{
+                            Ok(res)=>{
+                                if res.error != "" || res.error.len() != 0 || res.error_code != 0 {
+                                    return Err(format!("Error: {} , Error code: {} " , res.error , res.error_code))    
+                                }
+
+                                return Ok(res.output);
+
+                            },
+                            Err(e) => {
+                                return Err(format!("Unexpected Error {}" , e));// this should never happend due to previous check
+                            }
+                        }
+                    })
+
     }
 }
 
@@ -99,21 +158,19 @@ struct BaseProcess {
     sentinel: String,
 }
 
-
-impl BaseProcess{
-    async fn start(&mut self)-> Result<(), BashError>{
-        if self.started{
-            return Ok(())
+impl BaseProcess {
+    async fn start(&mut self) -> Result<(), BashError> {
+        if self.started {
+            return Ok(());
         }
 
-        #[cfg(target_os="macos")]
+        #[cfg(target_os = "macos")]
         let mut cmd = Command::new("/bin/bash");
 
         //TODO: add other operating system
 
-        #[cfg(target_os="macos")]
+        #[cfg(target_os = "macos")]
         {
-
             cmd.stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
@@ -131,11 +188,10 @@ impl BaseProcess{
         self.started = true;
         self.timed_out = false;
 
-
         Ok(())
     }
 
-    async fn stop(&mut self)-> Result<(), BashError>{
+    async fn stop(&mut self) -> Result<(), BashError> {
         if !self.started {
             return Err(BashError::SessionNotStarted);
         }
@@ -154,23 +210,28 @@ impl BaseProcess{
         }
     }
 
-    async fn run(&mut self, command:&str)->Result<ToolExecResult,BashError>
-    {
-        if !self.started{
+    async fn run(&mut self, command: &str) -> Result<BashExecResult, BashError> {
+        if !self.started {
             return Err(BashError::SessionNotStarted);
         }
 
-        //WARNING ALL REFERENCE ARE NOW MUTABLE ! 
+        //WARNING ALL REFERENCE ARE NOW MUTABLE !
         //CONCURRENT RUNNING IN SAME PROCESS IS NOT ALLOWED
-        let child = self.child.as_mut().ok_or_else(|| BashError::SessionNotStarted)?;
-        let stdin = self.stdin.as_mut().ok_or_else(|| BashError::Other("stdin not available".to_string()))?;
+        let child = self
+            .child
+            .as_mut()
+            .ok_or_else(|| BashError::SessionNotStarted)?;
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| BashError::Other("stdin not available".to_string()))?;
         let stdout = self.stdout.as_mut().ok_or(BashError::SessionNotStarted)?;
 
-        if let Some(code) = child.try_wait()?{
+        if let Some(code) = child.try_wait()? {
             return Err(BashError::BashExited(code.code().unwrap_or(-1)));
         }
 
-        if self.timed_out{
+        if self.timed_out {
             return Err(BashError::Timeout);
         }
 
@@ -191,13 +252,8 @@ impl BaseProcess{
 
         let full_command = format!(
             "(\n{}){} echo {}{}{}\n",
-            command,
-            command_sep,
-            sentinel_before,
-            errcode_retriever,
-            sentinel_after
+            command, command_sep, sentinel_before, errcode_retriever, sentinel_after
         );
-
 
         stdin.write_all(full_command.as_bytes()).await?;
         stdin.flush().await?;
@@ -213,11 +269,10 @@ impl BaseProcess{
         let stdout_reader = stdout;
 
         loop {
-
             buffer.clear();
             let read_fut = stdout_reader.read_to_string(&mut buffer);
 
-            match time::timeout(timeout, read_fut).await{
+            match time::timeout(timeout, read_fut).await {
                 Ok(Ok(0)) => {
                     break;
                 }
@@ -252,12 +307,12 @@ impl BaseProcess{
             }
         }
 
-        if timed_out{
+        if timed_out {
             self.timed_out = true;
             return Err(BashError::Timeout);
         }
 
-                if let Some(child) = &mut self.child {
+        if let Some(child) = &mut self.child {
             if let Some(mut stderr) = child.stderr.take() {
                 let mut err_buf = Vec::new();
                 let _ = stderr.read_to_end(&mut err_buf).await;
@@ -275,16 +330,15 @@ impl BaseProcess{
             error_accum.pop();
         }
 
-        Ok(ToolExecResult {
+        Ok(BashExecResult {
             output: output_accum,
             error: error_accum,
             error_code: error_code.unwrap_or(0),
         })
-
     }
 
-    fn new()->Self{
-         Self {
+    fn new() -> Self {
+        Self {
             child: None,
             stdin: None,
             stdout: None,
@@ -295,13 +349,10 @@ impl BaseProcess{
             sentinel: ",,,,bash-command-exit-__ERROR_CODE__-banner,,,,".to_string(),
         }
     }
-
 }
 
-
-
 #[derive(Error, Debug)]
-pub enum BashError {
+enum BashError {
     #[error("bash session not started")]
     SessionNotStarted,
     #[error("bash has exited with returncode {0}")]
@@ -314,11 +365,9 @@ pub enum BashError {
     Other(String),
 }
 
-#[derive(Debug)]
-pub struct ToolExecResult {
+#[derive(Debug, Default)]
+struct BashExecResult {
     pub output: String,
     pub error: String,
     pub error_code: i32,
 }
-
-

@@ -18,5 +18,5 @@ pub trait Tool: Send + Sync {
     fn get_input_schema(&self) -> Value;
     
     /// Execute the tool with the given arguments
-    async fn execute(&self, arguments: HashMap<String, Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>>;
+    fn execute(&mut self, arguments: HashMap<String, Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>>;
 }
