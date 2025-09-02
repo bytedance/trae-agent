@@ -13,7 +13,7 @@ use crate::{
         llm_provider::LLMProvider,
         error::{LLMError, LLMResult},
         retry_utils::{retry_with_backoff, RetryConfig},
-        LLMMessage, LLMResponse, LLMUsage, LLMStream, StreamChunk, FinishReason, ContentItem, MessageRole,
+        llm_basics::{LLMMessage, LLMResponse, LLMUsage, LLMStream, StreamChunk, FinishReason, ContentItem, MessageRole},
     },
     config::ModelConfig,
 };
@@ -440,10 +440,5 @@ impl LLMProvider for OpenAIClient {
 
     fn get_provider_name(&self) -> &str {
         "openai"
-    }
-
-    fn supports_tool_calling(&self, model_name: &str) -> bool {
-        let model_lower = model_name.to_lowercase();
-        model_lower.contains("gpt-4") || model_lower.contains("gpt-3.5-turbo")
     }
 }

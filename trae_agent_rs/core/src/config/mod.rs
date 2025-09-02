@@ -10,7 +10,6 @@ pub struct ModelProvider {
     pub name: String,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
-    pub api_version: Option<String>,
 }
 
 /// Model configuration for LLM clients
@@ -32,7 +31,6 @@ impl ModelProvider {
             name,
             api_key: None,
             base_url: None,
-            api_version: None,
         }
     }
     
@@ -43,11 +41,6 @@ impl ModelProvider {
     
     pub fn with_base_url(mut self, base_url: String) -> Self {
         self.base_url = Some(base_url);
-        self
-    }
-    
-    pub fn with_api_version(mut self, api_version: String) -> Self {
-        self.api_version = Some(api_version);
         self
     }
 }

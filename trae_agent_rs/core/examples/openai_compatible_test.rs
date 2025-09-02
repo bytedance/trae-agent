@@ -10,14 +10,15 @@
 //! 1. Set your API key: export OPENAI_COMPATIBLE_API_KEY="your-api-key"
 //! 2. Set your base URL: export OPENAI_COMPATIBLE_BASE_URL="https://api.your-provider.com/v1"
 //! 3. Optional: Set site info: export OPENAI_COMPATIBLE_SITE_URL="your-site.com" and OPENAI_COMPATIBLE_SITE_NAME="Your Site"
-//! 4. Run: cargo run --example openai_compatible_test
+//! 4. Optional: Set typewriter delay: export TYPEWRITER_DELAY_MS="15" (default: 15ms, set to 0 to disable)
+//! 5. Run: cargo run --example openai_compatible_test
 
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use trae_core::{
     config::{ModelConfig, ModelProvider},
-    llm::{LLMMessage, LLMProvider, OpenAICompatibleGenericClient, MessageRole, ContentItem},
+    llm::{LLMMessage, LLMClient, MessageRole, ContentItem},
     tools::Tool,
 };
 
@@ -128,7 +129,7 @@ impl Tool for WeatherTool {
     }
 }
 
-async fn test_basic_chat(client: &mut OpenAICompatibleGenericClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_basic_chat(client: &mut LLMClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 Testing basic chat functionality...");
     
     let messages = vec![
@@ -140,7 +141,7 @@ async fn test_basic_chat(client: &mut OpenAICompatibleGenericClient, model_confi
         }
     ];
 
-    match client.chat(messages, model_config, None, Some(false)).await {
+    match client.chat(messages, model_config, None, false).await {
         Ok(response) => {
             println!("✅ Basic chat test successful!");
             println!("Model: {:?}", response.model);
@@ -163,7 +164,7 @@ async fn test_basic_chat(client: &mut OpenAICompatibleGenericClient, model_confi
     Ok(())
 }
 
-async fn test_tool_calling(client: &mut OpenAICompatibleGenericClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_tool_calling(client: &mut LLMClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🔧 Testing tool calling functionality...");
     
     let tools: Vec<Box<dyn Tool>> = vec![
@@ -180,7 +181,7 @@ async fn test_tool_calling(client: &mut OpenAICompatibleGenericClient, model_con
         }
     ];
 
-    match client.chat(messages, model_config, Some(tools), Some(false)).await {
+    match client.chat(messages, model_config, Some(tools), false).await {
         Ok(response) => {
             println!("✅ Tool calling test successful!");
             println!("Model: {:?}", response.model);
@@ -224,7 +225,7 @@ async fn test_tool_calling(client: &mut OpenAICompatibleGenericClient, model_con
     Ok(())
 }
 
-async fn test_streaming(client: &mut OpenAICompatibleGenericClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_streaming(client: &mut LLMClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📡 Testing streaming functionality...");
     
     let messages = vec![
@@ -236,29 +237,44 @@ async fn test_streaming(client: &mut OpenAICompatibleGenericClient, model_config
         }
     ];
 
-    match client.chat_stream(messages, model_config, None, Some(false)).await {
+    match client.chat_stream(messages, model_config, None, false).await {
         Ok(mut stream) => {
             println!("✅ Streaming test initiated successfully!");
+            println!("🤖 Assistant: ");
             
             use futures::StreamExt;
+            use std::io::{self, Write};
+            use tokio::time::{sleep, Duration};
+            
+            // Get typewriter delay from environment variable (default: 15ms)
+            let typewriter_delay = std::env::var("TYPEWRITER_DELAY_MS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(15);
+            
             let mut chunk_count = 0;
             
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
                     Ok(chunk) => {
                         chunk_count += 1;
-                        println!("📦 Received chunk {}", chunk_count);
                         
                         if let Some(content) = &chunk.content {
                             if !content.is_empty() {
                                 if let Some(text) = content[0].as_text() {
                                     print!("{}", text);
+                                    // Flush stdout to ensure real-time output
+                                    io::stdout().flush().unwrap();
+                                    // Typewriter effect delay (configurable via TYPEWRITER_DELAY_MS env var)
+                                    if typewriter_delay > 0 {
+                                        sleep(Duration::from_millis(typewriter_delay)).await;
+                                    }
                                 }
                             }
                         }
                         
                         if let Some(finish_reason) = &chunk.finish_reason {
-                            println!("\n🏁 Stream finished with reason: {:?}", finish_reason);
+                            println!("\n\n🏁 Stream finished with reason: {:?}", finish_reason);
                             break;
                         }
                     }
@@ -269,7 +285,7 @@ async fn test_streaming(client: &mut OpenAICompatibleGenericClient, model_config
                 }
             }
             
-            println!("\n✅ Streaming test completed! Received {} chunks", chunk_count);
+            println!("✅ Streaming test completed! Received {} chunks", chunk_count);
         }
         Err(e) => {
             println!("❌ Streaming test failed: {}", e);
@@ -283,16 +299,19 @@ async fn test_streaming(client: &mut OpenAICompatibleGenericClient, model_config
 async fn test_error_handling() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n⚠️  Testing error handling...");
     
-    // Test with invalid API key
+    // Test with invalid base URL that will fail quickly (non-existent domain)
+    // Using .invalid TLD ensures DNS resolution fails quickly without retries
+    // Alternative: use "http://localhost:99999" for immediate connection refused
     let provider = ModelProvider::new("openai_compatible".to_string())
-        .with_api_key("invalid-key".to_string())
-        .with_base_url("https://api.openai.com/v1".to_string());
+        .with_api_key("test-key".to_string())
+        .with_base_url("https://non-existent-domain-12345.invalid".to_string());
     
     let config = ModelConfig::new("gpt-4o-2024-11-20".to_string(), provider)
         .with_temperature(0.7)
-        .with_max_tokens(100);
+        .with_max_tokens(100)
+        .with_max_retries(1); // Reduce retries for faster error testing
 
-    match OpenAICompatibleGenericClient::with_config(config) {
+    match LLMClient::new(config) {
         Ok(mut client) => {
             let messages = vec![
                 LLMMessage {
@@ -305,10 +324,12 @@ async fn test_error_handling() -> Result<(), Box<dyn std::error::Error>> {
 
             let model_config = ModelConfig::new("gpt-4o-2024-11-20".to_string(), 
                 ModelProvider::new("openai_compatible".to_string())
-                    .with_api_key("invalid-key".to_string())
-                    .with_base_url("https://api.openai.com/v1".to_string()));
+                    .with_api_key("test-key".to_string())
+                    .with_base_url("https://non-existent-domain-12345.invalid".to_string()))
+                .with_max_retries(1); // Reduce retries for faster error testing
 
-            match client.chat(messages, &model_config, None, Some(false)).await {
+            println!("🔍 Attempting connection to invalid URL (this should fail quickly)...");
+            match client.chat(messages, &model_config, None, false).await {
                 Ok(_) => {
                     println!("⚠️  Expected error but got success - this might indicate a problem");
                 }
@@ -361,6 +382,12 @@ fn print_configuration_info() {
         println!("ℹ️  Site Name: Not set (optional - set OPENAI_COMPATIBLE_SITE_NAME)");
     }
     
+    let typewriter_delay = std::env::var("TYPEWRITER_DELAY_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(15);
+    println!("⚡ Typewriter Delay: {}ms (set TYPEWRITER_DELAY_MS to customize, 0 to disable)", typewriter_delay);
+    
     println!();
 }
 
@@ -385,12 +412,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_temperature(0.7)
         .with_max_tokens(500);
 
-    // Create OpenAI Compatible client
-    let mut client = OpenAICompatibleGenericClient::with_config(model_config.clone())?;
+    // Create LLM client
+    let mut client = LLMClient::new(model_config.clone())?;
 
     println!("🚀 Starting tests with model: {}", model_config.model);
     println!("Provider: {}", client.get_provider_name());
-    println!("Tool calling support: {}", client.supports_tool_calling(&model_config.model));
     
     // Run all tests
     let mut test_results = Vec::new();
@@ -404,18 +430,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Test 2: Tool calling (only if supported)
-    if client.supports_tool_calling(&model_config.model) {
-        match test_tool_calling(&mut client, &model_config).await {
-            Ok(_) => test_results.push(("Tool Calling", true)),
-            Err(e) => {
-                eprintln!("Tool calling test failed: {}", e);
-                test_results.push(("Tool Calling", false));
-            }
+    // Test 2: Tool calling (try it and see if the model supports it)
+    match test_tool_calling(&mut client, &model_config).await {
+        Ok(_) => test_results.push(("Tool Calling", true)),
+        Err(e) => {
+            eprintln!("Tool calling test failed: {}", e);
+            test_results.push(("Tool Calling", false));
         }
-    } else {
-        println!("ℹ️  Skipping tool calling test - model doesn't support tools");
-        test_results.push(("Tool Calling", false)); // Mark as skipped
     }
 
     // Test 3: Streaming

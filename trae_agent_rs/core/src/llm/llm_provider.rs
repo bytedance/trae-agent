@@ -32,7 +32,4 @@ pub trait LLMProvider: Send + Sync {
 
     /// Get the provider name for this client
     fn get_provider_name(&self) -> &str;
-
-    /// Check if the model supports tool calling
-    fn supports_tool_calling(&self, model_name: &str) -> bool;
 }
