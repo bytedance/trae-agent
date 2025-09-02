@@ -45,7 +45,7 @@ where
     };
 
     let mut attempt = 0u32;
-    
+
     loop {
         match operation().await {
             Ok(result) => {
@@ -56,7 +56,7 @@ where
             }
             Err(err) => {
                 attempt += 1;
-                
+
                 let should_retry = match &err {
                     LLMError::HttpError(reqwest_err) => should_retry_http_error(reqwest_err),
                     LLMError::RateLimitError(_) => true,
@@ -64,19 +64,19 @@ where
                     LLMError::ApiError { status_code, .. } => should_retry_status_code(*status_code),
                     _ => false,
                 };
-                
+
                 if !should_retry || attempt >= config.max_retries {
                     return Err(err);
                 }
-                
+
                 let delay = backoff.initial_interval.mul_f64(config.multiplier.powi((attempt - 1) as i32));
                 let delay = delay.min(backoff.max_interval);
-                
+
                 warn!(
                     "[{}] Attempt {} failed, retrying in {:?}: {}",
                     provider_name, attempt, delay, err
                 );
-                
+
                 tokio::time::sleep(delay).await;
             }
         }
@@ -88,7 +88,7 @@ fn should_retry_http_error(err: &reqwest::Error) -> bool {
     if err.is_timeout() || err.is_connect() {
         return true;
     }
-    
+
     if let Some(status) = err.status() {
         should_retry_status_code(status.as_u16())
     } else {
