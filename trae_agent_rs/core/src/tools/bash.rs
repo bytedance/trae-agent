@@ -1,6 +1,15 @@
 // bash tool
 
+use std::io::{self, BufReader};
+use std::time::Duration;
+
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream , BufWriter};
+use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+
+use thiserror::Error;
 use serde_json::Value;
+
+use std::process::Stdio;
 
 use crate::Tool;
 
@@ -76,14 +85,97 @@ impl Tool for Bash{
 
 
 // set the bash process to be private field
-struct bashprocess;
+struct bashprocess {
+    child: Option<Child>,
+    stdin: Option<ChildStdin>,
+    stdout: Option<ChildStdout>,
+    // We do not capture stderr separately here, but can be extended.
+    started: bool,
+    timed_out: bool,
+    timeout: Duration,
+    output_delay: Duration,
+    sentinel: String,
+}
 
 
 impl bashprocess{
-    async fn start(&self){}
+    async fn start(&mut self)-> Result<(), BashError>{
+        if self.started{
+            return Ok(())
+        }
+
+        #[cfg(target_os="macos")]
+        let mut cmd = Command::new("/bin/bash");
+
+        //TODO: add other operating system
+
+        #[cfg(target_os="macos")]
+        {
+
+            cmd.stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        }
+
+        let mut child = cmd.spawn().map_err(BashError::Io)?;
+
+        let stdin = child.stdin.take().ok_or(BashError::SessionNotStarted)?;
+        let stdout = child.stdout.take().ok_or(BashError::SessionNotStarted)?;
+
+        self.stdin = Some(stdin);
+        self.stdout = Some(stdout);
+
+        self.child = Some(child);
+        self.started = true;
+        self.timed_out = false;
+
+
+        Ok(())
+    }
 
     async fn stop(&self){}
 
-    async fn run(&self, command:&str){
+    async fn run(&self, command:&str)->Result<ToolExecResult,BashError>
+    {
+
+
+        todo!()
     }
+
+    fn new()->Self{
+         Self {
+            child: None,
+            stdin: None,
+            stdout: None,
+            started: false,
+            timed_out: false,
+            timeout: Duration::from_secs(120),
+            output_delay: Duration::from_millis(200),
+            sentinel: ",,,,bash-command-exit-__ERROR_CODE__-banner,,,,".to_string(),
+        }
+    }
+
+}
+
+
+
+#[derive(Error, Debug)]
+pub enum BashError {
+    #[error("bash session not started")]
+    SessionNotStarted,
+    #[error("bash has exited with returncode {0}")]
+    BashExited(i32),
+    #[error("bash command timed out")]
+    Timeout,
+    #[error("io error: {0}")]
+    Io(#[from] io::Error),
+    #[error("other error: {0}")]
+    Other(String),
+}
+
+#[derive(Debug)]
+pub struct ToolExecResult {
+    pub output: String,
+    pub error: String,
+    pub error_code: i32,
 }
