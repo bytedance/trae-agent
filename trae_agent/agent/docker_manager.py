@@ -195,6 +195,10 @@ class DockerManager:
         if not self.shell or not self.shell.isalive():
             print("[yellow]Shell not found or died. Attempting to restart...[/yellow]")
             self._start_persistent_shell()
+
+        if self.shell is None:
+            raise RuntimeError("Failed to start or restart the persistent shell.")
+
         print(f"Executing (interactive): `{command}`")
         marker = "---CMD_DONE---"
         full_command = command.strip()

@@ -130,7 +130,7 @@ class TraeAgent(BaseAgent):
 
         self.project_path = extra_args.get("project_path", "")
         if self.docker_config:
-            user_message += "[Project root path]:\workspace\n\n"
+            user_message += r"[Project root path]:\workspace\n\n"
         else:
             user_message += f"[Project root path]:\n{self.project_path}\n\n"
 

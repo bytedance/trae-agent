@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any
 
 from trae_agent.agent.docker_manager import DockerManager
 from trae_agent.tools.base import ToolCall, ToolExecutor, ToolResult
@@ -45,6 +46,14 @@ class DockerToolExecutor:
             return os.path.normpath(container_path)
         return host_path
 
+    async def close_tools(self):
+        """
+        Closes any resources held by the underlying original executor.
+        This method fulfills the contract expected by BaseAgent.
+        """
+        if self._original_executor:
+            return await self._original_executor.close_tools()
+
     async def sequential_tool_call(self, tool_calls: list[ToolCall]) -> list[ToolResult]:
         """Executes tool calls sequentially, routing to Docker if necessary."""
         results = []
@@ -60,9 +69,9 @@ class DockerToolExecutor:
 
     async def parallel_tool_call(self, tool_calls: list[ToolCall]) -> list[ToolResult]:
         """For simplicity, parallel calls are also executed sequentially."""
-        print(
-            "[yellow]Warning: Parallel tool calls are executed sequentially in Docker mode.[/yellow]"
-        )
+        # print(
+        #     "[yellow]Warning: Parallel tool calls are executed sequentially in Docker mode.[/yellow]"
+        # )
         return await self.sequential_tool_call(tool_calls)
 
     def _execute_in_docker(self, tool_call: ToolCall) -> ToolResult:
@@ -72,13 +81,12 @@ class DockerToolExecutor:
         """
         try:
             # --- Parameter preprocessing and path translation ---
-            processed_args = {}
+            processed_args: dict[str, Any] = {}
             for key, value in tool_call.arguments.items():
                 # Assuming that all parameters named 'path' are paths that need to be translated
                 if key == "path" and isinstance(value, str):
                     translated_path = self._translate_path(value)
                     processed_args[key] = translated_path
-                    print(f"[Path Translation]: '{value}' -> '{translated_path}'")
                 else:
                     processed_args[key] = value
 
@@ -87,9 +95,10 @@ class DockerToolExecutor:
 
             # --- Rule 1: Handling bash tools ---
             if tool_call.name == "bash":
-                command_to_run = processed_args.get("command", "")
-                if not command_to_run:
-                    raise ValueError("Tool 'bash' was called without a 'command' argument.")
+                command_value = processed_args.get("command")
+                if not isinstance(command_value, str) or not command_value:
+                    raise ValueError("Tool 'bash' requires a non-empty 'command' string argument.")
+                command_to_run = command_value
 
             # --- Rule2 : Handling str_replace_based_edit_tool ---
             elif tool_call.name == "str_replace_based_edit_tool":
@@ -97,6 +106,10 @@ class DockerToolExecutor:
                 if not sub_command:
                     raise ValueError("Edit tool called without a 'command' (sub-command).")
 
+                if not isinstance(sub_command, str):
+                    raise TypeError(
+                        f"The 'command' argument for {tool_call.name} must be a string."
+                    )
                 executable_path = f"{self._docker_manager.CONTAINER_TOOLS_PATH}/edit_tool"
                 cmd_parts = [executable_path, sub_command]
 

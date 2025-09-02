@@ -45,8 +45,10 @@ def maybe_truncate(output: str, max_chars: int = 20000) -> str:
         return output[:max_chars] + "\n<... response clipped ...>\n"
     return output
 
+
 EditToolSubCommands = ["view", "create", "str_replace", "insert"]
 SNIPPET_LINES = 5
+
 
 async def run(command: str, timeout: int = 300) -> tuple[int, str, str]:
     """Run a shell command asynchronously."""
@@ -167,7 +169,7 @@ Notes for using the `str_replace` command:
                     return self._insert_handler(arguments, _path)
                 case _:
                     return ToolExecResult(
-                        error=f"Unrecognized command {command}. The allowed commands for the {self.name} tool are: {', '.join(EditToolSubCommands)}",
+                        error=f"Unrecognized command {command}. The allowed commands for the {self.get_name()} tool are: {', '.join(EditToolSubCommands)}",
                         error_code=-1,
                     )
         except ToolError as e:

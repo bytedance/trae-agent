@@ -45,6 +45,7 @@ class ToolParameter:
     def __init__(self, name: str, type: str, description: str, required: bool = False, **kwargs):
         pass
 
+
 class JSONEditTool(Tool):
     """Tool for editing JSON files using JSONPath expressions."""
 
@@ -69,7 +70,7 @@ class JSONEditTool(Tool):
 
     @override
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
-        pass
+        raise NotImplementedError("This method is not used in CLI mode.")
 
     async def _load_json_file(self, file_path: Path) -> dict | list:
         if not file_path.exists():

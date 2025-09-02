@@ -6,6 +6,7 @@
 import contextlib
 import os
 from abc import ABC, abstractmethod
+from typing import Union
 
 from trae_agent.agent.agent_basics import AgentExecution, AgentState, AgentStep, AgentStepState
 from trae_agent.agent.docker_manager import DockerManager
@@ -22,6 +23,8 @@ from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 
 class BaseAgent(ABC):
     """Base class for LLM-based agents."""
+
+    _tool_caller: Union[ToolExecutor, DockerToolExecutor]
 
     def __init__(
         self, agent_config: AgentConfig, docker_config: dict | None = None, docker_keep: bool = True
