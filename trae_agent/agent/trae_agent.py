@@ -13,7 +13,7 @@ from trae_agent.agent.agent_basics import AgentError, AgentExecution
 from trae_agent.agent.base_agent import BaseAgent
 from trae_agent.prompt.agent_prompt import TRAE_AGENT_SYSTEM_PROMPT
 from trae_agent.tools import tools_registry
-from trae_agent.tools.base import Tool, ToolExecutor, ToolResult
+from trae_agent.tools.base import Tool, ToolResult
 from trae_agent.utils.config import MCPServerConfig, TraeAgentConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 from trae_agent.utils.mcp_client import MCPClient
@@ -30,7 +30,12 @@ TraeAgentToolNames = [
 class TraeAgent(BaseAgent):
     """Trae Agent specialized for software engineering tasks."""
 
-    def __init__(self, trae_agent_config: TraeAgentConfig, docker_config: dict | None = None, docker_keep: bool = True):
+    def __init__(
+        self,
+        trae_agent_config: TraeAgentConfig,
+        docker_config: dict | None = None,
+        docker_keep: bool = True,
+    ):
         """Initialize TraeAgent.
 
         Args:
@@ -53,7 +58,9 @@ class TraeAgent(BaseAgent):
         self.mcp_tools: list[Tool] = []
         self.mcp_clients: list[MCPClient] = []  # Keep track of MCP clients for cleanup
         self.docker_config = docker_config
-        super().__init__(agent_config=trae_agent_config, docker_config=docker_config, docker_keep=docker_keep)
+        super().__init__(
+            agent_config=trae_agent_config, docker_config=docker_config, docker_keep=docker_keep
+        )
 
     async def initialise_mcp(self):
         """Async factory to create and initialize TraeAgent."""
@@ -123,7 +130,7 @@ class TraeAgent(BaseAgent):
 
         self.project_path = extra_args.get("project_path", "")
         if self.docker_config:
-            user_message += f"[Project root path]:\workspace\n\n"
+            user_message += "[Project root path]:\workspace\n\n"
         else:
             user_message += f"[Project root path]:\n{self.project_path}\n\n"
 

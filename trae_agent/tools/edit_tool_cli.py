@@ -1,36 +1,53 @@
 import argparse
 import asyncio
-from pathlib import Path
 import sys
-import subprocess
+from pathlib import Path
+
+
 # Dependency Definition Area: Here we define all the required "blueprints" and "parts"
 # This is a minimal 'override' alternative. Since we no longer need it after packaging, we can define a function that does nothing
 def override(f):
     return f
+
+
 # A simple base class that makes' class TextEditorTool (Tool): 'grammatically correct
 class Tool:
     def __init__(self, model_provider: str | None = None) -> None:
         self._model_provider = model_provider
+
+
 # ToolCallArguments is just a type alias, we can use dict instead
 ToolCallArguments = dict
+
+
 # Custom exception class
 class ToolError(Exception):
     pass
+
+
 # A class used to encapsulate the results of tool execution
 class ToolExecResult:
     def __init__(self, output: str | None = None, error: str | None = None, error_code: int = 0):
         self.output = output
         self.error = error
         self.error_code = error_code
+
+
 # Class used to describe tool parameters (although not directly used in CLI, TextEditTool's methods require it)
 class ToolParameter:
     def __init__(self, name: str, type: str, description: str, required: bool = False, **kwargs):
         pass
+
+
 def maybe_truncate(output: str, max_chars: int = 20000) -> str:
     """Truncate the output if it's too long."""
     if len(output) > max_chars:
         return output[:max_chars] + "\n<... response clipped ...>\n"
     return output
+
+EditToolSubCommands = ["view", "create", "str_replace", "insert"]
+SNIPPET_LINES = 5
+
 async def run(command: str, timeout: int = 300) -> tuple[int, str, str]:
     """Run a shell command asynchronously."""
     proc = await asyncio.create_subprocess_shell(
@@ -47,6 +64,7 @@ async def run(command: str, timeout: int = 300) -> tuple[int, str, str]:
         proc.kill()
         await proc.wait()
         return -1, "", f"Command timed out after {timeout} seconds."
+
 
 class TextEditorTool(Tool):
     """Tool to replace a string in a file."""
@@ -392,8 +410,12 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True, help="Sub-command help")
 
     parser_view = subparsers.add_parser("view", help="View a file or directory.")
-    parser_view.add_argument("--path", required=True, help="Absolute path to the file or directory.")
-    parser_view.add_argument("--view_range", nargs=2, type=int, help="Line range to view, e.g., 11 12")
+    parser_view.add_argument(
+        "--path", required=True, help="Absolute path to the file or directory."
+    )
+    parser_view.add_argument(
+        "--view_range", nargs=2, type=int, help="Line range to view, e.g., 11 12"
+    )
 
     parser_create = subparsers.add_parser("create", help="Create a new file.")
     parser_create.add_argument("--path", required=True, help="Absolute path for the new file.")
@@ -402,22 +424,26 @@ def main():
     parser_replace = subparsers.add_parser("str_replace", help="Replace a string in a file.")
     parser_replace.add_argument("--path", required=True, help="Absolute path to the file.")
     parser_replace.add_argument("--old_str", required=True, help="The string to be replaced.")
-    parser_replace.add_argument("--new_str", required=False, default="", help="The string to replace with.")
+    parser_replace.add_argument(
+        "--new_str", required=False, default="", help="The string to replace with."
+    )
 
     parser_insert = subparsers.add_parser("insert", help="Insert a string at a specific line.")
     parser_insert.add_argument("--path", required=True, help="Absolute path to the file.")
-    parser_insert.add_argument("--insert_line", type=int, required=True, help="Line number to insert after.")
+    parser_insert.add_argument(
+        "--insert_line", type=int, required=True, help="Line number to insert after."
+    )
     parser_insert.add_argument("--new_str", required=True, help="The string to insert.")
-    
+
     args = parser.parse_args()
 
     tool = TextEditorTool()
-    
+
     arguments = vars(args)
 
     try:
         _path = Path(arguments["path"])
-        
+
         tool.validate_path(args.command, _path)
 
         if args.command == "view":
@@ -429,7 +455,9 @@ def main():
         elif args.command == "insert":
             result = tool._insert_handler(arguments, _path)
         else:
-            raise NotImplementedError(f"Sub-command '{args.command}' is not implemented in CLI wrapper.")
+            raise NotImplementedError(
+                f"Sub-command '{args.command}' is not implemented in CLI wrapper."
+            )
 
         if result.error:
             print(f"Error: {result.error}", file=sys.stderr)

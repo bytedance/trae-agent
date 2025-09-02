@@ -42,8 +42,10 @@ class Agent:
 
                 self.agent_config: AgentConfig = config.trae_agent
 
-                self.agent: TraeAgent = TraeAgent(self.agent_config, docker_config=docker_config, docker_keep=docker_keep)
-                
+                self.agent: TraeAgent = TraeAgent(
+                    self.agent_config, docker_config=docker_config, docker_keep=docker_keep
+                )
+
                 self.agent.set_cli_console(cli_console)
 
         if cli_console:

@@ -72,7 +72,6 @@ def cli():
 )
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 @click.option("--patch-path", "-pp", help="Path to patch file")
-
 # --- Docker Mode Start ---
 @click.option(
     "--docker-image",
@@ -104,7 +103,6 @@ def cli():
     default=True,
     help="Keep or remove the Docker container after finishing the task",
 )
-
 # --- Docker Mode End ---
 
 @click.option(
@@ -155,19 +153,37 @@ def run(
     """
 
     docker_config = None
-    if sum([bool(docker_image), bool(docker_container_id), bool(dockerfile_path), bool(docker_image_file)]) > 1:
-        console.print("[red]Error: --docker-image, --docker-container-id, --dockerfile-path, and --docker-image-file are mutually exclusive.[/red]")
+    if (
+        sum(
+            [
+                bool(docker_image),
+                bool(docker_container_id),
+                bool(dockerfile_path),
+                bool(docker_image_file),
+            ]
+        )
+        > 1
+    ):
+        console.print(
+            "[red]Error: --docker-image, --docker-container-id, --dockerfile-path, and --docker-image-file are mutually exclusive.[/red]"
+        )
         sys.exit(1)
-    
+
     if dockerfile_path:
         docker_config = {"dockerfile_path": dockerfile_path}
-        console.print(f"[blue]Docker mode enabled. Building from Dockerfile: {dockerfile_path}[/blue]")
+        console.print(
+            f"[blue]Docker mode enabled. Building from Dockerfile: {dockerfile_path}[/blue]"
+        )
     elif docker_image_file:
         docker_config = {"docker_image_file": docker_image_file}
-        console.print(f"[blue]Docker mode enabled. Loading from image file: {docker_image_file}[/blue]")
+        console.print(
+            f"[blue]Docker mode enabled. Loading from image file: {docker_image_file}[/blue]"
+        )
     elif docker_container_id:
         docker_config = {"container_id": docker_container_id}
-        console.print(f"[blue]Docker mode enabled. Attaching to container: {docker_container_id}[/blue]")
+        console.print(
+            f"[blue]Docker mode enabled. Attaching to container: {docker_container_id}[/blue]"
+        )
     elif docker_image:
         docker_config = {"image": docker_image}
         console.print(f"[blue]Docker mode enabled. Using image: {docker_image}[/blue]")
@@ -249,9 +265,16 @@ def run(
         sys.exit(1)
 
     if docker_config is not None:
-        docker_config['workspace_dir'] = working_dir
+        docker_config["workspace_dir"] = working_dir
 
-    agent = Agent(agent_type, config, trajectory_file, cli_console, docker_config=docker_config, docker_keep=docker_keep)
+    agent = Agent(
+        agent_type,
+        config,
+        trajectory_file,
+        cli_console,
+        docker_config=docker_config,
+        docker_keep=docker_keep,
+    )
 
     if not docker_config:
         try:
@@ -284,11 +307,14 @@ def run(
     except Exception as e:
         try:
             from docker.errors import DockerException
+
             if isinstance(e, DockerException):
                 console.print(f"\n[red]Docker Error: {e}[/red]")
-                console.print("[yellow]Please ensure the Docker daemon is running and you have the necessary permissions.[/yellow]")
+                console.print(
+                    "[yellow]Please ensure the Docker daemon is running and you have the necessary permissions.[/yellow]"
+                )
             else:
-                raise e 
+                raise e
         except ImportError:
             console.print(f"\n[red]Unexpected error: {e}[/red]")
             console.print(traceback.format_exc())
