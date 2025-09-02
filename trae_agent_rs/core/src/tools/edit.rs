@@ -9,6 +9,7 @@ use tokio::process::Command;
 const EditCommand: [&str; 4] = ["view", "create", "str_replace", "insert"];
 
 const SNIPPET_LINES: usize = 4; //would u8 already enough ?
+const TAB_WIDTH: usize = 8; // Python str.expandtabs() default
 
 pub struct Edit {}
 
@@ -142,10 +143,6 @@ async fn str_replace_handler(
         return Err(EditToolError::EmptyOldString);
     }
 
-    // Use raw strings for both validation and replacement (Option A).
-    // let expanded_old_str = expand_tabs_fixed(old_str, 2);
-    // let expanded_new_str = expand_tabs_fixed(new_str, 2);
-
     let mut file_content = match fs::read_to_string(path) {
         Ok(s) => s,
         Err(_) => return Err(EditToolError::Io),
@@ -242,8 +239,145 @@ async fn str_replace_handler(
     })
 }
 
-async fn insert_handler() {
-    todo!()
+// Helper: expand tabs like Python's str.expandtabs(tabsize)
+fn expand_tabs_fixed(s: &str, tabsize: usize) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut col = 0usize;
+    for ch in s.chars() {
+        match ch {
+            '\t' => {
+                let spaces = tabsize - (col % tabsize);
+                for _ in 0..spaces {
+                    out.push(' ');
+                }
+                col += spaces;
+            }
+            '\n' => {
+                out.push('\n');
+                col = 0;
+            }
+            _ => {
+                out.push(ch);
+                col += 1;
+            }
+        }
+    }
+    out
+}
+
+async fn insert_handler(
+    path: &str,
+    args: HashMap<String, serde_json::Value>,
+) -> Result<ToolExecResult, EditToolError> {
+    // 1) Validate insert_line
+    let insert_line_val = args.get("insert_line");
+    let insert_line = match insert_line_val.and_then(|v| v.as_i64()) {
+        Some(v) if v >= 0 => v as usize,
+        _ => {
+            return Ok(ToolExecResult {
+                output: None,
+                error: Some(
+                    "Parameter `insert_line` is required and should be integer for command: insert"
+                        .to_string(),
+                ),
+                error_code: Some(-1),
+            });
+        }
+    };
+    // 2) Validate new_str
+    let new_str_val = args.get("new_str");
+    let new_str = match new_str_val.and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return Ok(ToolExecResult {
+                output: None,
+                error: Some("Parameter `new_str` is required for command: insert".to_string()),
+                error_code: Some(-1),
+            });
+        }
+    };
+    // 3) Read file
+    let file_text_raw = fs::read_to_string(path).map_err(|_| EditToolError::Io)?;
+    // 4) Expand tabs like Python before operating
+    let file_text = expand_tabs_fixed(&file_text_raw, TAB_WIDTH);
+    let new_str_expanded = expand_tabs_fixed(new_str, TAB_WIDTH);
+    // 5) Split into lines
+    let file_text_lines: Vec<&str> = file_text.split('\n').collect();
+    let n_lines_file = file_text_lines.len();
+    // Special note: Python's split("\n") keeps an empty last segment if the file ends with '\n'.
+    // Our split() behavior matches that.
+    // 6) Range validation (Python mirrors raising ToolError). Here we return a ToolExecResult error.
+    if insert_line > n_lines_file {
+        let msg = format!(
+            "Invalid `insert_line` parameter: {}. It should be within the range of lines of the file: {:?}",
+            insert_line,
+            [0, n_lines_file]
+        );
+        return Ok(ToolExecResult {
+            output: None,
+            error: Some(msg),
+            error_code: Some(-1),
+        });
+    }
+    // 7) Prepare insertion
+    let new_str_lines: Vec<&str> = new_str_expanded.split('\n').collect();
+    // Build new file content lines
+    // file_text_lines[..insert_line] + new_str_lines + file_text_lines[insert_line..]
+    let mut new_file_text_lines: Vec<String> =
+        Vec::with_capacity(file_text_lines.len() + new_str_lines.len());
+    // Push left part
+    for &l in &file_text_lines[..insert_line] {
+        new_file_text_lines.push(l.to_string());
+    }
+    // Push new lines
+    for &l in &new_str_lines {
+        new_file_text_lines.push(l.to_string());
+    }
+    // Push right part
+    for &l in &file_text_lines[insert_line..] {
+        new_file_text_lines.push(l.to_string());
+    }
+    // 8) Build snippet lines
+    const SNIPPET_LINES: usize = 3; // ensure this matches your project’s constant
+    let snippet_start = insert_line.saturating_sub(SNIPPET_LINES);
+    let snippet_end = (insert_line + SNIPPET_LINES).min(file_text_lines.len());
+    let mut snippet_lines: Vec<String> = Vec::new();
+    // lines before
+    for &l in &file_text_lines[snippet_start..insert_line] {
+        snippet_lines.push(l.to_string());
+    }
+    // inserted lines
+    for &l in &new_str_lines {
+        snippet_lines.push(l.to_string());
+    }
+    // lines after
+    for &l in &file_text_lines[insert_line..snippet_end] {
+        snippet_lines.push(l.to_string());
+    }
+    // 9) Join back to text
+    let new_file_text = new_file_text_lines.join("\n");
+    let snippet = snippet_lines.join("\n");
+    // 10) Write file
+    fs::write(path, new_file_text).map_err(|_| EditToolError::Io)?;
+    // 11) Build success message
+    fn make_output(snippet: &str, label: &str, start_line_1_based: usize) -> String {
+        format!(
+            "{} (starting at line {}):\n{}\n",
+            label, start_line_1_based, snippet
+        )
+    }
+    let mut success_msg = format!("The file {} has been edited. ", path);
+    success_msg.push_str(&make_output(
+        &snippet,
+        "a snippet of the edited file",
+        std::cmp::max(1, insert_line.saturating_sub(SNIPPET_LINES) + 1),
+    ));
+    success_msg.push_str("Review the changes and make sure they are as expected (correct indentation, no duplicate lines, etc). Edit the file again if necessary.");
+    Ok(ToolExecResult {
+        output: Some(success_msg),
+        error: None,
+        error_code: None,
+    })
 }
 
 async fn view(path: &str, view_range: Option<&[i32; 2]>) -> Result<ToolExecResult, EditToolError> {
@@ -428,6 +562,20 @@ mod tests {
         }
         if let Some(n) = new_ {
             m.insert("new_str".to_string(), json!(n));
+        }
+        m
+    }
+
+    fn args_insert(
+        insert_line: Option<i64>,
+        new_str: Option<&str>,
+    ) -> std::collections::HashMap<String, serde_json::Value> {
+        let mut m = std::collections::HashMap::new();
+        if let Some(i) = insert_line {
+            m.insert("insert_line".to_string(), json!(i));
+        }
+        if let Some(s) = new_str {
+            m.insert("new_str".to_string(), json!(s));
         }
         m
     }
@@ -817,5 +965,247 @@ mod tests {
         assert!(new_content.contains("A"));
         assert!(new_content.contains("B"));
         assert!(!new_content.contains("a\tb"));
+    }
+
+    #[test]
+    fn test_insert_missing_insert_line() {
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "a\nb\n");
+        let args = args_insert(None, Some("X"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.output.is_none());
+        assert_eq!(res.error_code, Some(-1));
+        let msg = res.error.unwrap();
+        assert!(msg.contains("Parameter `insert_line` is required"));
+    }
+    #[test]
+    fn test_insert_invalid_insert_line_negative() {
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "a\nb\n");
+        let args = args_insert(Some(-3), Some("X"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.output.is_none());
+        assert_eq!(res.error_code, Some(-1));
+        let msg = res.error.unwrap();
+        assert!(
+            msg.contains("Parameter `insert_line` is required")
+                || msg.contains("should be integer")
+        ); // matches the validation branch
+    }
+    #[test]
+    fn test_insert_missing_new_str() {
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "a\nb\n");
+        let args = args_insert(Some(0), None);
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.output.is_none());
+        assert_eq!(res.error_code, Some(-1));
+        let msg = res.error.unwrap();
+        assert!(msg.contains("Parameter `new_str` is required"));
+    }
+    #[test]
+    fn test_insert_out_of_range_high() {
+        // file lines: split by '\n' retains empty segment at end -> ["a", "b", ""], len = 3
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "a\nb\n");
+        // insert_line > len (3) -> error
+        let args = args_insert(Some(4), Some("X"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.output.is_none());
+        assert_eq!(res.error_code, Some(-1));
+        let msg = res.error.unwrap();
+        assert!(msg.contains("Invalid `insert_line` parameter"));
+        assert!(
+            msg.contains("[0, 3]"),
+            "range should reflect number of lines"
+        );
+    }
+    #[test]
+    fn test_insert_at_start() {
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "a\nb\nc\n");
+        let args = args_insert(Some(0), Some("X"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.error.is_none(), "should succeed");
+        let out = res.output.unwrap();
+        assert!(out.contains("The file"), "should include success header");
+        assert!(out.contains("a snippet of the edited file"));
+        // file should be updated with X inserted as first line
+        let new_text = fs::read_to_string(&path).unwrap();
+        assert_eq!(new_text, "X\na\nb\nc\n");
+    }
+    #[test]
+    fn test_insert_in_middle() {
+        let dir = tempdir().expect("tempdir");
+        // file has 4 segments: ["a","b","c",""] because trailing '\n'
+        let path = write_temp_file(&dir, "a.txt", "a\nb\nc\n");
+        // insert at index 1 (0-based) before "b"
+        let args = args_insert(Some(1), Some("X"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.error.is_none());
+        let new_text = fs::read_to_string(&path).unwrap();
+        assert_eq!(new_text, "a\nX\nb\nc\n");
+    }
+    #[test]
+    fn test_insert_at_end() {
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "a\nb\n");
+        let args = args_insert(Some(3), Some("X"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.error.is_none());
+
+        dbg!(res);
+        let new_text = fs::read_to_string(&path).unwrap();
+        assert_eq!(new_text, "a\nb\nX");
+    }
+    #[test]
+    fn test_insert_multiline_new_str() {
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "a\nb\nc");
+        // Note: file without trailing newline -> split => ["a","b","c"] len=3
+        let args = args_insert(Some(1), Some("X\nY"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.error.is_none());
+        let new_text = fs::read_to_string(&path).unwrap();
+        // Expected lines: ["a","X","Y","b","c"] joined => "a\nX\nY\nb\nc"
+        assert_eq!(new_text, "a\nX\nY\nb\nc");
+    }
+    #[test]
+    fn test_insert_snippet_window_and_label() {
+        let dir = tempdir().expect("tempdir");
+        // Create 10 lines with trailing newline
+        let original: String = (1..=10).map(|i| format!("L{}\n", i)).collect();
+        let path = write_temp_file(&dir, "a.txt", &original);
+        // Insert at line index 5 (0-based), i.e., before "L6"
+        let args = args_insert(Some(5), Some("X"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.error.is_none());
+        let out = res.output.unwrap();
+        // Snippet window: SNIPPET_LINES = 3
+        // snippet_start = max(0, 5-3)=2 -> includes lines 3..5 (0-based) => L3, L4, L5
+        // inserted lines: X
+        // lines after: from 5..8 => L6, L7, L8
+        // The snippet should contain: L3,L4,L5,X,L6,L7,L8
+        assert!(out.contains("a snippet of the edited file (starting at line 3):"));
+        assert!(out.contains("L3"));
+        assert!(out.contains("L4"));
+        assert!(out.contains("L5"));
+        assert!(out.contains("\nX\n"));
+        assert!(out.contains("L6"));
+        assert!(out.contains("L7"));
+        assert!(out.contains("L8"));
+    }
+    #[test]
+    fn test_insert_tab_expansion_behavior() {
+        let dir = tempdir().expect("tempdir");
+        // File content has tabs; function expands tabs before splitting and joining
+        let path = write_temp_file(&dir, "a.txt", "\tcol1\n\t\tcol2\n");
+        // Insert a line with tabs
+        let args = args_insert(Some(1), Some("\tINS"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.error.is_none());
+        // Read file and ensure tabs were expanded consistently.
+        // Since function writes the joined expanded lines, tabs in the inserted string and original are expanded to spaces.
+        let new_text = fs::read_to_string(&path).unwrap();
+        // We can compute the expected expansion using the same helper if exported;
+        // otherwise, validate structural expectations: no raw '\t' remain and relative positions.
+        assert!(
+            !new_text.contains('\t'),
+            "tabs should be expanded in final output"
+        );
+        // Ensure insertion point is correct: after first expanded line
+        // Original lines after expansion:
+        // expand_tabs_fixed("\tcol1\n\t\tcol2\n", TAB_WIDTH)
+        // Insert expanded "\tINS" at index 1
+        let expected_file_text = {
+            let file_text = expand_tabs_fixed("\tcol1\n\t\tcol2\n", TAB_WIDTH);
+            let mut lines: Vec<&str> = file_text.split('\n').collect(); // keeps empty last
+            let ins = expand_tabs_fixed("\tINS", TAB_WIDTH);
+            let ins_lines: Vec<&str> = ins.split('\n').collect();
+            // manual merge mimic of function
+            let mut new_lines = Vec::new();
+            new_lines.extend(lines[..1].iter().copied());
+            new_lines.extend(ins_lines.iter().copied());
+            new_lines.extend(lines[1..].iter().copied());
+            new_lines.join("\n")
+        };
+        assert_eq!(new_text, expected_file_text);
+    }
+    #[test]
+    fn test_insert_at_file_start_snippet_bounds() {
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "A\nB\nC\nD\n");
+        // insert at 0 should show snippet starting at line 1
+        let args = args_insert(Some(0), Some("X\nY"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.error.is_none());
+        let out = res.output.unwrap();
+        assert!(out.contains("(starting at line 1):"));
+        // Snippet should include inserted X,Y and next up to SNIPPET_LINES lines after
+        assert!(out.contains("X"));
+        assert!(out.contains("Y"));
+        assert!(out.contains("A"));
+        assert!(out.contains("B"));
+    }
+    #[test]
+    fn test_insert_at_file_end_snippet_bounds() {
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "A\nB\nC\n");
+        // file_text_lines split => ["A","B","C",""] len=4, insert at 4 (end)
+        let args = args_insert(Some(4), Some("X"));
+        let res =
+            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+        assert!(res.error.is_none());
+        let out = res.output.unwrap();
+        // snippet_start = max(0, 4-3)=1 -> starts at line 2 (1-based)
+        assert!(out.contains("(starting at line 2):"));
+        assert!(out.contains("B"));
+        assert!(out.contains("C"));
+        assert!(out.contains("X"));
+    }
+    #[test]
+    fn test_insert_io_error_on_write() {
+        // Simulate write error by pointing to a path in a directory that does not exist
+        // Read succeeds must fail for this to target write; to ensure read succeeds, we create and then remove permissions
+        let dir = tempdir().expect("tempdir");
+        let path = write_temp_file(&dir, "a.txt", "A\n");
+        // Make the directory read-only to provoke write error on most systems
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(dir.path()).unwrap().permissions();
+            perms.set_mode(0o555); // r-x
+            fs::set_permissions(dir.path(), perms).unwrap();
+        }
+        let args = args_insert(Some(0), Some("X"));
+        let res = run_async(insert_handler(path.to_str().unwrap(), args));
+        match res {
+            Err(EditToolError::Io) => { /* expected on write failure */ }
+            Ok(ok) => {
+                // In some environments, permissions might not prevent write.
+                // If write succeeded, at least ensure content matches expected.
+                let new_text = fs::read_to_string(&path).unwrap();
+                if new_text != "X\nA\n" && new_text != "X\nA" {
+                    panic!(
+                        "unexpected content when write unexpectedly succeeded: {:?}",
+                        new_text
+                    );
+                }
+                // And success message present
+                assert!(ok.output.is_some());
+            }
+            Err(e) => panic!("unexpected error: {:?}", e),
+        }
     }
 }
