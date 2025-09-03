@@ -12,6 +12,7 @@ import traceback
 from pathlib import Path
 
 import click
+import PyInstaller.__main__
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -47,6 +48,73 @@ def resolve_config_file(config_file: str) -> str:
             sys.exit(1)
     else:
         return config_file
+
+
+def check_docker(timeout=3):
+    # 1) Check whether the docker CLI is installed
+    if shutil.which("docker") is None:
+        return {"cli": False, "daemon": False, "version": None, "error": "docker CLI not found"}
+    # 2) Check whether the Docker daemon is reachable (this makes a real request)
+    try:
+        cp = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if cp.returncode == 0 and cp.stdout.strip():
+            return {"cli": True, "daemon": True, "version": cp.stdout.strip(), "error": None}
+        else:
+            # The daemon may not be running or permissions may be insufficient
+            return {
+                "cli": True,
+                "daemon": False,
+                "version": None,
+                "error": (cp.stderr or cp.stdout).strip(),
+            }
+    except Exception as e:
+        return {"cli": True, "daemon": False, "version": None, "error": str(e)}
+
+
+def build_with_pyinstaller(
+    project_dir: str | Path,
+    spec_file: str | Path = "build_tools.spec",
+    dist_dir: str | Path = "trae_agent/dist",
+    build_dir: str | Path | None = None,
+):
+    """
+    Build using PyInstaller's Python API. Behavior matches the CLI.
+
+    Args:
+        project_dir: The base project directory (used to resolve spec if relative).
+        spec_file: The spec file to use (relative to project_dir or absolute).
+        dist_dir: Directory for final artifacts.
+        build_dir: Directory for intermediate build files.
+    """
+    subprocess.run(["rm", "-rf", "trae_agent/dist"])
+    subprocess.run(["mkdir", "trae_agent/dist"])
+    project_dir = Path(project_dir).resolve()
+    spec_path = Path(spec_file)
+    spec_path = (
+        (project_dir / spec_path).resolve() if not spec_path.is_absolute() else spec_path.resolve()
+    )
+
+    dist_dir = Path(dist_dir).resolve()
+    build_dir = Path(build_dir).resolve() if build_dir else (project_dir / "build").resolve()
+
+    dist_dir.mkdir(parents=True, exist_ok=True)
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    # Arguments mirror the CLI flags; absolute paths avoid cwd ambiguity
+    PyInstaller.__main__.run(
+        [
+            str(spec_path),
+            "--noconfirm",
+            f"--distpath={dist_dir}",
+            f"--workpath={build_dir}",
+            # Add more flags if needed (e.g., "--clean")
+        ]
+    )
 
 
 @click.group()
@@ -121,32 +189,6 @@ def cli():
     help="Type of agent to use (trae_agent)",
     default="trae_agent",
 )
-def check_docker(timeout=3):
-    # 1) Check whether the docker CLI is installed
-    if shutil.which("docker") is None:
-        return {"cli": False, "daemon": False, "version": None, "error": "docker CLI not found"}
-    # 2) Check whether the Docker daemon is reachable (this makes a real request)
-    try:
-        cp = subprocess.run(
-            ["docker", "version", "--format", "{{.Server.Version}}"],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        if cp.returncode == 0 and cp.stdout.strip():
-            return {"cli": True, "daemon": True, "version": cp.stdout.strip(), "error": None}
-        else:
-            # The daemon may not be running or permissions may be insufficient
-            return {
-                "cli": True,
-                "daemon": False,
-                "version": None,
-                "error": (cp.stderr or cp.stdout).strip(),
-            }
-    except Exception as e:
-        return {"cli": True, "daemon": False, "version": None, "error": str(e)}
-
-
 def run(
     task: str | None,
     file_path: str | None,
@@ -180,7 +222,7 @@ def run(
         None (it is expected to be ended after calling the run function)
     """
 
-    docker_config = None
+    docker_config: dict[str, str | None] | None = None
     if (
         sum(
             [
@@ -227,6 +269,14 @@ def run(
         else:
             print(f"Docker is configured incorrectly. {check_msg['error']}")
             sys.exit(1)
+        if not (
+            os.path.exists("trae_agent/dist/dist_tools")
+            and os.path.exists("trae_agent/dist/dist_tools/_internal")
+        ):
+            print("Building tools of Docker mode for the first use, waiting for a few seconds...")
+            build_with_pyinstaller(os.getcwd())
+            print("Building finished.")
+
     if file_path:
         if task:
             console.print(
@@ -276,7 +326,14 @@ def run(
         cli_console.set_initial_task(task)
 
     # agent = Agent(agent_type, config, trajectory_file, cli_console)
-    # --- MODIFIED: 将docker_config传递给Agent构造函数 ---
+
+    if docker_config is None:
+        return  # or handle appropriately
+    if not isinstance(docker_config, dict):
+        raise TypeError("docker_config must be a dict-like DockerConfig")
+    if working_dir is None:
+        raise ValueError("working_dir is required here")
+    docker_config["workspace_dir"] = working_dir  # now type-safe
 
     # Change working directory if specified
     if working_dir:
@@ -298,9 +355,6 @@ def run(
             f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
         )
         sys.exit(1)
-
-    if docker_config is not None:
-        docker_config["workspace_dir"] = working_dir
 
     agent = Agent(
         agent_type,

@@ -21,7 +21,7 @@ class DockerManager:
         container_id: str | None,
         dockerfile_path: str | None,
         docker_image_file: str | None,
-        workspace_dir: str,
+        workspace_dir: str | None = None,
         tools_dir: str | None = None,
         interactive: bool = False,
     ):
@@ -88,25 +88,36 @@ class DockerManager:
                 print(f"Successfully attached to container {self.container.short_id}.")
             elif self.image:
                 print(f"Starting a new container from image: {self.image}...")
-                os.makedirs(self.workspace_dir, exist_ok=True)
-                volumes = {
-                    os.path.abspath(self.workspace_dir): {
-                        "bind": self.container_workspace,
-                        "mode": "rw",
+                if self.workspace_dir is not None:
+                    os.makedirs(self.workspace_dir, exist_ok=True)
+                    volumes = {
+                        os.path.abspath(self.workspace_dir): {
+                            "bind": self.container_workspace,
+                            "mode": "rw",
+                        }
                     }
-                }
-                self.container = self.client.containers.run(
-                    self.image,
-                    command="sleep infinity",
-                    detach=True,
-                    volumes=volumes,
-                    working_dir=self.container_workspace,
-                )
-                self.container_id = self.container.id
-                self._is_managed = True
-                print(
-                    f"Container {self.container.short_id} created. Workspace '{self.workspace_dir}' is mounted to '{self.container_workspace}'."
-                )
+                    self.container = self.client.containers.run(
+                        self.image,
+                        command="sleep infinity",
+                        detach=True,
+                        volumes=volumes,
+                        working_dir=self.container_workspace,
+                    )
+                    self.container_id = self.container.id
+                    self._is_managed = True
+                    print(
+                        f"Container {self.container.short_id} created. Workspace '{self.workspace_dir}' is mounted to '{self.container_workspace}'."
+                    )
+                else:
+                    self.container = self.client.containers.run(
+                        self.image,
+                        command="sleep infinity",
+                        detach=True,
+                        working_dir=self.container_workspace,
+                    )
+                    self.container_id = self.container.id
+                    self._is_managed = True
+                    print(f"Container {self.container.short_id} created.")
             self._copy_tools_to_container()
             # if self.interactive:
             self._start_persistent_shell()
@@ -199,7 +210,7 @@ class DockerManager:
         if self.shell is None:
             raise RuntimeError("Failed to start or restart the persistent shell.")
 
-        print(f"Executing (interactive): `{command}`")
+        # print(f"Executing (interactive): `{command}`")
         marker = "---CMD_DONE---"
         full_command = command.strip()
         marker_command = f"echo {marker}$?"
