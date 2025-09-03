@@ -449,11 +449,11 @@ mod tests {
     fn test_get_input_schema_openai() {
         let bash = Bash::new("openai".to_string());
         let schema = bash.get_input_schema();
-        
+
         assert!(schema["type"] == "object");
         assert!(schema["properties"]["command"]["type"] == "string");
         assert!(schema["properties"]["restart"]["type"] == "boolean");
-        
+
         // OpenAI provider should require both command and restart
         let required = schema["required"].as_array().unwrap();
         assert!(required.contains(&json!("command")));
@@ -464,11 +464,11 @@ mod tests {
     fn test_get_input_schema_non_openai() {
         let bash = Bash::new("anthropic".to_string());
         let schema = bash.get_input_schema();
-        
+
         assert!(schema["type"] == "object");
         assert!(schema["properties"]["command"]["type"] == "string");
         assert!(schema["properties"]["restart"]["type"] == "boolean");
-        
+
         // Non-OpenAI provider should only require command
         let required = schema["required"].as_array().unwrap();
         assert!(required.contains(&json!("command")));
@@ -489,7 +489,7 @@ mod tests {
     fn test_bash_process_start_and_stop() {
         let mut bash_process = BashProcess::new();
         bash_process.timeout = Duration::from_millis(500); // Very short timeout
-        
+
         let start_result = run_async(bash_process.start());
         assert!(start_result.is_ok());
         assert!(bash_process.started);
@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn test_bash_process_run_without_start() {
         let mut bash_process = BashProcess::new();
-        
+
         let run_result = run_async(bash_process.run("echo test"));
         match run_result {
             Ok(_) => panic!("Expected error when running without starting"),
@@ -518,7 +518,7 @@ mod tests {
     #[test]
     fn test_stop_without_start() {
         let mut bash_process = BashProcess::new();
-        
+
         let stop_result = run_async(bash_process.stop());
         match stop_result {
             Ok(_) => panic!("Expected error when stopping without starting"),
@@ -555,9 +555,9 @@ mod tests {
     fn test_bash_process_timeout() {
         let mut bash_process = BashProcess::new();
         bash_process.timeout = Duration::from_millis(100); // Very short timeout
-        
+
         run_async(bash_process.start()).expect("start should succeed");
-        
+
         // This command should timeout due to the very short timeout
         let run_result = run_async(bash_process.run("echo 'test'"));
         match run_result {
@@ -579,16 +579,16 @@ mod tests {
     #[test]
     fn test_execute_argument_parsing() {
         let bash = Bash::new("openai".to_string());
-        
+
         // Test that arguments are parsed correctly
         let mut args = HashMap::new();
         args.insert("command".to_string(), json!("echo test"));
         args.insert("restart".to_string(), json!(true));
-        
+
         // We can't easily test execute without mocking, but we can test argument parsing
         let cmd = args.get("command").and_then(|x| x.as_str()).unwrap_or("");
         let restart = args.get("restart").and_then(|x| x.as_bool()).unwrap_or(false);
-        
+
         assert_eq!(cmd, "echo test");
         assert_eq!(restart, true);
     }
@@ -598,7 +598,7 @@ mod tests {
     fn test_basic_integration() {
         let mut bash = Bash::new("openai".to_string());
         bash.bash.timeout = Duration::from_millis(200); // Very short timeout
-        
+
         let mut args = HashMap::new();
         args.insert("command".to_string(), json!("true")); // Simple command that should succeed quickly
         args.insert("restart".to_string(), json!(false));
@@ -612,11 +612,11 @@ mod tests {
     #[test]
     fn test_tool_trait() {
         let bash = Bash::new("test".to_string());
-        
+
         // Test Tool trait methods
         assert_eq!(bash.get_name(), "bash");
         assert!(!bash.get_description().is_empty());
-        
+
         let schema = bash.get_input_schema();
         assert!(schema.is_object());
         assert!(schema["properties"].is_object());
@@ -627,7 +627,7 @@ mod tests {
     fn test_execute_ls_command() {
         let mut bash = Bash::new("openai".to_string());
         bash.bash.timeout = Duration::from_millis(1000);
-        
+
         let mut args = HashMap::new();
         args.insert("command".to_string(), json!("ls /"));
         args.insert("restart".to_string(), json!(false));
@@ -637,8 +637,8 @@ mod tests {
             Ok(output) => {
                 // Check for common directories that should exist on most systems
                 assert!(
-                    output.contains("bin") || 
-                    output.contains("usr") || 
+                    output.contains("bin") ||
+                    output.contains("usr") ||
                     output.contains("etc") ||
                     output.contains("home") ||
                     output.len() > 0, // At least some output
@@ -657,7 +657,7 @@ mod tests {
     fn test_execute_echo_multiline() {
         let mut bash = Bash::new("openai".to_string());
         bash.bash.timeout = Duration::from_millis(500);
-        
+
         let mut args = HashMap::new();
         args.insert("command".to_string(), json!("echo -e 'First line\\nSecond line\\nThird line'"));
         args.insert("restart".to_string(), json!(false));
@@ -667,12 +667,12 @@ mod tests {
             Ok(output) => {
                 // Check that all three lines are present in output
                 assert!(
-                    output.contains("First line") && 
-                    output.contains("Second line") && 
+                    output.contains("First line") &&
+                    output.contains("Second line") &&
                     output.contains("Third line"),
                     "Expected multiline echo output to contain all lines, got: {}", output
                 );
-                
+
                 // Verify it's actually multiple lines (contains newline or shows multiple lines)
                 assert!(
                     output.lines().count() >= 3 || output.contains("line"),

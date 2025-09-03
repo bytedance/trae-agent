@@ -19,7 +19,7 @@ pub trait Tool: Send + Sync {
 
     /// Execute the tool with the given arguments
     fn execute(&mut self, arguments: HashMap<String, Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>>;
-    
+
     fn reset(&mut self);
 }
 

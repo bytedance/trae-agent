@@ -42,7 +42,7 @@ pub enum AgentStepState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentState {
-    IDEL,
+    IDLE,
     RUNNING,
     COMPLETED,
     ERROR,
@@ -105,7 +105,7 @@ impl AgentExecution {
             success: false,
             total_token: None,
             execution_time: 0.0,
-            agent_state: AgentState::IDEL,
+            agent_state: AgentState::IDLE,
         }
     }
 }
@@ -143,7 +143,7 @@ impl AgentStep {
 }
 
 pub trait Agent {
-    // run is correspoinding to execute_task in python.
+    // run is corresponding to execute_task in python.
     async fn run(&mut self) -> Result<AgentExecution, &'static str>;
     fn new_task(
         &mut self,
@@ -189,7 +189,7 @@ impl BaseAgent {
 
         is_task_complete: Option<Box<dyn FnOnce(&LLMResponse) -> bool>>,
     ) -> Result<Vec<LLMMessage>, AgentError> {
-        let msgs_backup = msgs.clone(); // this is not good practice once chat rely only &msgs it should be removed 
+        let msgs_backup = msgs.clone(); // this is not good practice once chat rely only &msgs it should be removed
 
         step.state = AgentStepState::THINKING;
         // a cli api should place here currently there's not cli api
@@ -487,7 +487,7 @@ mod tests {
         fn test_agent_step_state_clone() {
             let state = AgentStepState::THINKING;
             let cloned_state = state.clone();
-            
+
             // Since we can't directly compare enum variants without PartialEq,
             // we'll test through pattern matching
             match cloned_state {
@@ -513,7 +513,7 @@ mod tests {
 
         #[test]
         fn test_agent_state_equality() {
-            assert_eq!(AgentState::IDEL, AgentState::IDEL);
+            assert_eq!(AgentState::IDLE, AgentState::IDLE);
             assert_eq!(AgentState::RUNNING, AgentState::RUNNING);
             assert_eq!(AgentState::COMPLETED, AgentState::COMPLETED);
             assert_eq!(AgentState::ERROR, AgentState::ERROR);
@@ -521,7 +521,7 @@ mod tests {
 
         #[test]
         fn test_agent_state_inequality() {
-            assert_ne!(AgentState::IDEL, AgentState::RUNNING);
+            assert_ne!(AgentState::IDLE, AgentState::RUNNING);
             assert_ne!(AgentState::RUNNING, AgentState::COMPLETED);
             assert_ne!(AgentState::COMPLETED, AgentState::ERROR);
         }
@@ -549,7 +549,7 @@ mod tests {
             assert!(!execution.success);
             assert!(execution.total_token.is_none());
             assert_eq!(execution.execution_time, 0.0);
-            assert_eq!(execution.agent_state, AgentState::IDEL);
+            assert_eq!(execution.agent_state, AgentState::IDLE);
         }
 
         #[test]
@@ -658,7 +658,7 @@ mod tests {
         fn test_indicate_task_complete_with_completion_indicators() {
             let completion_phrases = [
                 "task completed",
-                "task finished", 
+                "task finished",
                 "done",
                 "completed successfully",
                 "finished successfully",
@@ -735,7 +735,7 @@ mod tests {
         fn test_indicate_task_complete_empty_content() {
             let mut response = create_test_llm_response("");
             response.content.clear(); // Remove all content
-            
+
             // Should not panic and should return false
             assert!(!indicate_task_complete(&response));
         }
@@ -859,14 +859,14 @@ mod tests {
         fn test_agent_step_workflow() {
             // Test a complete workflow from thinking to completion
             let mut step = AgentStep::new(1, AgentStepState::THINKING);
-            
+
             // Simulate thinking phase
             step.thought = Some("I need to analyze the task".to_string());
-            
+
             // Simulate tool calling phase
             step.state = AgentStepState::CALLINGTOOL;
             step.tool_calls = Some(vec![create_test_tool_call("bash", HashMap::new())]);
-            
+
             // Simulate tool results
             let tool_result = ToolResult {
                 call_id: "call_bash".to_string(),
@@ -877,10 +877,10 @@ mod tests {
                 id: Some("result_1".to_string()),
             };
             step.tool_results = Some(vec![tool_result]);
-            
+
             // Complete the step
             step.state = AgentStepState::COMPLETED;
-            
+
             assert_eq!(step.step_number, 1);
             assert!(step.thought.is_some());
             assert!(step.tool_calls.is_some());
@@ -892,22 +892,22 @@ mod tests {
         fn test_agent_execution_complete_workflow() {
             let task = "Complete a complex task".to_string();
             let mut execution = AgentExecution::new(task.clone(), None);
-            
+
             // Add steps to execution
             let mut step1 = AgentStep::new(1, AgentStepState::THINKING);
             step1.state = AgentStepState::COMPLETED;
             execution.steps.push(step1);
-            
+
             let mut step2 = AgentStep::new(2, AgentStepState::CALLINGTOOL);
             step2.state = AgentStepState::COMPLETED;
             execution.steps.push(step2);
-            
+
             // Mark execution as successful
             execution.agent_state = AgentState::COMPLETED;
             execution.success = true;
             execution.final_result = Some("Task completed successfully".to_string());
             execution.execution_time = 123.45;
-            
+
             assert_eq!(execution.steps.len(), 2);
             assert!(execution.success);
             assert_eq!(execution.agent_state, AgentState::COMPLETED);
@@ -918,15 +918,15 @@ mod tests {
         #[test]
         fn test_error_handling_workflow() {
             let mut execution = AgentExecution::new("Error test".to_string(), None);
-            
+
             // Create a step with error
             let mut error_step = AgentStep::new(1, AgentStepState::ERROR);
             error_step.error = Some("Simulated error occurred".to_string());
-            
+
             execution.steps.push(error_step);
             execution.agent_state = AgentState::ERROR;
             execution.success = false;
-            
+
             assert_eq!(execution.agent_state, AgentState::ERROR);
             assert!(!execution.success);
             assert!(execution.steps[0].error.is_some());
@@ -949,7 +949,7 @@ mod tests {
             let mut step = AgentStep::new(1, AgentStepState::THINKING);
             step.thought = Some(long_string.clone());
             step.error = Some(long_string.clone());
-            
+
             assert_eq!(step.thought.as_ref().unwrap().len(), 10000);
             assert_eq!(step.error.as_ref().unwrap().len(), 10000);
         }
@@ -959,7 +959,7 @@ mod tests {
             let unicode_string = "测试 🚀 emoji and unicode ñáéíóú";
             let mut step = AgentStep::new(1, AgentStepState::THINKING);
             step.thought = Some(unicode_string.to_string());
-            
+
             assert_eq!(step.thought.as_ref().unwrap(), unicode_string);
         }
 
@@ -974,16 +974,16 @@ mod tests {
         fn test_multiple_tool_calls() {
             let mut args1 = HashMap::new();
             args1.insert("command".to_string(), json!("ls -la"));
-            
+
             let mut args2 = HashMap::new();
             args2.insert("file".to_string(), json!("test.txt"));
             args2.insert("content".to_string(), json!("hello world"));
-            
+
             let tool_calls = vec![
                 create_test_tool_call("bash", args1),
                 create_test_tool_call("str_replace_based_edit_tool", args2),
             ];
-            
+
             let response = create_test_llm_response_with_tools("Using tools", tool_calls);
             assert_eq!(response.tool_calls.as_ref().unwrap().len(), 2);
         }
