@@ -5,6 +5,8 @@
 
 import asyncio
 import os
+import shutil
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -119,6 +121,32 @@ def cli():
     help="Type of agent to use (trae_agent)",
     default="trae_agent",
 )
+def check_docker(timeout=3):
+    # 1) Check whether the docker CLI is installed
+    if shutil.which("docker") is None:
+        return {"cli": False, "daemon": False, "version": None, "error": "docker CLI not found"}
+    # 2) Check whether the Docker daemon is reachable (this makes a real request)
+    try:
+        cp = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if cp.returncode == 0 and cp.stdout.strip():
+            return {"cli": True, "daemon": True, "version": cp.stdout.strip(), "error": None}
+        else:
+            # The daemon may not be running or permissions may be insufficient
+            return {
+                "cli": True,
+                "daemon": False,
+                "version": None,
+                "error": (cp.stderr or cp.stdout).strip(),
+            }
+    except Exception as e:
+        return {"cli": True, "daemon": False, "version": None, "error": str(e)}
+
+
 def run(
     task: str | None,
     file_path: str | None,
@@ -192,6 +220,13 @@ def run(
     # Apply backward compatibility for config file
     config_file = resolve_config_file(config_file)
 
+    if docker_config:
+        check_msg = check_docker()
+        if check_msg["cli"] and check_msg["daemon"] and check_msg["version"]:
+            print("Docker is configured correctly.")
+        else:
+            print(f"Docker is configured incorrectly. {check_msg['error']}")
+            sys.exit(1)
     if file_path:
         if task:
             console.print(
