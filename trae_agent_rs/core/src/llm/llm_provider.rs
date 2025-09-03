@@ -14,6 +14,8 @@ pub trait LLMProvider: Send + Sync {
 
     /// Send chat messages to the LLM with optional tool support
     async fn chat(
+        // i am not so sure why here need to use mut instead of & cuz it will cause every 
+        // agent calling this api has to be &mut
         &mut self,
         messages: Vec<LLMMessage>,
         model_config: &ModelConfig,

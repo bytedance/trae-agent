@@ -39,7 +39,7 @@ impl ToolResult {
 }
 
 /// Represents a parsed tool call
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default,Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
     pub name: String,
     pub call_id: String,

@@ -5,7 +5,10 @@ pub mod llm;
 pub mod tools;
 pub mod config;
 pub mod trajectories;
+pub mod agent;
 
 pub use llm::*;
 pub use tools::*;
 pub use config::*;
+pub use agent::*;
+
