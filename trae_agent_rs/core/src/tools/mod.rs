@@ -2,6 +2,8 @@ use std::{collections::HashMap, fmt};
 use serde::{Deserialize, Serialize};
 
 pub mod base;
+pub mod edit;
+pub mod bash;
 pub use base::Tool;
 
 /// Tool call arguments type alias
@@ -18,6 +20,24 @@ pub struct ToolResult {
     pub id: Option<String>, // OpenAI-specific field
 }
 
+impl ToolResult {
+
+    pub fn new(
+        call_id: String,
+        name: String,
+    ) -> Self{
+        ToolResult {
+            call_id: call_id,
+            name: name,
+            success: false,
+            result: None,
+            error: None,
+            id: None
+        }
+    }
+
+}
+
 /// Represents a parsed tool call
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
@@ -27,6 +47,9 @@ pub struct ToolCall {
     pub arguments: ToolCallArguments,
     pub id: Option<String>,
 }
+
+// don't implement new for tool call cause tool call actually depends on the argument which
+// may cause problem when developer randomly call the Tool Call
 
 impl fmt::Display for ToolCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -60,4 +83,13 @@ impl ToolSchema {
             strict: Some(true),
         }
     }
+}
+
+
+
+#[derive(Debug, Default)]
+pub struct ToolExecResult{
+    pub output: Option<String>,
+    pub error: Option<String>,
+    pub error_code: Option<i32>,
 }
