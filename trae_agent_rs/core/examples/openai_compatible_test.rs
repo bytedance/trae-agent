@@ -18,7 +18,7 @@ use std::future::Future;
 use std::pin::Pin;
 use trae_core::{
     config::{ModelConfig, ModelProvider},
-    llm::{LLMMessage, LLMClient, MessageRole, ContentItem},
+    llm::{ContentItem, LLMClient, LLMMessage, MessageRole},
     tools::Tool,
 };
 
@@ -31,6 +31,7 @@ impl Tool for CalculatorTool {
         "calculator"
     }
 
+    fn reset(&mut self) {}
 
     fn get_description(&self) -> &str {
         "Performs basic arithmetic operations (add, subtract, multiply, divide)"
@@ -58,18 +59,18 @@ impl Tool for CalculatorTool {
         })
     }
 
-    fn execute(&mut self, arguments: HashMap<String, serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
-        let operation = arguments.get("operation")
+    fn execute(
+        &mut self,
+        arguments: HashMap<String, serde_json::Value>,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
+        let operation = arguments
+            .get("operation")
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        let a = arguments.get("a")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
+        let a = arguments.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
-        let b = arguments.get("b")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
+        let b = arguments.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
         let result = match operation {
             "add" => Ok((a + b).to_string()),
@@ -98,6 +99,8 @@ impl Tool for WeatherTool {
         "get_weather"
     }
 
+    fn reset(&mut self) {}
+
     fn get_description(&self) -> &str {
         "Gets the current weather for a given location"
     }
@@ -115,8 +118,12 @@ impl Tool for WeatherTool {
         })
     }
 
-    fn execute(&mut self, arguments: HashMap<String, serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
-        let location = arguments.get("location")
+    fn execute(
+        &mut self,
+        arguments: HashMap<String, serde_json::Value>,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
+        let location = arguments
+            .get("location")
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown");
 
@@ -130,17 +137,20 @@ impl Tool for WeatherTool {
     }
 }
 
-async fn test_basic_chat(client: &mut LLMClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_basic_chat(
+    client: &mut LLMClient,
+    model_config: &ModelConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 Testing basic chat functionality...");
 
-    let messages = vec![
-        LLMMessage {
-            role: MessageRole::User,
-            content: Some(vec![ContentItem::text("Hello! Can you tell me a short joke?".to_string())]),
-            tool_call: None,
-            tool_result: None,
-        }
-    ];
+    let messages = vec![LLMMessage {
+        role: MessageRole::User,
+        content: Some(vec![ContentItem::text(
+            "Hello! Can you tell me a short joke?".to_string(),
+        )]),
+        tool_call: None,
+        tool_result: None,
+    }];
 
     match client.chat(messages, model_config, None, false).await {
         Ok(response) => {
@@ -165,24 +175,27 @@ async fn test_basic_chat(client: &mut LLMClient, model_config: &ModelConfig) -> 
     Ok(())
 }
 
-async fn test_tool_calling(client: &mut LLMClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_tool_calling(
+    client: &mut LLMClient,
+    model_config: &ModelConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🔧 Testing tool calling functionality...");
 
-    let tools: Vec<Box<dyn Tool>> = vec![
-        Box::new(CalculatorTool),
-        Box::new(WeatherTool),
-    ];
+    let tools: Vec<Box<dyn Tool>> = vec![Box::new(CalculatorTool), Box::new(WeatherTool)];
 
-    let messages = vec![
-        LLMMessage {
-            role: MessageRole::User,
-            content: Some(vec![ContentItem::text("What's 15 + 27? Also, what's the weather like in Tokyo, Japan?".to_string())]),
-            tool_call: None,
-            tool_result: None,
-        }
-    ];
+    let messages = vec![LLMMessage {
+        role: MessageRole::User,
+        content: Some(vec![ContentItem::text(
+            "What's 15 + 27? Also, what's the weather like in Tokyo, Japan?".to_string(),
+        )]),
+        tool_call: None,
+        tool_result: None,
+    }];
 
-    match client.chat(messages, model_config, Some(tools), false).await {
+    match client
+        .chat(messages, model_config, Some(tools), false)
+        .await
+    {
         Ok(response) => {
             println!("✅ Tool calling test successful!");
             println!("Model: {:?}", response.model);
@@ -208,7 +221,9 @@ async fn test_tool_calling(client: &mut LLMClient, model_config: &ModelConfig) -
                     }
                 }
             } else {
-                println!("No tool calls were made (model might not support tools or didn't decide to use them)");
+                println!(
+                    "No tool calls were made (model might not support tools or didn't decide to use them)"
+                );
             }
 
             if !response.content.is_empty() {
@@ -226,26 +241,32 @@ async fn test_tool_calling(client: &mut LLMClient, model_config: &ModelConfig) -
     Ok(())
 }
 
-async fn test_streaming(client: &mut LLMClient, model_config: &ModelConfig) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_streaming(
+    client: &mut LLMClient,
+    model_config: &ModelConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📡 Testing streaming functionality...");
 
-    let messages = vec![
-        LLMMessage {
-            role: MessageRole::User,
-            content: Some(vec![ContentItem::text("Tell me a short story about a robot learning to cook.".to_string())]),
-            tool_call: None,
-            tool_result: None,
-        }
-    ];
+    let messages = vec![LLMMessage {
+        role: MessageRole::User,
+        content: Some(vec![ContentItem::text(
+            "Tell me a short story about a robot learning to cook.".to_string(),
+        )]),
+        tool_call: None,
+        tool_result: None,
+    }];
 
-    match client.chat_stream(messages, model_config, None, false).await {
+    match client
+        .chat_stream(messages, model_config, None, false)
+        .await
+    {
         Ok(mut stream) => {
             println!("✅ Streaming test initiated successfully!");
             println!("🤖 Assistant: ");
 
             use futures::StreamExt;
             use std::io::{self, Write};
-            use tokio::time::{sleep, Duration};
+            use tokio::time::{Duration, sleep};
 
             // Get typewriter delay from environment variable (default: 15ms)
             let typewriter_delay = std::env::var("TYPEWRITER_DELAY_MS")
@@ -286,7 +307,10 @@ async fn test_streaming(client: &mut LLMClient, model_config: &ModelConfig) -> R
                 }
             }
 
-            println!("✅ Streaming test completed! Received {} chunks", chunk_count);
+            println!(
+                "✅ Streaming test completed! Received {} chunks",
+                chunk_count
+            );
         }
         Err(e) => {
             println!("❌ Streaming test failed: {}", e);
@@ -314,20 +338,20 @@ async fn test_error_handling() -> Result<(), Box<dyn std::error::Error>> {
 
     match LLMClient::new(config) {
         Ok(mut client) => {
-            let messages = vec![
-                LLMMessage {
-                    role: MessageRole::User,
-                    content: Some(vec![ContentItem::text("Hello".to_string())]),
-                    tool_call: None,
-                    tool_result: None,
-                }
-            ];
+            let messages = vec![LLMMessage {
+                role: MessageRole::User,
+                content: Some(vec![ContentItem::text("Hello".to_string())]),
+                tool_call: None,
+                tool_result: None,
+            }];
 
-            let model_config = ModelConfig::new("gpt-4o-2024-11-20".to_string(),
+            let model_config = ModelConfig::new(
+                "gpt-4o-2024-11-20".to_string(),
                 ModelProvider::new("openai_compatible".to_string())
                     .with_api_key("test-key".to_string())
-                    .with_base_url("https://non-existent-domain-12345.invalid".to_string()))
-                .with_max_retries(1); // Reduce retries for faster error testing
+                    .with_base_url("https://non-existent-domain-12345.invalid".to_string()),
+            )
+            .with_max_retries(1); // Reduce retries for faster error testing
 
             println!("🔍 Attempting connection to invalid URL (this should fail quickly)...");
             match client.chat(messages, &model_config, None, false).await {
@@ -335,12 +359,18 @@ async fn test_error_handling() -> Result<(), Box<dyn std::error::Error>> {
                     println!("⚠️  Expected error but got success - this might indicate a problem");
                 }
                 Err(e) => {
-                    println!("✅ Error handling test successful - caught expected error: {}", e);
+                    println!(
+                        "✅ Error handling test successful - caught expected error: {}",
+                        e
+                    );
                 }
             }
         }
         Err(e) => {
-            println!("✅ Error handling test successful - caught config error: {}", e);
+            println!(
+                "✅ Error handling test successful - caught config error: {}",
+                e
+            );
         }
     }
 
@@ -351,7 +381,9 @@ fn print_header() {
     println!("🤖 OpenAI Compatible Client Test Program");
     println!("==========================================");
     println!("This program tests the OpenAI Compatible client functionality.");
-    println!("Make sure you have set your OPENAI_COMPATIBLE_API_KEY and OPENAI_COMPATIBLE_BASE_URL environment variables.");
+    println!(
+        "Make sure you have set your OPENAI_COMPATIBLE_API_KEY and OPENAI_COMPATIBLE_BASE_URL environment variables."
+    );
     println!();
 }
 
@@ -359,8 +391,15 @@ fn print_configuration_info() {
     println!("📋 Configuration:");
 
     if let Ok(api_key) = std::env::var("OPENAI_COMPATIBLE_API_KEY") {
-        println!("✅ API Key: {}...{}", &api_key[..8.min(api_key.len())],
-            if api_key.len() > 8 { &api_key[api_key.len()-4..] } else { "" });
+        println!(
+            "✅ API Key: {}...{}",
+            &api_key[..8.min(api_key.len())],
+            if api_key.len() > 8 {
+                &api_key[api_key.len() - 4..]
+            } else {
+                ""
+            }
+        );
     } else {
         println!("❌ API Key: Not set (set OPENAI_COMPATIBLE_API_KEY environment variable)");
     }
@@ -387,7 +426,10 @@ fn print_configuration_info() {
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(15);
-    println!("⚡ Typewriter Delay: {}ms (set TYPEWRITER_DELAY_MS to customize, 0 to disable)", typewriter_delay);
+    println!(
+        "⚡ Typewriter Delay: {}ms (set TYPEWRITER_DELAY_MS to customize, 0 to disable)",
+        typewriter_delay
+    );
 
     println!();
 }
