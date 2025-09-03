@@ -178,6 +178,29 @@ trae-cli run "Update API endpoints" --must-patch
 trae-cli interactive --provider openai --model gpt-4o --max-steps 30
 ```
 
+## Docker Mode Commands
+### Preparation
+**Important**: You need to download a directory "_interal" from [Google Drive](https://drive.google.com/file/d/164ivShb7VrjhO7S_159dIqskZeABryok/view?usp=drive_link) and unzip it into
+trae-agent/trae_agent/dist/dist_tools. This is used to execute agent tools in Docker containers.
+
+### Usage
+```bash
+# Specify a Docker image to run the task in a new container
+trae-cli run "Add tests for utils module" --docker-image python:3.11
+
+# Attach to an existing Docker container by ID
+trae-cli run "Update API endpoints" --docker-container-id 91998a56056c
+
+# Specify an absolute path to a Dockerfile to build an environment
+trae-cli run "Debug authentication" --dockerfile-path test_workspace/Dockerfile
+
+# Specify a path to a local Docker image file (tar archive) to load
+trae-cli run "Fix the bug in main.py" --docker-image-file test_workspace/trae_agent_custom.tar
+
+# Remove the Docker container after finishing the task (keep default)
+trae-cli run "Add tests for utils module" --docker-image python:3.11 --docker-keep false
+```
+
 ### Interactive Mode Commands
 
 In interactive mode, you can use:
