@@ -188,7 +188,10 @@ trae-agent/trae_agent/dist/dist_tools. This is used to execute agent tools in Do
 # Specify a Docker image to run the task in a new container
 trae-cli run "Add tests for utils module" --docker-image python:3.11
 
-# Attach to an existing Docker container by ID
+# Specify a Docker image to run the task in a new container and mount the directory
+trae-cli run "write a script to print helloworld" --docker-image python:3.12 --working-dir test_workdir/
+
+# Attach to an existing Docker container by ID (`--working-dir` is invalid with `--docker-container-id`)
 trae-cli run "Update API endpoints" --docker-container-id 91998a56056c
 
 # Specify an absolute path to a Dockerfile to build an environment
