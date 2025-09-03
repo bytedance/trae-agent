@@ -31,6 +31,7 @@ impl Tool for CalculatorTool {
         "calculator"
     }
 
+
     fn get_description(&self) -> &str {
         "Performs basic arithmetic operations (add, subtract, multiply, divide)"
     }
