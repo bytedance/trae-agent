@@ -224,20 +224,20 @@ impl Config {
         let trae_agent_config_yaml = &agent_config_yaml["trae_agent"];
         let tools: Vec<String> = trae_agent_config_yaml["tools"].as_vec().unwrap().iter()
             .map(|s| s.as_str().unwrap().to_string()).collect();
-        
+
         let model_name = trae_agent_config_yaml["model"].as_str().unwrap().to_string();
         let model_config = models.get(&model_name)
             .ok_or_else(|| ConfigError::LoadFileError(format!("Model not found: {}", model_name)))?
             .clone();
-        
+
         let max_steps = trae_agent_config_yaml["max_steps"].as_i64().unwrap() as u32;
-        
+
         let allow_mcp_servers = if let Some(servers) = doc["allow_mcp_servers"].as_vec() {
             servers.iter().map(|s| s.as_str().unwrap().to_string()).collect()
         } else {
             Vec::new()
         };
-        
+
         let mcp_servers_config = if let Some(servers_hash) = doc["mcp_servers"].as_hash() {
             let mut config_map = HashMap::new();
             for (key, value) in servers_hash.iter() {
@@ -381,7 +381,7 @@ models:
     #[test]
     fn test_config_from_yaml_file_not_found() {
         let result = Config::from_yaml("/non/existent/path/config.yaml");
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             ConfigError::LoadFileError(path) => {

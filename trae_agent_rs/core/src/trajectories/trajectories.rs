@@ -49,7 +49,7 @@ pub struct TrajectoryDataUpdate {
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct LLMRecord {
-    pub content: String, // we only save text content ? 
+    pub content: String, // we only save text content ?
     pub token_usage: Option<u128>,
     pub model: Option<String>,
     pub provider: Option<String>,
