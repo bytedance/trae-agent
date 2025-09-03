@@ -1,6 +1,5 @@
-use core::error;
 use serde::Serialize;
-use std::{alloc::System, collections::HashMap, fs, time::SystemTime};
+use std::{fs, time::SystemTime};
 use thiserror::Error;
 
 use std::io::{self, Write};
@@ -9,7 +8,6 @@ use std::time::UNIX_EPOCH;
 
 // every recorde should have CRU feature
 pub trait Recorder {
-    fn read_record();
     fn write_record(&self) -> Result<(), TrajectoryError>;
     fn update_record(&mut self, update: TrajectoryDataUpdate) -> Result<(), TrajectoryError>;
     fn save_record(&self) -> Result<(), TrajectoryError>;
@@ -63,8 +61,6 @@ impl Trajectory {
 }
 
 impl Recorder for Trajectory {
-    fn read_record() {}
-
     fn save_record(&self) -> Result<(), TrajectoryError> {
         let trajectory_path = Path::new(&self.path);
         if let Some(parent_dir) = trajectory_path.parent() {
