@@ -101,7 +101,7 @@ pub enum ImageSource {
 #[serde(tag = "type")]
 pub enum ContentItem {
     #[serde(rename = "text")]
-    Text(TextContent),
+    Text(TextContent),  // i think here we wrap too much maybe using String is better ?
     #[serde(rename = "image")]
     Image(ImageContent),
 }

@@ -20,13 +20,15 @@ use std::error::Error;
 use std::vec;
 
 use crate::llm;
+use crate::llm_basics::LLMUsage;
+use crate::llm_basics::TextContent;
 use crate::tools;
 use crate::config;
+use crate::ContentItem;
+use crate::LLMClient;
 use crate::LLMMessage;
 use crate::LLMResponse;
-use crate::LLMUsage;
-use crate::ToolCall;
-
+use crate::Tool;
 pub enum AgentStepState{
     THINKING,
     CALLINGTOOL,
@@ -52,7 +54,7 @@ pub struct BaseAgent{
     pub execution_record: AgentExecution, //an agent record that save the result
     pub max_step: u32,
 
-    pub llm_client: Box<dyn llm::LLMProvider>,
+    pub llm_client: LLMClient,
     pub tools: Option<Vec<Box<dyn tools::Tool>>>,
     model_config: config::ModelConfig,
 
@@ -62,7 +64,7 @@ impl BaseAgent{
     fn new(
         task: String,
         record: AgentExecution, 
-        client: Box<dyn llm::LLMProvider>,
+        client: LLMClient,
         max_step: u32,
         model_config: config::ModelConfig,
         tools: Option<Vec<Box<dyn tools::Tool>>>,
@@ -119,7 +121,7 @@ pub struct AgentStep{
     pub thought: Option<String>,
 
     pub llm_response: Option<LLMResponse>,
-    pub tool_calls: Option<Vec<ToolCall>>, 
+    pub tool_calls: Option<Vec<Box <dyn Tool>>>, 
 
 } 
 
@@ -168,15 +170,15 @@ impl BaseAgent{
         let response = self.llm_client.chat(
             msgs, 
             &self.model_config ,
-            self.tools.as_ref(),
-            None
+            None,
+            false,
         ).await;
 
         let llm_response= match response{
             Ok(t) => Some(t),
             Err(e) => {
                 Some(LLMResponse { 
-                    content: "error occur for llm responses".to_string(), 
+                    content: vec![ContentItem::Text(TextContent{text:"error occur for llm responses".to_string()})], 
                     usage: Some(LLMUsage{
                         input_tokens: 0,
                         output_tokens: 0,
@@ -185,7 +187,7 @@ impl BaseAgent{
                         reasoning_tokens: 0,
                     }), 
                     model: Some(self.llm_client.get_provider_name().to_string()), 
-                    finish_reason: Some(e.to_string()), 
+                    finish_reason: llm::FinishReason::Error, 
                     tool_calls: None,
                     }
                 )
@@ -200,7 +202,7 @@ impl BaseAgent{
 
 
         // indicate task complete here
-        if indicate_task_complete(unwrap_response){
+        if indicate_task_complete(&unwrap_response){
 
             let check_complete: Box<dyn FnOnce(&LLMResponse) -> bool> = match is_task_complete {
                 Some(f) => f,
@@ -208,9 +210,17 @@ impl BaseAgent{
             };
 
 
+
             if check_complete(&unwrap_response){
                 exec.agent_state = AgentState::COMPLETED;
-                exec.final_result = Some(unwrap_response.content.clone());
+
+                let result = unwrap_response
+                    .content
+                    .get(0)
+                    .and_then(|c| c.as_text())
+                    .unwrap_or("Error: no message found");
+
+                exec.final_result = Some(result.to_string());
                 exec.success = true;
                 return Ok(msgs_backup);
             }
@@ -219,7 +229,7 @@ impl BaseAgent{
             return Ok(
                 vec![
                     LLMMessage{
-                        role:"user".to_string(),
+                        role: llm::MessageRole::User,
                         content: None,// TODO !,
                         tool_call: None,
                         tool_result: None
@@ -231,22 +241,23 @@ impl BaseAgent{
 
         let tool_call = &unwrap_response.tool_calls;
         
-        self.tool_call_handler(&tool_call,step)
+//        self.tool_call_handler(tool_call,step)
 
+        todo!()
     }
 
 
     fn tool_call_handler(
         &mut self, 
-        tool_calls: &Option<Vec<ToolCall>>, 
-        step: &mut AgentStep) 
-        ->  Result<Vec<LLMMessage> , &'static str>
+        tool_calls: &Option<Vec<Box<dyn Tool>>>, 
+        step: &mut AgentStep,
+    )  ->  Result<Vec<LLMMessage> , &'static str>
     {
 
 
         let unfinished_message = vec![
                     LLMMessage{
-                        role:"user".to_string(),
+                        role:llm::MessageRole::User,
                         content:None, // implement content here
                         tool_call:None,
                         tool_result:None,
@@ -260,7 +271,6 @@ impl BaseAgent{
                 }
                 
                 step.state = AgentStepState::CALLINGTOOL;
-                step.tool_calls = tool_calls.clone();
 
                 // console work here TODO
 
@@ -281,8 +291,13 @@ impl BaseAgent{
 
 
 fn indicate_task_complete(response: &LLMResponse)-> bool{
+    
+    let content = response
+        .content
+        .get(0)
+        .and_then(|c| c.as_text())
+        .unwrap_or("Error: can not get the response");
 
-    let content = response.content.to_lowercase();
     let completion_indicators = [
         "task completed",
         "task finished", 
