@@ -1,5 +1,6 @@
 // bash tool
 
+use std::clone;
 use std::f32::consts::E;
 use std::fmt::format;
 use std::io::{self, BufReader};
@@ -17,6 +18,7 @@ use std::process::Stdio;
 
 use crate::Tool;
 
+
 pub struct Bash {
     model_provider: String,
     bash: BashProcess,
@@ -29,13 +31,18 @@ impl Bash{
             bash: BashProcess::new(),
         }
     }
-
 }
+
 
 impl Tool for Bash {
     fn get_name(&self) -> &str {
         "bash"
     }
+
+    fn reset(&mut self) {
+        self.bash = BashProcess::new();
+    }
+
 
     fn get_description(&self) -> &str {
         r#"Run commands in a bash shell
