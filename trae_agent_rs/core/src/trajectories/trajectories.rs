@@ -48,7 +48,21 @@ pub struct TrajectoryDataUpdate {
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
-pub struct LLMRecord {}
+pub struct LLMRecord {
+    pub content: String, // we only save text content ? 
+    pub token_usage: Option<u128>,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+    pub llmdetails: Option<TrajectoryDetails>,
+}
+
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub enum TrajectoryDetails {
+    Chat { messages: Vec<String>, temperature: f32 },
+    Embedding { dims: usize },
+    Completion { prompt_tokens: u32, completion_tokens: u32 },
+}
 
 impl Trajectory {
     pub fn start_recording(&mut self, task: &str, provider: &str, model: &str, max_step: u64) {
@@ -463,7 +477,7 @@ mod tests {
                 provider: "openai".into(),
                 model: "gpt-4".into(),
                 max_step: 5,
-                llm_interaction: vec![LLMRecord {}],
+                llm_interaction: vec![],
                 success: false,
                 final_result: Some("pending".into()),
                 execution_time: 3600.0,
