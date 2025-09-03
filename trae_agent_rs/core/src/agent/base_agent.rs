@@ -15,8 +15,8 @@
 
 */
 
+use thiserror::Error;
 use std::collections::HashMap;
-use std::error::Error;
 use std::vec;
 
 use crate::llm;
@@ -29,6 +29,8 @@ use crate::LLMClient;
 use crate::LLMMessage;
 use crate::LLMResponse;
 use crate::Tool;
+use crate::ToolCall;
+use crate::ToolResult;
 pub enum AgentStepState{
     THINKING,
     CALLINGTOOL,
@@ -55,7 +57,7 @@ pub struct BaseAgent{
     pub max_step: u32,
 
     pub llm_client: LLMClient,
-    pub tools: Option<Vec<Box<dyn tools::Tool>>>,
+    pub tools: Option<HashMap<String ,Box<dyn tools::Tool>>>,
     model_config: config::ModelConfig,
 
 }
@@ -67,7 +69,7 @@ impl BaseAgent{
         client: LLMClient,
         max_step: u32,
         model_config: config::ModelConfig,
-        tools: Option<Vec<Box<dyn tools::Tool>>>,
+        tools: Option<HashMap<String,Box<dyn tools::Tool>>>,
     ) -> Self{
         BaseAgent { 
             task: task, 
@@ -121,7 +123,9 @@ pub struct AgentStep{
     pub thought: Option<String>,
 
     pub llm_response: Option<LLMResponse>,
-    pub tool_calls: Option<Vec<Box <dyn Tool>>>, 
+    pub tool_calls: Option<Vec<ToolCall>>, 
+
+    pub tool_results: Option<Vec<Result<String ,String>>>
 
 } 
 
@@ -133,6 +137,7 @@ impl AgentStep {
             thought: None,
             llm_response: None,
             tool_calls: None,
+            tool_results: None,
         }
     }
 }
@@ -200,7 +205,6 @@ impl BaseAgent{
         // update console 
         // update llm usage
 
-
         // indicate task complete here
         if indicate_task_complete(&unwrap_response){
 
@@ -230,7 +234,7 @@ impl BaseAgent{
                 vec![
                     LLMMessage{
                         role: llm::MessageRole::User,
-                        content: None,// TODO !,
+                        content: None,// TODO:  task_incomplete_message
                         tool_call: None,
                         tool_result: None
                     }
@@ -238,52 +242,86 @@ impl BaseAgent{
             ) // return type here
         }
 
-
         let tool_call = &unwrap_response.tool_calls;
-        
-//        self.tool_call_handler(tool_call,step)
+        let val =self.tool_call_handler(tool_call,step).await;
 
         todo!()
     }
 
 
-    fn tool_call_handler(
+    async fn tool_call_handler(
         &mut self, 
-        tool_calls: &Option<Vec<Box<dyn Tool>>>, 
+        tool_call: &Option<Vec<ToolCall>>,
         step: &mut AgentStep,
-    )  ->  Result<Vec<LLMMessage> , &'static str>
-    {
+    )-> Result<LLMMessage, AgentError>{
 
 
-        let unfinished_message = vec![
-                    LLMMessage{
-                        role:llm::MessageRole::User,
-                        content:None, // implement content here
-                        tool_call:None,
-                        tool_result:None,
-                    }
-                ];
-        
-        match tool_calls {
-            Some(tools) => {
-                if tools.len() == 0 {
-                    return Ok(unfinished_message)
-                }
-                
-                step.state = AgentStepState::CALLINGTOOL;
+        let tool_size = tool_call
+            .as_ref()
+            .unwrap_or(&vec![])
+            .len();
 
-                // console work here TODO
-
-                // TODO need to handle tool call ?
-
-                // handle tool caller_sequential_tool_call
-               todo!("we need to finish tool call first") ;
-
-                Ok(unfinished_message)
-            },
-            None => Ok(unfinished_message)
+        if tool_size == 0 {
+            return Ok(LLMMessage{
+                role:llm::MessageRole::User,
+                content:Some(vec![ContentItem::text("It seems that you have not completed the task".to_string())]),
+                tool_call: None,
+                tool_result:None
+            })
         }
+
+        step.state = AgentStepState::CALLINGTOOL;
+
+        let default_vec  = vec![];
+
+        let unwrapped_tool = tool_call
+            .as_ref()
+            .unwrap_or(&default_vec);
+
+        let agent_tools=
+            self.tools.get_or_insert_with(HashMap::new);
+
+        let mut tool_results = vec![];
+        
+        // TODO: parallel tool call 
+        for tool in unwrapped_tool{
+            let result = match tool.name.as_str() {
+                "bash" => {
+                    // ensure `agent_tools` is a mutable variable in scope: `&mut agent_tools`
+                    match agent_tools.get_mut("bash") {
+                        Some(x) => 
+                        {
+                            x.execute(tool.arguments.clone()).await
+                        },
+                        None => Err("Cannot find bash tool".to_string()),
+                    }
+                },
+                
+                "str_replace_based_edit_tool" => {
+                        match agent_tools.get_mut("str_replace_based_edit_tool") {
+                            Some(x) => x.execute(tool.arguments.clone()).await,
+                            None => Err("Cannot find str_replace_based_edit tool".to_string()),
+                    } 
+                }
+                _ => Err("The requested tool is not found".to_string()),
+            };
+
+            tool_results.push(result);
+        }
+        
+        step.tool_results = Some(tool_results.clone());
+
+        let mut msg:Vec<LLMMessage> = Vec::new();
+
+        for tool_result in tool_results{
+
+        }
+
+
+        todo!()
     }
+
+
 
 }
 
@@ -314,4 +352,17 @@ fn indicate_task_complete(response: &LLMResponse)-> bool{
 
     false
 
+}
+
+#[derive(Error, Debug)]
+pub enum AgentError {
+    #[error("Internal Error {0}")]
+    InternalError(String) 
+}
+
+fn execresult_to_toolresult(
+    execresult: Result<String, String>, 
+)-> String{
+
+    "".to_string()
 }
