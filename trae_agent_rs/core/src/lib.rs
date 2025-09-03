@@ -4,6 +4,7 @@
 pub mod llm;
 pub mod tools;
 pub mod config;
+pub mod trajectories;
 
 pub use llm::*;
 pub use tools::*;
