@@ -1,5 +1,3 @@
-# build_tools.spec
-
 # -*- mode: python ; coding: utf-8 -*-
 
 analysis = Analysis(
@@ -8,7 +6,7 @@ analysis = Analysis(
         'trae_agent/tools/json_edit_tool_cli.py'
     ],
     pathex=['.'],
-    data=[],
+    datas=[], # codespell:ignore
     hiddenimports=[
         'jsonpath_ng',
     ],
@@ -58,6 +56,6 @@ exe_json_edit_tool = EXE(
 )
 
 coll = COLLECT(
-    exe_edit_tool, exe_json_edit_tool, analysis.binaries, analysis.zipfiles, analysis.data,
+    exe_edit_tool, exe_json_edit_tool, analysis.binaries, analysis.zipfiles, analysis.datas, # codespell:ignore
     strip=False, upx=True, upx_exclude=[], name='dist_tools'
 )

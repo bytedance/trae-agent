@@ -327,13 +327,8 @@ def run(
 
     # agent = Agent(agent_type, config, trajectory_file, cli_console)
 
-    if docker_config is None:
-        return  # or handle appropriately
-    if not isinstance(docker_config, dict):
-        raise TypeError("docker_config must be a dict-like DockerConfig")
-    if working_dir is None:
-        raise ValueError("working_dir is required here")
-    docker_config["workspace_dir"] = working_dir  # now type-safe
+    if docker_config is not None:
+        docker_config["workspace_dir"] = working_dir  # now type-safe
 
     # Change working directory if specified
     if working_dir:
