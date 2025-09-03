@@ -126,27 +126,29 @@ impl OpenAICompatibleClient {
     }
 
     async fn make_api_call(&self, request: OpenAIRequest) -> LLMResult<OpenAIResponse> {
-         let base_url = self.config.model_provider.base_url
-             .as_ref()
-             .ok_or_else(|| LLMError::ConfigError("Base URL not configured".to_string()))?;
+        let base_url = self.config.model_provider.base_url
+            .as_ref()
+            .ok_or_else(|| LLMError::ConfigError("Base URL not configured".to_string()))?;
 
-         let url = if base_url.ends_with("/chat/completions") {
-             base_url.clone()
-         } else if base_url.ends_with("/") {
-             format!("{}chat/completions", base_url)
-         } else {
-             format!("{}/chat/completions", base_url)
-         };
+        let url = if base_url.ends_with("/chat/completions") {
+            base_url.clone()
+        } else if base_url.ends_with("/") {
+            format!("{}chat/completions", base_url)
+        } else {
+            format!("{}/chat/completions", base_url)
+        };
 
-         let mut headers = reqwest::header::HeaderMap::new();
-         let api_key = self.config.model_provider.api_key
-             .as_ref()
-             .ok_or_else(|| LLMError::AuthError("API key not configured".to_string()))?;
-         headers.insert(
-             reqwest::header::AUTHORIZATION,
-             format!("Bearer {}", api_key)
-                 .parse()
-                 .map_err(|e| LLMError::AuthError(format!("Invalid API key: {}", e)))?,
+        println!("url: {}", url);
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        let api_key = self.config.model_provider.api_key
+            .as_ref()
+            .ok_or_else(|| LLMError::AuthError("API key not configured".to_string()))?;
+        headers.insert(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {}", api_key)
+                .parse()
+                .map_err(|e| LLMError::AuthError(format!("Invalid API key: {}", e)))?,
          );
         headers.insert(
             reqwest::header::CONTENT_TYPE,
@@ -167,38 +169,38 @@ impl OpenAICompatibleClient {
         }
 
         // Add extra headers from config
-         for (key, value) in &self.config.extra_headers {
-             headers.insert(
-                 key.parse::<reqwest::header::HeaderName>().map_err(|e| LLMError::ConfigError(format!("Invalid header key: {}", e)))?,
-                 value.parse::<reqwest::header::HeaderValue>().map_err(|e| LLMError::ConfigError(format!("Invalid header value: {}", e)))?,
-             );
-         }
+        for (key, value) in &self.config.extra_headers {
+            headers.insert(
+                key.parse::<reqwest::header::HeaderName>().map_err(|e| LLMError::ConfigError(format!("Invalid header key: {}", e)))?,
+                value.parse::<reqwest::header::HeaderValue>().map_err(|e| LLMError::ConfigError(format!("Invalid header value: {}", e)))?,
+            );
+        }
 
-         let response = retry_with_backoff(
-            || async {
-                self.client
-                    .post(&url)
-                    .headers(headers.clone())
-                    .json(&request)
-                    .send()
-                    .await
-                    .map_err(LLMError::HttpError)
+        let response = retry_with_backoff(
+        || async {
+            self.client
+                .post(&url)
+                .headers(headers.clone())
+                .json(&request)
+                .send()
+                .await
+                .map_err(LLMError::HttpError)
             },
             crate::llm::retry_utils::RetryConfig::default(),
             "openai_compatible",
         )
         .await?;
 
-         if !response.status().is_success() {
-             let status = response.status();
-             let error_text = response.text().await.unwrap_or_default();
-             return Err(LLMError::ApiError {
-                 status_code: status.as_u16(),
-                 message: error_text,
-             });
-         }
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(LLMError::ApiError {
+                status_code: status.as_u16(),
+                message: error_text,
+            });
+        }
 
-         let response_text = response.text().await?;
+        let response_text = response.text().await?;
 
         serde_json::from_str::<OpenAIResponse>(&response_text)
             .map_err(|e| {

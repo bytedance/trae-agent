@@ -16,7 +16,7 @@ const TraeAgentToolNames: [&str;5] = [
 ];
 
 pub struct TraeAgent{
-    baseagent: agent::base_agent::BaseAgent, 
+    baseagent: agent::base_agent::BaseAgent,
     pub initial_msgs: Vec<LLMMessage>,
 
 }
@@ -26,7 +26,7 @@ impl TraeAgent {
     fn new(
         base_agent: agent::base_agent::BaseAgent
     ) -> Self{
-        TraeAgent { 
+        TraeAgent {
             baseagent: base_agent,
             initial_msgs: vec![],
         }
@@ -36,8 +36,8 @@ impl TraeAgent {
 
 impl Agent for TraeAgent{
     fn new_task(
-            &mut self, 
-            task:String, 
+            &mut self,
+            task:String,
             args: Option<std::collections::HashMap<String, String>>,
             tool_names: Vec<String>,
         ) -> Result<() , AgentError> {
@@ -56,20 +56,20 @@ impl Agent for TraeAgent{
             success: false,
             total_token:None,
             execution_time:0.,
-            agent_state:AgentState::IDEL
+            agent_state:AgentState::IDLE
         };
         let mut step_number = 1u32;
 
         while self.baseagent.max_step >= step_number{
 
-            let mut step = 
+            let mut step =
                 AgentStep::new(step_number, AgentStepState::THINKING);
 
             let exec_msg = self.baseagent.execute_step(
                 &mut step, msgs, &mut exec_agent, None
             ).await;
 
-            
+
             if exec_msg.is_err() {
                 // consider having error message
 
@@ -80,7 +80,7 @@ impl Agent for TraeAgent{
                 }
 
                 self.baseagent.finalize_step(&mut step, &mut msgs.clone(), &mut exec_agent);
-                break; 
+                break;
             }
 
             self.baseagent.finalize_step(&mut step, &mut msgs.clone(), &mut exec_agent);
@@ -91,7 +91,7 @@ impl Agent for TraeAgent{
         }
 
         if step_number > self.baseagent.max_step && exec_agent.agent_state != AgentState::COMPLETED{
-            exec_agent.final_result = Some("Task execution exceeded maximum steps without completion".to_string()); 
+            exec_agent.final_result = Some("Task execution exceeded maximum steps without completion".to_string());
             exec_agent.agent_state=AgentState::ERROR;
         }
 
@@ -106,8 +106,7 @@ impl Agent for TraeAgent{
         // TODO: update cli here
 
 
-        Err("havne't finish the implementation")
+        Err("haven't finish the implementation")
     }
 
 }
-
