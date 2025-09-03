@@ -14,17 +14,17 @@ pub trait Recorder {
     // implement the following methods
     fn read_record();
     fn write_record();
-    fn update_record();
+    fn update_record(&mut self, update: TrajectoryDataUpdate) -> Result<(), TrajectoryError>;
     fn save_record(&self) -> Result<(), TrajectoryError> ;
 }
-
+#[derive(Clone)]
 pub struct Trajectory{
     pub path: String,
     pub start_time:String,
     pub trajectory_data: TrajectoryData,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone ,PartialEq, Debug)]
 pub struct TrajectoryData{
     pub task: String,
     pub start_time: String,
@@ -38,7 +38,22 @@ pub struct TrajectoryData{
     pub execution_time: f64,
 }
 
-#[derive(Serialize, Clone)]
+
+#[derive(Debug, Default, PartialEq)]
+pub struct TrajectoryDataUpdate {
+    pub task: Option<String>,
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub max_step: Option<u64>,
+    pub llm_interaction: Option<Vec<LLMRecord>>,
+    pub success: Option<bool>,
+    pub final_result: Option<Option<String>>, // Some(Some(v)) to set; Some(None) to clear; None to leave unchanged
+    pub execution_time: Option<f64>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct LLMRecord {}
 
 
@@ -96,12 +111,63 @@ impl Recorder for Trajectory {
         Ok(())
     }
 
-    fn update_record() {}
+    fn update_record(&mut self, update: TrajectoryDataUpdate) -> Result<(), TrajectoryError> {
+        // Optional: validation helpers
+        if let Some(ref task) = update.task {
+            if task.trim().is_empty() {
+                return Err(TrajectoryError::Validation("task cannot be empty".into()));
+            }
+        }
+        if let Some(ref st) = update.start_time {
+            if st.trim().is_empty() {
+                return Err(TrajectoryError::Validation("start_time cannot be empty".into()));
+            }
+        }
+        if let Some(ref et) = update.end_time {
+            if et.trim().is_empty() {
+                return Err(TrajectoryError::Validation("end_time cannot be empty".into()));
+            }
+        }
+        if let Some(ref provider) = update.provider {
+            if provider.trim().is_empty() {
+                return Err(TrajectoryError::Validation("provider cannot be empty".into()));
+            }
+        }
+        if let Some(ref model) = update.model {
+            if model.trim().is_empty() {
+                return Err(TrajectoryError::Validation("model cannot be empty".into()));
+            }
+        }
+        if let Some(ms) = update.max_step {
+            // Example validation: max_step should be > 0
+            if ms == 0 {
+                return Err(TrajectoryError::Validation("max_step must be > 0".into()));
+            }
+        }
+        if let Some(exec) = update.execution_time {
+            if exec < 0.0 {
+                return Err(TrajectoryError::Validation("execution_time cannot be negative".into()));
+            }
+        }
+        // Apply updates
+        if let Some(v) = update.task { self.trajectory_data.task = v; }
+        if let Some(v) = update.start_time { self.trajectory_data.start_time = v; }
+        if let Some(v) = update.end_time { self.trajectory_data.end_time = v; }
+        if let Some(v) = update.provider { self.trajectory_data.provider = v; }
+        if let Some(v) = update.model { self.trajectory_data.model = v; }
+        if let Some(v) = update.max_step { self.trajectory_data.max_step = v; }
+        if let Some(v) = update.llm_interaction { self.trajectory_data.llm_interaction = v; }
+        if let Some(v) = update.success { self.trajectory_data.success = v; }
+        if let Some(v) = update.final_result { self.trajectory_data.final_result = v; }
+        if let Some(v) = update.execution_time { self.trajectory_data.execution_time = v; }
+
+        Ok(())
+    }
     fn write_record() {}
 }
 
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug ,PartialEq)]
 pub enum TrajectoryError{
     #[error("Create File file at path:{0}. Error message: {0}")]
     CreateFileError(String, String),
@@ -113,7 +179,10 @@ pub enum TrajectoryError{
     SerializationError(String),
 
     #[error("Fail to write the data to the json file to path: {0} with the error message {0}")]
-    WriteError(String, String)
+    WriteError(String, String),
+
+    #[error("Can not validate the data {0}")]
+    Validation(String)
 
 }
 
@@ -144,13 +213,14 @@ impl TrajectoryData {
 
 
 
+// UNIT TEST: 
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
     use std::io::Read;
-    use std::path::{Path, PathBuf};
+    use std::path::{Path};
     use tempfile::TempDir;
 
     fn sample_trajectory(path: impl Into<String>) -> Trajectory {
@@ -309,5 +379,119 @@ mod tests {
             }
             Err(e) => panic!("unexpected error variant: {e:?}"),
         }
+    }
+
+    fn sample_trajectory_update() -> Trajectory {
+        Trajectory {
+            path: "/tmp/traj.json".into(),
+            start_time: "2024-01-01T00:00:00Z".into(),
+            trajectory_data: TrajectoryData {
+                task: "initial task".into(),
+                start_time: "2024-01-01T00:00:00Z".into(),
+                end_time: "2024-01-01T01:00:00Z".into(),
+                provider: "openai".into(),
+                model: "gpt-4".into(),
+                max_step: 5,
+                llm_interaction: vec![
+                    LLMRecord { }
+                ],
+                success: false,
+                final_result: Some("pending".into()),
+                execution_time: 3600.0,
+            },
+        }
+    }
+    #[test]
+    fn update_single_field_task() {
+        let mut t = sample_trajectory_update();
+        let upd = TrajectoryDataUpdate { task: Some("new task".into()), ..Default::default() };
+        t.update_record(upd).unwrap();
+        assert_eq!(t.trajectory_data.task, "new task");
+        // Unchanged others
+        assert_eq!(t.trajectory_data.provider, "openai");
+    }
+    #[test]
+    fn update_multiple_fields() {
+        let mut t = sample_trajectory_update();
+        let upd = TrajectoryDataUpdate {
+            provider: Some("anthropic".into()),
+            model: Some("claude-3".into()),
+            max_step: Some(42),
+            success: Some(true),
+            execution_time: Some(123.45),
+            ..Default::default()
+        };
+        t.update_record(upd).unwrap();
+        assert_eq!(t.trajectory_data.provider, "anthropic");
+        assert_eq!(t.trajectory_data.model, "claude-3");
+        assert_eq!(t.trajectory_data.max_step, 42);
+        assert!(t.trajectory_data.success);
+        assert!((t.trajectory_data.execution_time - 123.45).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn clear_final_result() {
+        let mut t = sample_trajectory_update();
+        // Use Some(None) to clear Option<String>
+        let upd = TrajectoryDataUpdate { final_result: Some(None), ..Default::default() };
+        t.update_record(upd).unwrap();
+        assert_eq!(t.trajectory_data.final_result, None);
+    }
+    #[test]
+    fn set_final_result() {
+        let mut t = sample_trajectory_update();
+        let upd = TrajectoryDataUpdate { final_result: Some(Some("done".into())), ..Default::default() };
+        t.update_record(upd).unwrap();
+        assert_eq!(t.trajectory_data.final_result, Some("done".into()));
+    }
+
+    #[test]
+    fn reject_empty_task() {
+        let mut t = sample_trajectory_update();
+        let upd = TrajectoryDataUpdate { task: Some("   ".into()), ..Default::default() };
+        let err = t.update_record(upd).unwrap_err();
+        assert_eq!(err, TrajectoryError::Validation("task cannot be empty".into()));
+    }
+    #[test]
+    fn reject_zero_max_step() {
+        let mut t = sample_trajectory_update();
+        let upd = TrajectoryDataUpdate { max_step: Some(0), ..Default::default() };
+        let err = t.update_record(upd).unwrap_err();
+        assert_eq!(err, TrajectoryError::Validation("max_step must be > 0".into()));
+    }
+    #[test]
+    fn reject_negative_execution_time() {
+        let mut t = sample_trajectory_update();
+        let upd = TrajectoryDataUpdate { execution_time: Some(-0.1), ..Default::default() };
+        let err = t.update_record(upd).unwrap_err();
+        assert_eq!(err, TrajectoryError::Validation("execution_time cannot be negative".into()));
+    }
+    #[test]
+    fn no_op_update_is_ok() {
+        let mut t = sample_trajectory_update();
+        let snapshot = t.trajectory_data.clone();
+        let upd = TrajectoryDataUpdate::default();
+        t.update_record(upd).unwrap();
+        assert_eq!(t.trajectory_data, snapshot);
+    }
+    #[test]
+    fn whitespace_trim_validation_for_provider_model() {
+        let mut t = sample_trajectory_update();
+        let err1 = t.update_record(TrajectoryDataUpdate { provider: Some("   ".into()), ..Default::default() }).unwrap_err();
+        assert_eq!(err1, TrajectoryError::Validation("provider cannot be empty".into()));
+        let err2 = t.update_record(TrajectoryDataUpdate { model: Some("\n".into()), ..Default::default() }).unwrap_err();
+        assert_eq!(err2, TrajectoryError::Validation("model cannot be empty".into()));
+    }
+    #[test]
+    fn update_end_time_and_success_together() {
+        let mut t = sample_trajectory_update();
+        let upd = TrajectoryDataUpdate {
+            end_time: Some("2024-01-01T02:00:00Z".into()),
+            success: Some(true),
+            ..Default::default()
+        };
+        t.update_record(upd).unwrap();
+        assert_eq!(t.trajectory_data.end_time, "2024-01-01T02:00:00Z");
+        assert!(t.trajectory_data.success);
     }
 }
