@@ -193,7 +193,7 @@ async fn test_tool_calling(
     }];
 
     match client
-        .chat(messages, model_config, Some(tools), false)
+        .chat(messages, model_config, Some(&tools), false)
         .await
     {
         Ok(response) => {

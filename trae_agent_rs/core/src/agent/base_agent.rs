@@ -31,7 +31,7 @@ use crate::llm_basics::LLMUsage;
 use crate::llm_basics::TextContent;
 use crate::tools;
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub enum AgentStepState {
     THINKING,
     CALLINGTOOL,
@@ -58,18 +58,21 @@ pub struct BaseAgent {
     pub max_step: u32,
 
     pub llm_client: LLMClient,
-    pub tools: Option<HashMap<String, Box<dyn tools::Tool>>>,
-    model_config: config::ModelConfig,
+    pub tools_map: Option<HashMap<String, usize>>,
+
+    pub tools: Vec<Box<dyn tools::Tool>>,
+    pub model_config: config::ModelConfig,
 }
 
 impl BaseAgent {
-    fn new(
+    pub fn new(
         task: String,
         record: AgentExecution,
         client: LLMClient,
         max_step: u32,
         model_config: config::ModelConfig,
-        tools: Option<HashMap<String, Box<dyn tools::Tool>>>,
+        tools_map:Option<HashMap<String, usize>>,
+        tools: Vec<Box<dyn tools::Tool>>,
     ) -> Self {
         BaseAgent {
             task: task,
@@ -78,11 +81,13 @@ impl BaseAgent {
             model_config: model_config,
             max_step: max_step,
             tools: tools,
+            tools_map: tools_map,
         }
     }
 }
 
 // this struct should be private Agent
+#[derive(Debug)]
 pub struct AgentExecution {
     pub task: String,
     pub steps: Vec<AgentStep>,
@@ -94,7 +99,7 @@ pub struct AgentExecution {
 }
 
 impl AgentExecution {
-    fn new(task: String, steps: Option<Vec<AgentStep>>) -> Self {
+    pub fn new(task: String, steps: Option<Vec<AgentStep>>) -> Self {
         AgentExecution {
             task: task,
             steps: match steps {
@@ -111,7 +116,7 @@ impl AgentExecution {
 }
 
 // the execution of that specific step
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AgentStep {
     pub step_number: u32,
 
@@ -149,7 +154,7 @@ pub trait Agent {
         &mut self,
         task: String,
         args: Option<HashMap<String, String>>,
-        tool_names: Vec<String>,
+        tool_names: Option<Vec<String>>,
     ) -> Result<(), AgentError>;
 }
 
@@ -169,13 +174,13 @@ impl BaseAgent {
     }
 
     pub fn close_tools(&mut self) {
-        if self.tools.is_none() {
+        if self.tools.len() == 0 {
             return;
         }
 
-        if let Some(tools) = self.tools.as_mut() {
-            for (_name, tool) in tools.iter_mut() {
-                tool.reset();
+        if let Some(tools) = self.tools_map.as_mut() {
+            for (_name, tool) in tools.iter() {
+                self.tools[*tool].reset();
             }
         }
     }
@@ -189,15 +194,16 @@ impl BaseAgent {
 
         is_task_complete: Option<Box<dyn FnOnce(&LLMResponse) -> bool>>,
     ) -> Result<Vec<LLMMessage>, AgentError> {
-        let msgs_backup = msgs.clone(); // this is not good practice once chat rely only &msgs it should be removed
 
         step.state = AgentStepState::THINKING;
         // a cli api should place here currently there's not cli api
 
+
         let response = self
             .llm_client
-            .chat(msgs.clone(), &self.model_config, None, false)
+            .chat(msgs.clone(), &self.model_config, Some(&self.tools), false)
             .await;
+
 
         let llm_response = match response {
             Ok(t) => Some(t),
@@ -242,13 +248,19 @@ impl BaseAgent {
 
                 exec.final_result = Some(result.to_string());
                 exec.success = true;
-                return Ok(msgs_backup);
+                return Ok(msgs.to_vec());
             }
 
             exec.agent_state = AgentState::RUNNING;
             return Ok(vec![LLMMessage {
                 role: llm::MessageRole::User,
-                content: None, // TODO:  task_incomplete_message
+                content: Some(vec![
+                    ContentItem::Text(
+                        TextContent{
+                            text:"Your task is not finished. Please continue.".to_string(),
+                        }
+                    )
+                ]),
                 tool_call: None,
                 tool_result: None,
             }]); // return type here
@@ -281,8 +293,9 @@ impl BaseAgent {
         let default_vec = vec![];
 
         let unwrapped_tool = tool_call.as_ref().unwrap_or(&default_vec);
-
-        let agent_tools = self.tools.get_or_insert_with(HashMap::new);
+        
+        let empty_map = HashMap::new();
+        let agent_tools = self.tools_map.as_ref().unwrap_or(&empty_map);
 
         let mut tool_results = vec![];
 
@@ -306,20 +319,22 @@ impl BaseAgent {
             let result = match tool.name.as_str() {
                 "bash" => {
                     // ensure `agent_tools` is a mutable variable in scope: `&mut agent_tools`
-                    match agent_tools.get_mut("bash") {
-                        Some(x) => x.execute(tool.arguments.clone()).await,
+                    match (*agent_tools).get("bash") {
+                        Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
                         None => Err("Cannot find bash tool".to_string()),
                     }
                 }
 
                 "str_replace_based_edit_tool" => {
-                    match agent_tools.get_mut("str_replace_based_edit_tool") {
-                        Some(x) => x.execute(tool.arguments.clone()).await,
+                    match agent_tools.get("str_replace_based_edit_tool") {
+                        Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
                         None => Err("Cannot find str_replace_based_edit tool".to_string()),
                     }
                 }
                 _ => Err("The requested tool is not found".to_string()),
             };
+
+
             execresult_to_toolresult(result, &mut tool_result);
 
             tool_results.push(tool_result);
@@ -332,7 +347,13 @@ impl BaseAgent {
         for tool_result in &tool_results {
             msg.push(LLMMessage {
                 role: llm::MessageRole::User,
-                content: None,
+                content: Some(vec![
+                    ContentItem::Text(
+                        TextContent { 
+                            text: "Here are the tool resuls".to_string()
+                        }
+                    )
+                ]),
                 tool_call: None,
                 tool_result: Some(tool_result.clone()),
             })
@@ -378,6 +399,7 @@ impl BaseAgent {
 
         Ok(msg)
     }
+
 }
 
 fn indicate_task_complete(response: &LLMResponse) -> bool {
@@ -408,6 +430,12 @@ fn indicate_task_complete(response: &LLMResponse) -> bool {
 pub enum AgentError {
     #[error("Internal Error {0}")]
     InternalError(String),
+
+    #[error("Project path and issue information are required")]
+    NoExtraArgument,
+
+    #[error("Project path is required")]
+    NoProjectPath,
 }
 
 fn execresult_to_toolresult(execresult: Result<String, String>, toolresult: &mut ToolResult) {

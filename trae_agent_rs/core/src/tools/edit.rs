@@ -13,6 +13,11 @@ const TAB_WIDTH: usize = 8; // Python str.expandtabs() default
 
 pub struct Edit {}
 
+impl Edit{
+    pub fn new()->Self{
+        Edit{}
+    }
+}
 
 
 impl Tool for Edit {
@@ -80,14 +85,64 @@ impl Tool for Edit {
     fn execute(
         &mut self,
         arguments: std::collections::HashMap<String, serde_json::Value>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
-        todo!()
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send + '_>> {
+        Box::pin(async move {
+            // Extract command and path from arguments
+            let command = arguments
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            let path = arguments
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            if path.is_empty() {
+                return Err("Path parameter is required".to_string());
+            }
+
+            // Route to appropriate handler based on command
+            let result = match command {
+                "view" => view_handler(path, &arguments).await,
+                "create" => {
+                    // Check if file already exists
+                    if Path::new(path).exists() {
+                        return Err(format!("File already exists at path: {}. Please remove it first before creating.", path));
+                    }
+                    create_handler(path, &arguments).await
+                },
+                "str_replace" => str_replace_handler(path, &arguments).await,
+                "insert" => insert_handler(path, &arguments).await,
+                _ => {
+                    return Err(format!("Unknown command: {}. Supported commands are: view, create, str_replace, insert", command));
+                }
+            };
+
+            // Convert result to String format expected by Tool trait
+            match result {
+                Ok(tool_result) => {
+                    if let Some(error) = tool_result.error {
+                        if !error.is_empty() {
+                            return Err(format!("Error: {}", error));
+                        }
+                    }
+                    
+                    if let Some(output) = tool_result.output {
+                        Ok(output)
+                    } else {
+                        Ok("Command executed successfully".to_string())
+                    }
+                },
+                Err(e) => Err(format!("Tool execution failed: {}", e))
+            }
+        })
     }
 }
 
 async fn view_handler(
     path: &str,
-    args: HashMap<String, serde_json::Value>,
+    args: &HashMap<String, serde_json::Value>,
 ) -> Result<ToolExecResult, EditToolError> {
     let view_range: Option<[i32; 2]> = args.get("view_range").and_then(|v| match v {
         serde_json::Value::Array(arr) if arr.len() == 2 => {
@@ -107,8 +162,9 @@ async fn view_handler(
 
 async fn create_handler(
     path: &str,
-    args: HashMap<String, serde_json::Value>,
+    args: &HashMap<String, serde_json::Value>,
 ) -> Result<ToolExecResult, EditToolError> {
+
     let file_text = args.get("file_text").and_then(|v| v.as_str()).unwrap_or("");
 
     if file_text.len() == 0 {
@@ -134,7 +190,7 @@ async fn create_handler(
 
 async fn str_replace_handler(
     path: &str,
-    args: HashMap<String, serde_json::Value>,
+    args: &HashMap<String, serde_json::Value>,
 ) -> Result<ToolExecResult, EditToolError> {
     let old_str = args.get("old_str").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -271,12 +327,11 @@ fn expand_tabs_fixed(s: &str, tabsize: usize) -> String {
 
 async fn insert_handler(
     path: &str,
-    args: HashMap<String, serde_json::Value>,
+    args: &HashMap<String, serde_json::Value>,
 ) -> Result<ToolExecResult, EditToolError> {
     // 1) Validate insert_line
     let insert_line_val = args.get("insert_line");
 
-    dbg!(insert_line_val);
 
     let insert_line = match insert_line_val.and_then(|v| v.as_i64()) {
         Some(v) if v >= 0 => v as usize,
@@ -292,12 +347,10 @@ async fn insert_handler(
         }
     };
 
-    dbg!(insert_line);
 
     // 2) Validate new_str
     let new_str_val = args.get("new_str");
 
-    dbg!(new_str_val);
 
     let new_str = match new_str_val.and_then(|v| v.as_str()) {
         Some(s) => s,
@@ -310,7 +363,6 @@ async fn insert_handler(
         }
     };
 
-    dbg!(new_str);
 
     // 3) Read file
     let file_text_raw = fs::read_to_string(path).map_err(|_| EditToolError::Io)?;
@@ -651,7 +703,6 @@ mod tests {
         match result {
             Ok(res) => {
                 let out = res.output.expect("output present");
-                dbg!(out.clone());
                 // expect lines y and z
                 assert!(out.contains("y"));
                 assert!(out.contains("z"));
@@ -705,7 +756,7 @@ mod tests {
         let path_str = file_path.to_str().unwrap();
         let mut args = HashMap::new();
         args.insert("file_text".to_string(), json!("hello world"));
-        let result = run_async(create_handler(path_str, args));
+        let result = run_async(create_handler(path_str, &args));
         match result {
             Ok(res) => {
                 assert!(res.error.is_none());
@@ -726,7 +777,7 @@ mod tests {
         let path_str = file_path.to_str().unwrap();
         let mut args = HashMap::new();
         args.insert("file_text".to_string(), json!(""));
-        let result = run_async(create_handler(path_str, args));
+        let result = run_async(create_handler(path_str, &args));
         match result {
             Err(EditToolError::FileTextEmpty) => {}
             other => panic!("expected FileTextEmpty, got {:?}", other),
@@ -739,7 +790,7 @@ mod tests {
         let path_str = file_path.to_str().unwrap();
         // No "file_text" key in args
         let args: HashMap<String, serde_json::Value> = HashMap::new();
-        let result = run_async(create_handler(path_str, args));
+        let result = run_async(create_handler(path_str, &args));
         match result {
             Err(EditToolError::FileTextEmpty) => {}
             other => panic!(
@@ -756,7 +807,7 @@ mod tests {
         // Non-string value: as_str() -> None -> unwrap_or("") -> empty -> FileTextEmpty
         let mut args = HashMap::new();
         args.insert("file_text".to_string(), json!(12345));
-        let result = run_async(create_handler(path_str, args));
+        let result = run_async(create_handler(path_str, &args));
         match result {
             Err(EditToolError::FileTextEmpty) => {}
             other => panic!(
@@ -773,7 +824,7 @@ mod tests {
         let path_str = nested_nonexistent.to_str().unwrap();
         let mut args = HashMap::new();
         args.insert("file_text".to_string(), json!("data"));
-        let result = run_async(create_handler(path_str, args));
+        let result = run_async(create_handler(path_str, &args));
         match result {
             Err(EditToolError::Other(msg)) => {
                 // On most platforms, this will mention "No such file or directory"
@@ -792,7 +843,7 @@ mod tests {
         fs::write(&file_path, "old").expect("prewrite");
         let mut args = HashMap::new();
         args.insert("file_text".to_string(), json!("new"));
-        let result = run_async(create_handler(path_str, args));
+        let result = run_async(create_handler(path_str, &args));
         match result {
             Ok(_) => {
                 let contents = fs::read_to_string(path_str).expect("read back file");
@@ -805,7 +856,7 @@ mod tests {
     fn returns_error_when_file_not_found() {
         let args = args(Some("foo"), Some("bar"));
         let non_existent = PathBuf::from("surely/does/not/exist.txt");
-        let res = run_async(str_replace_handler(non_existent.to_str().unwrap(), args));
+        let res = run_async(str_replace_handler(non_existent.to_str().unwrap(), &args));
         assert!(matches!(res, Err(EditToolError::Io)));
     }
     #[test]
@@ -815,13 +866,13 @@ mod tests {
         // 1) missing old_str (defaults to "")
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(None, Some("x")),
+            &args(None, Some("x")),
         ));
         assert!(matches!(res, Err(EditToolError::EmptyOldString)));
         // 2) explicitly empty old_str
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(Some(""), Some("x")),
+            &args(Some(""), Some("x")),
         ));
         assert!(matches!(res, Err(EditToolError::EmptyOldString)));
     }
@@ -831,7 +882,7 @@ mod tests {
         let path = write_temp_file(&dir, "a.txt", "hello world");
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(Some("hello"), None),
+            &args(Some("hello"), None),
         ));
         assert!(matches!(res, Err(EditToolError::NewStringError)));
     }
@@ -841,7 +892,7 @@ mod tests {
         let path = write_temp_file(&dir, "a.txt", "alpha beta gamma");
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(Some("delta"), Some("DELTA")),
+            &args(Some("delta"), Some("DELTA")),
         ));
         match res {
             Err(EditToolError::OldStringNotExists(old, p)) => {
@@ -858,7 +909,7 @@ mod tests {
         let path = write_temp_file(&dir, "a.txt", content);
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(Some("foo"), Some("bar")),
+            &args(Some("foo"), Some("bar")),
         ));
         match res {
             Err(EditToolError::MultipleOccurrences(old, line)) => {
@@ -876,7 +927,7 @@ mod tests {
         let path = write_temp_file(&dir, "a.txt", content);
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(Some("foo"), Some("xyz")),
+            &args(Some("foo"), Some("xyz")),
         ));
         match res {
             Err(EditToolError::MultipleOccurrences(old, line)) => {
@@ -893,7 +944,7 @@ mod tests {
         let path = write_temp_file(&dir, "a.txt", content);
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(Some("hello"), Some("HELLO")),
+            &args(Some("hello"), Some("HELLO")),
         ))
         .expect("should succeed");
         // Verify file content changed
@@ -922,7 +973,7 @@ mod tests {
         // new_str: "\tprintln!(\"hello\");"
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(Some("\tprintln!(\"hi\");"), Some("\tprintln!(\"hello\");")),
+            &args(Some("\tprintln!(\"hi\");"), Some("\tprintln!(\"hello\");")),
         ))
         .expect("should succeed");
         let new_content = fs::read_to_string(&path).unwrap();
@@ -945,7 +996,7 @@ mod tests {
         // Replace something near the top to exercise saturating_sub for start_line
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(Some("line 1"), Some("LINE 1")),
+            &args(Some("line 1"), Some("LINE 1")),
         ))
         .expect("should succeed");
         // Verify replacement
@@ -969,11 +1020,10 @@ mod tests {
         // old_str is "\ta" will not match; use "a\tb" to match once
         let res = run_async(str_replace_handler(
             path.to_str().unwrap(),
-            args(Some("a\tb"), Some("A\tB")),
+            &args(Some("a\tb"), Some("A\tB")),
         ))
         .expect("should succeed");
 
-        dbg!(res);
         let new_content = fs::read_to_string(&path).unwrap();
         // After expansion with 2-space tabs, "a\tb" replaced by "A\tB"
         assert!(new_content.contains("A"));
@@ -987,7 +1037,7 @@ mod tests {
         let path = write_temp_file(&dir, "a.txt", "a\nb\n");
         let args = args_insert(None, Some("X"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.output.is_none());
         assert_eq!(res.error_code, Some(-1));
         let msg = res.error.unwrap();
@@ -999,7 +1049,7 @@ mod tests {
         let path = write_temp_file(&dir, "a.txt", "a\nb\n");
         let args = args_insert(Some(-3), Some("X"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.output.is_none());
         assert_eq!(res.error_code, Some(-1));
         let msg = res.error.unwrap();
@@ -1014,7 +1064,7 @@ mod tests {
         let path = write_temp_file(&dir, "a.txt", "a\nb\n");
         let args = args_insert(Some(0), None);
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.output.is_none());
         assert_eq!(res.error_code, Some(-1));
         let msg = res.error.unwrap();
@@ -1028,7 +1078,7 @@ mod tests {
         // insert_line > len (3) -> error
         let args = args_insert(Some(4), Some("X"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.output.is_none());
         assert_eq!(res.error_code, Some(-1));
         let msg = res.error.unwrap();
@@ -1044,7 +1094,7 @@ mod tests {
         let path = write_temp_file(&dir, "a.txt", "a\nb\nc\n");
         let args = args_insert(Some(0), Some("X"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.error.is_none(), "should succeed");
         let out = res.output.unwrap();
         assert!(out.contains("The file"), "should include success header");
@@ -1061,7 +1111,7 @@ mod tests {
         // insert at index 1 (0-based) before "b"
         let args = args_insert(Some(1), Some("X"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.error.is_none());
         let new_text = fs::read_to_string(&path).unwrap();
         assert_eq!(new_text, "a\nX\nb\nc\n");
@@ -1075,7 +1125,7 @@ mod tests {
         // Note: file without trailing newline -> split => ["a","b","c"] len=3
         let args = args_insert(Some(1), Some("X\nY"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.error.is_none());
         let new_text = fs::read_to_string(&path).unwrap();
         // Expected lines: ["a","X","Y","b","c"] joined => "a\nX\nY\nb\nc"
@@ -1090,7 +1140,7 @@ mod tests {
         // Insert at line index 5 (0-based), i.e., before "L6"
         let args = args_insert(Some(5), Some("X"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.error.is_none());
         let out = res.output.unwrap();
         // Snippet window: SNIPPET_LINES = 3
@@ -1115,7 +1165,7 @@ mod tests {
         // Insert a line with tabs
         let args = args_insert(Some(1), Some("\tINS"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.error.is_none());
         // Read file and ensure tabs were expanded consistently.
         // Since function writes the joined expanded lines, tabs in the inserted string and original are expanded to spaces.
@@ -1151,7 +1201,7 @@ mod tests {
         // insert at 0 should show snippet starting at line 1
         let args = args_insert(Some(0), Some("X\nY"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.error.is_none());
         let out = res.output.unwrap();
         assert!(out.contains("(starting at line 1):"));
@@ -1168,7 +1218,7 @@ mod tests {
         // file_text_lines split => ["A","B","C",""] len=4, insert at 4 (end)
         let args = args_insert(Some(4), Some("X"));
         let res =
-            run_async(insert_handler(path.to_str().unwrap(), args)).expect("Ok result expected");
+            run_async(insert_handler(path.to_str().unwrap(), &args)).expect("Ok result expected");
         assert!(res.error.is_none());
         let out = res.output.unwrap();
         // snippet_start = max(0, 4-3)=1 -> starts at line 2 (1-based)
@@ -1192,7 +1242,7 @@ mod tests {
             fs::set_permissions(dir.path(), perms).unwrap();
         }
         let args = args_insert(Some(0), Some("X"));
-        let res = run_async(insert_handler(path.to_str().unwrap(), args));
+        let res = run_async(insert_handler(path.to_str().unwrap(),&args));
         match res {
             Err(EditToolError::Io) => { /* expected on write failure */ }
             Ok(ok) => {
