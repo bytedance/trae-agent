@@ -108,11 +108,14 @@ impl Agent for TraeAgent {
                 .unwrap_or_default();
             
 
-            user_msg += &format!(
-                "[Problem statement]: We're currently solving the following issue within our repository. \
-                Here's the issue text:\n{{{}}}\n",
-                issue
-            );
+        user_msg += &format!(
+            "[Problem statement]: We're currently solving the following issue within our repository. \
+            Here's the issue text:\n{}\n Your work directory is {} \n",
+            issue,
+            args.as_ref()
+                .and_then(|m| m.get("project_path").map(|s| s.as_str()))
+                .unwrap_or("")
+        );
         };
 
 
