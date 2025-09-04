@@ -546,7 +546,7 @@ impl LLMProvider for OpenAICompatibleClient {
         &mut self,
         messages: Vec<LLMMessage>,
         model_config: &ModelConfig,
-        tools: Option<Vec<Box<dyn Tool>>>,
+        tools: Option<&Vec<Box<dyn Tool>>>,
         reuse_history: Option<bool>,
     ) -> LLMResult<crate::llm::LLMStream> {
         // Note: For streaming responses, chat history is not automatically updated.

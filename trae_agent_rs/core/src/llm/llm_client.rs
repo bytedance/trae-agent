@@ -123,7 +123,7 @@ impl LLMProviderTrait for ClientWrapper {
         &mut self,
         messages: Vec<LLMMessage>,
         model_config: &ModelConfig,
-        tools: Option<Vec<Box<dyn Tool>>>,
+        tools: Option<&Vec<Box<dyn Tool>>>,
         reuse_history: Option<bool>,
     ) -> LLMResult<LLMStream> {
         match self {
@@ -274,7 +274,7 @@ impl LLMClient {
         &mut self,
         messages: Vec<LLMMessage>,
         model_config: &ModelConfig,
-        tools: Option<Vec<Box<dyn Tool>>>,
+        tools: Option<&Vec<Box<dyn Tool>>>,
         reuse_history: bool,
     ) -> LLMResult<LLMStream> {
         self.client.chat_stream(messages, model_config, tools, Some(reuse_history)).await
