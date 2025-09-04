@@ -48,25 +48,36 @@ impl Agent for TraeAgent {
     ) -> Result<(), AgentError> {
         self.baseagent.task = task;
 
-        if tool_names.is_none() || tool_names.unwrap_or(vec![]).len() == 0 {
+        if tool_names.is_some() || tool_names.unwrap_or(vec![]).len() == 0 {
+
             let provider = &self.baseagent.model_config.model_provider;
 
-            let mut tool_map: HashMap<String, Box<dyn Tool>> = HashMap::new();
+            let mut tools_map: HashMap<String, usize> = HashMap::new();
+            let mut tools: Vec<Box<dyn Tool>> = Vec::new();
 
             for tool in TraeAgentToolNames {
                 match tool {
                     "bash" => {
-                        tool_map.insert(
+
+                        tools.push(Box::new(Bash::new(provider.name.clone())));
+
+                        tools_map.insert(
                             tool.to_string().clone(),
-                            Box::new(Bash::new(provider.name.clone())),
+                            tools.len()-1,
                         );
                     }
                     "str_replace_based_edit_tool" => {
-                        tool_map.insert(tool.to_string().clone(), Box::new(Edit::new()));
+
+                        tools.push(Box::new(Bash::new(provider.name.clone())));                        
+
+                        tools_map.insert(tool.to_string().clone(), tools.len() - 1);
                     }
                     _ => {}
                 }
             }
+
+            self.baseagent.tools = tools;
+            self.baseagent.tools_map = Some(tools_map);
         }
 
         // reset the init msg here
@@ -89,12 +100,13 @@ impl Agent for TraeAgent {
             return Err(AgentError::NoProjectPath);
         }
 
-        if args.as_ref().and_then(|m| m.get("issue")).is_none() {
+        if args.as_ref().and_then(|m| m.get("issue")).is_some() {
             let issue: String = args
                 .as_ref()
                 .and_then(|m| m.get("issue"))
                 .map(|v| v.to_string())
                 .unwrap_or_default();
+            
 
             user_msg += &format!(
                 "[Problem statement]: We're currently solving the following issue within our repository. \
@@ -102,6 +114,7 @@ impl Agent for TraeAgent {
                 issue
             );
         };
+
 
         for attr in ["base_commit" , "must_patch", "patch_path"]{
             if args.as_ref().and_then(|m| m.get(attr)).is_none(){
@@ -133,8 +146,9 @@ impl Agent for TraeAgent {
                 tool_result: None 
             }
         );
+
+
         // todo trajectory recorder 
-        
         Ok(())
     }
 async fn run(&mut self) -> Result<AgentExecution, &'static str> {
@@ -151,18 +165,22 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
     };
 
     let mut step_number = 1u32;
-    let mut messages = self.initial_msgs.clone(); // Work with a mutable copy of messages
-
+//    let mut messages = self.initial_msgs.clone(); // Work with a mutable copy of messages
     // Set agent state to RUNNING when execution starts
     exec_agent.agent_state = AgentState::RUNNING;
 
     while step_number <= self.baseagent.max_step {
+
+        dbg!(step_number);
+
         let mut step = AgentStep::new(step_number, AgentStepState::THINKING);
 
         let exec_msg = self
             .baseagent
-            .execute_step(&mut step, &messages, &mut exec_agent, None)
+            .execute_step(&mut step, &self.initial_msgs, &mut exec_agent, None)
             .await;
+    
+        dbg!(&step);
 
         match exec_msg {
             Err(e) => {
@@ -172,15 +190,15 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
                 step.error = Some(e.to_string());
                 
                 self.baseagent
-                    .finalize_step(&mut step, &mut messages, &mut exec_agent);
+                    .finalize_step(&mut step, &mut self.initial_msgs, &mut exec_agent);
                 break;
             }
             Ok(new_messages) => {
                 // Add new messages from the execution to our message history
-                messages.extend(new_messages);
+                self.initial_msgs.extend(new_messages);
                 
                 self.baseagent
-                    .finalize_step(&mut step, &mut messages, &mut exec_agent);
+                    .finalize_step(&mut step, &mut self.initial_msgs, &mut exec_agent);
                 
                 // Check if task is completed
                 if exec_agent.agent_state == AgentState::COMPLETED {
@@ -188,6 +206,8 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
                 }
             }
         }
+
+        //dbg!(&self.initial_msgs);
 
         step_number += 1;
     }
@@ -225,7 +245,6 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
     // You might want to add CLI updates for final results
 
     // Update the initial_msgs with the final message state for potential future use
-    self.initial_msgs = messages;
 
     Ok(exec_agent)
 }

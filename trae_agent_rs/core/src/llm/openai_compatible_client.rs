@@ -135,7 +135,7 @@ impl OpenAICompatibleClient {
         } else if base_url.ends_with("/") {
             format!("{}chat/completions", base_url)
         } else {
-            format!("{}/chat/completions", base_url)
+            format!("{}", base_url)
         };
 
         println!("url: {}", url);
@@ -219,7 +219,7 @@ impl OpenAICompatibleClient {
         } else if base_url.ends_with("/") {
             format!("{}chat/completions", base_url)
         } else {
-            format!("{}/chat/completions", base_url)
+            format!("{}", base_url)
         };
 
         let mut headers = reqwest::header::HeaderMap::new();
@@ -484,7 +484,7 @@ impl LLMProvider for OpenAICompatibleClient {
         &mut self,
         messages: Vec<LLMMessage>,
         model_config: &ModelConfig,
-        tools: Option<Vec<Box<dyn Tool>>>,
+        tools: Option<&Vec<Box<dyn Tool>>>,
         reuse_history: Option<bool>,
     ) -> LLMResult<LLMResponse> {
         let parsed_messages = self.convert_messages(&messages);

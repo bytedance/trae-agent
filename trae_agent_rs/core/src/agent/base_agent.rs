@@ -22,6 +22,7 @@ use crate::ContentItem;
 use crate::LLMClient;
 use crate::LLMMessage;
 use crate::LLMResponse;
+use crate::Tool;
 use crate::ToolCall;
 use crate::ToolResult;
 use crate::config;
@@ -30,7 +31,7 @@ use crate::llm_basics::LLMUsage;
 use crate::llm_basics::TextContent;
 use crate::tools;
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub enum AgentStepState {
     THINKING,
     CALLINGTOOL,
@@ -57,7 +58,9 @@ pub struct BaseAgent {
     pub max_step: u32,
 
     pub llm_client: LLMClient,
-    pub tools: Option<HashMap<String, Box<dyn tools::Tool>>>,
+    pub tools_map: Option<HashMap<String, usize>>,
+
+    pub tools: Vec<Box<dyn tools::Tool>>,
     pub model_config: config::ModelConfig,
 }
 
@@ -68,7 +71,8 @@ impl BaseAgent {
         client: LLMClient,
         max_step: u32,
         model_config: config::ModelConfig,
-        tools: Option<HashMap<String, Box<dyn tools::Tool>>>,
+        tools_map:Option<HashMap<String, usize>>,
+        tools: Vec<Box<dyn tools::Tool>>,
     ) -> Self {
         BaseAgent {
             task: task,
@@ -77,11 +81,13 @@ impl BaseAgent {
             model_config: model_config,
             max_step: max_step,
             tools: tools,
+            tools_map: tools_map,
         }
     }
 }
 
 // this struct should be private Agent
+#[derive(Debug)]
 pub struct AgentExecution {
     pub task: String,
     pub steps: Vec<AgentStep>,
@@ -110,7 +116,7 @@ impl AgentExecution {
 }
 
 // the execution of that specific step
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AgentStep {
     pub step_number: u32,
 
@@ -168,13 +174,13 @@ impl BaseAgent {
     }
 
     pub fn close_tools(&mut self) {
-        if self.tools.is_none() {
+        if self.tools.len() == 0 {
             return;
         }
 
-        if let Some(tools) = self.tools.as_mut() {
-            for (_name, tool) in tools.iter_mut() {
-                tool.reset();
+        if let Some(tools) = self.tools_map.as_mut() {
+            for (_name, tool) in tools.iter() {
+                self.tools[*tool].reset();
             }
         }
     }
@@ -188,15 +194,17 @@ impl BaseAgent {
 
         is_task_complete: Option<Box<dyn FnOnce(&LLMResponse) -> bool>>,
     ) -> Result<Vec<LLMMessage>, AgentError> {
-        let msgs_backup = msgs.clone(); // this is not good practice once chat rely only &msgs it should be removed
 
         step.state = AgentStepState::THINKING;
         // a cli api should place here currently there's not cli api
 
+
         let response = self
             .llm_client
-            .chat(msgs.clone(), &self.model_config, None, false)
+            .chat(msgs.clone(), &self.model_config, Some(&self.tools), false)
             .await;
+
+        dbg!(&response);
 
         let llm_response = match response {
             Ok(t) => Some(t),
@@ -241,7 +249,7 @@ impl BaseAgent {
 
                 exec.final_result = Some(result.to_string());
                 exec.success = true;
-                return Ok(msgs_backup);
+                return Ok(msgs.to_vec());
             }
 
             exec.agent_state = AgentState::RUNNING;
@@ -279,9 +287,12 @@ impl BaseAgent {
 
         let default_vec = vec![];
 
+        dbg!(&tool_call);
         let unwrapped_tool = tool_call.as_ref().unwrap_or(&default_vec);
+        
+        dbg!(&unwrapped_tool);
 
-        let agent_tools = self.tools.get_or_insert_with(HashMap::new);
+        let agent_tools = self.tools_map.get_or_insert_with(HashMap::new);
 
         let mut tool_results = vec![];
 
@@ -306,14 +317,14 @@ impl BaseAgent {
                 "bash" => {
                     // ensure `agent_tools` is a mutable variable in scope: `&mut agent_tools`
                     match agent_tools.get_mut("bash") {
-                        Some(x) => x.execute(tool.arguments.clone()).await,
+                        Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
                         None => Err("Cannot find bash tool".to_string()),
                     }
                 }
 
                 "str_replace_based_edit_tool" => {
                     match agent_tools.get_mut("str_replace_based_edit_tool") {
-                        Some(x) => x.execute(tool.arguments.clone()).await,
+                        Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
                         None => Err("Cannot find str_replace_based_edit tool".to_string()),
                     }
                 }
@@ -377,6 +388,7 @@ impl BaseAgent {
 
         Ok(msg)
     }
+
 }
 
 fn indicate_task_complete(response: &LLMResponse) -> bool {

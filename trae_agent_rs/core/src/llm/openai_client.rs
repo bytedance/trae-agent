@@ -304,7 +304,7 @@ impl LLMProvider for OpenAIClient {
         &mut self,
         messages: Vec<LLMMessage>,
         model_config: &ModelConfig,
-        tools: Option<Vec<Box<dyn Tool>>>,
+        tools: Option<&Vec<Box<dyn Tool>>>,
         reuse_history: Option<bool>,
     ) -> LLMResult<LLMResponse> {
         let parsed_messages = self.parse_messages(&messages);
