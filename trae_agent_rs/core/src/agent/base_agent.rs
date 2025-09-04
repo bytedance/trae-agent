@@ -204,7 +204,6 @@ impl BaseAgent {
             .chat(msgs.clone(), &self.model_config, Some(&self.tools), false)
             .await;
 
-        dbg!(&response);
 
         let llm_response = match response {
             Ok(t) => Some(t),
@@ -335,7 +334,6 @@ impl BaseAgent {
                 _ => Err("The requested tool is not found".to_string()),
             };
 
-            dbg!(&result);
 
             execresult_to_toolresult(result, &mut tool_result);
 
@@ -399,7 +397,6 @@ impl BaseAgent {
             });
         }
 
-        dbg!(&msg);
         Ok(msg)
     }
 

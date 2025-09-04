@@ -11,7 +11,8 @@
 //! 2. Set your base URL: export OPENAI_COMPATIBLE_BASE_URL="https://api.your-provider.com/v1"
 //! 3. Set test project path: export TEST_PROJECT_PATH="/path/to/test/project"
 //! 4. Optional: Set test issue: export TEST_ISSUE="Test issue description"
-//! 5. Run: cargo run --example trae_agent_test
+//! 5. PLEASE MAKE SURE YOU CHANGE THE PATH TO YOUR ABSOLUTE PATH.
+//! 6. Run: cargo run --example trae_agent_test
 
 use std::{collections::HashMap, pin::Pin};
 use std::{env, vec};

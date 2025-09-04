@@ -332,7 +332,6 @@ async fn insert_handler(
     // 1) Validate insert_line
     let insert_line_val = args.get("insert_line");
 
-    dbg!(insert_line_val);
 
     let insert_line = match insert_line_val.and_then(|v| v.as_i64()) {
         Some(v) if v >= 0 => v as usize,
@@ -348,12 +347,10 @@ async fn insert_handler(
         }
     };
 
-    dbg!(insert_line);
 
     // 2) Validate new_str
     let new_str_val = args.get("new_str");
 
-    dbg!(new_str_val);
 
     let new_str = match new_str_val.and_then(|v| v.as_str()) {
         Some(s) => s,
@@ -366,7 +363,6 @@ async fn insert_handler(
         }
     };
 
-    dbg!(new_str);
 
     // 3) Read file
     let file_text_raw = fs::read_to_string(path).map_err(|_| EditToolError::Io)?;
@@ -707,7 +703,6 @@ mod tests {
         match result {
             Ok(res) => {
                 let out = res.output.expect("output present");
-                dbg!(out.clone());
                 // expect lines y and z
                 assert!(out.contains("y"));
                 assert!(out.contains("z"));
@@ -1029,7 +1024,6 @@ mod tests {
         ))
         .expect("should succeed");
 
-        dbg!(res);
         let new_content = fs::read_to_string(&path).unwrap();
         // After expansion with 2-space tabs, "a\tb" replaced by "A\tB"
         assert!(new_content.contains("A"));

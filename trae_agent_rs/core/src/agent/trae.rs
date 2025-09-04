@@ -171,7 +171,6 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
 
     while step_number <= self.baseagent.max_step {
 
-
         let mut step = AgentStep::new(step_number, AgentStepState::THINKING);
 
         let exec_msg = self

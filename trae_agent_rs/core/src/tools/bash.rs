@@ -323,7 +323,6 @@ impl BashProcess {
 
                     // Check if sentinel is found
                     if chunk.contains(sentinel_before) {
-                        dbg!("Found sentinel_before in chunk");
                         if let Some(pos) = chunk.find(sentinel_before) {
                             output_accum.push_str(&chunk[..pos]);
                             let rest = &chunk[pos + sentinel_before.len()..];
