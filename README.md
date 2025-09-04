@@ -180,15 +180,17 @@ trae-cli interactive --provider openai --model gpt-4o --max-steps 30
 
 ## Docker Mode Commands
 ### Preparation
-**Important**: You need to download a directory "_interal" from [Google Drive](https://drive.google.com/file/d/164ivShb7VrjhO7S_159dIqskZeABryok/view?usp=drive_link) and unzip it into
-trae-agent/trae_agent/dist/dist_tools. This is used to execute agent tools in Docker containers.
+**Important**: You need to make sure Docker is configured in your environment.
 
 ### Usage
 ```bash
 # Specify a Docker image to run the task in a new container
 trae-cli run "Add tests for utils module" --docker-image python:3.11
 
-# Attach to an existing Docker container by ID
+# Specify a Docker image to run the task in a new container and mount the directory
+trae-cli run "write a script to print helloworld" --docker-image python:3.12 --working-dir test_workdir/
+
+# Attach to an existing Docker container by ID (`--working-dir` is invalid with `--docker-container-id`)
 trae-cli run "Update API endpoints" --docker-container-id 91998a56056c
 
 # Specify an absolute path to a Dockerfile to build an environment

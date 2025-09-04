@@ -5,6 +5,8 @@
 
 import asyncio
 import os
+import shutil
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -45,6 +47,62 @@ def resolve_config_file(config_file: str) -> str:
             sys.exit(1)
     else:
         return config_file
+
+
+def check_docker(timeout=3):
+    # 1) Check whether the docker CLI is installed
+    if shutil.which("docker") is None:
+        return {"cli": False, "daemon": False, "version": None, "error": "docker CLI not found"}
+    # 2) Check whether the Docker daemon is reachable (this makes a real request)
+    try:
+        cp = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if cp.returncode == 0 and cp.stdout.strip():
+            return {"cli": True, "daemon": True, "version": cp.stdout.strip(), "error": None}
+        else:
+            # The daemon may not be running or permissions may be insufficient
+            return {
+                "cli": True,
+                "daemon": False,
+                "version": None,
+                "error": (cp.stderr or cp.stdout).strip(),
+            }
+    except Exception as e:
+        return {"cli": True, "daemon": False, "version": None, "error": str(e)}
+
+
+def build_with_pyinstaller():
+    os.system("rm -rf trae_agent/dist")
+    print("--- Building edit_tool ---")
+    subprocess.run(
+        [
+            "pyinstaller",
+            "--name",
+            "edit_tool",
+            "trae_agent/tools/edit_tool_cli.py",
+        ],
+        check=True,
+    )
+    print("\n--- Building json_edit_tool ---")
+    subprocess.run(
+        [
+            "pyinstaller",
+            "--name",
+            "json_edit_tool",
+            "--hidden-import=jsonpath_ng",
+            "trae_agent/tools/json_edit_tool_cli.py",
+        ],
+        check=True,
+    )
+    os.system("mkdir trae_agent/dist")
+    os.system("cp dist/edit_tool/edit_tool trae_agent/dist")
+    os.system("cp -r dist/json_edit_tool/_internal trae_agent/dist")
+    os.system("cp dist/json_edit_tool/json_edit_tool trae_agent/dist")
+    os.system("rm -rf dist")
 
 
 @click.group()
@@ -152,7 +210,7 @@ def run(
         None (it is expected to be ended after calling the run function)
     """
 
-    docker_config = None
+    docker_config: dict[str, str | None] | None = None
     if (
         sum(
             [
@@ -191,6 +249,18 @@ def run(
 
     # Apply backward compatibility for config file
     config_file = resolve_config_file(config_file)
+
+    if docker_config:
+        check_msg = check_docker()
+        if check_msg["cli"] and check_msg["daemon"] and check_msg["version"]:
+            print("Docker is configured correctly.")
+        else:
+            print(f"Docker is configured incorrectly. {check_msg['error']}")
+            sys.exit(1)
+        if not (os.path.exists("trae_agent/dist") and os.path.exists("trae_agent/dist/_internal")):
+            print("Building tools of Docker mode for the first use, waiting for a few seconds...")
+            build_with_pyinstaller()
+            print("Building finished.")
 
     if file_path:
         if task:
@@ -241,7 +311,9 @@ def run(
         cli_console.set_initial_task(task)
 
     # agent = Agent(agent_type, config, trajectory_file, cli_console)
-    # --- MODIFIED: 将docker_config传递给Agent构造函数 ---
+
+    if docker_config is not None:
+        docker_config["workspace_dir"] = working_dir  # now type-safe
 
     # Change working directory if specified
     if working_dir:
@@ -263,9 +335,6 @@ def run(
             f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
         )
         sys.exit(1)
-
-    if docker_config is not None:
-        docker_config["workspace_dir"] = working_dir
 
     agent = Agent(
         agent_type,
