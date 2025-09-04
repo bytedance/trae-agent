@@ -12,7 +12,6 @@ import traceback
 from pathlib import Path
 
 import click
-import PyInstaller.__main__
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -76,45 +75,34 @@ def check_docker(timeout=3):
         return {"cli": True, "daemon": False, "version": None, "error": str(e)}
 
 
-def build_with_pyinstaller(
-    project_dir: str | Path,
-    spec_file: str | Path = "build_tools.spec",
-    dist_dir: str | Path = "trae_agent/dist",
-    build_dir: str | Path | None = None,
-):
-    """
-    Build using PyInstaller's Python API. Behavior matches the CLI.
-
-    Args:
-        project_dir: The base project directory (used to resolve spec if relative).
-        spec_file: The spec file to use (relative to project_dir or absolute).
-        dist_dir: Directory for final artifacts.
-        build_dir: Directory for intermediate build files.
-    """
-    subprocess.run(["rm", "-rf", "trae_agent/dist"])
-    subprocess.run(["mkdir", "trae_agent/dist"])
-    project_dir = Path(project_dir).resolve()
-    spec_path = Path(spec_file)
-    spec_path = (
-        (project_dir / spec_path).resolve() if not spec_path.is_absolute() else spec_path.resolve()
-    )
-
-    dist_dir = Path(dist_dir).resolve()
-    build_dir = Path(build_dir).resolve() if build_dir else (project_dir / "build").resolve()
-
-    dist_dir.mkdir(parents=True, exist_ok=True)
-    build_dir.mkdir(parents=True, exist_ok=True)
-
-    # Arguments mirror the CLI flags; absolute paths avoid cwd ambiguity
-    PyInstaller.__main__.run(
+def build_with_pyinstaller():
+    os.system("rm -rf trae_agent/dist")
+    print("--- Building edit_tool ---")
+    subprocess.run(
         [
-            str(spec_path),
-            "--noconfirm",
-            f"--distpath={dist_dir}",
-            f"--workpath={build_dir}",
-            # Add more flags if needed (e.g., "--clean")
-        ]
+            "pyinstaller",
+            "--name",
+            "edit_tool",
+            "trae_agent/tools/edit_tool_cli.py",
+        ],
+        check=True,
     )
+    print("\n--- Building json_edit_tool ---")
+    subprocess.run(
+        [
+            "pyinstaller",
+            "--name",
+            "json_edit_tool",
+            "--hidden-import=jsonpath_ng",
+            "trae_agent/tools/json_edit_tool_cli.py",
+        ],
+        check=True,
+    )
+    os.system("mkdir trae_agent/dist")
+    os.system("cp dist/edit_tool/edit_tool trae_agent/dist")
+    os.system("cp -r dist/json_edit_tool/_internal trae_agent/dist")
+    os.system("cp dist/json_edit_tool/json_edit_tool trae_agent/dist")
+    os.system("rm -rf dist")
 
 
 @click.group()
@@ -269,12 +257,9 @@ def run(
         else:
             print(f"Docker is configured incorrectly. {check_msg['error']}")
             sys.exit(1)
-        if not (
-            os.path.exists("trae_agent/dist/dist_tools")
-            and os.path.exists("trae_agent/dist/dist_tools/_internal")
-        ):
+        if not (os.path.exists("trae_agent/dist") and os.path.exists("trae_agent/dist/_internal")):
             print("Building tools of Docker mode for the first use, waiting for a few seconds...")
-            build_with_pyinstaller(os.getcwd())
+            build_with_pyinstaller()
             print("Building finished.")
 
     if file_path:

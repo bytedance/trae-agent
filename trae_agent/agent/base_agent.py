@@ -49,7 +49,7 @@ class BaseAgent(ABC):
         if docker_config:
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             # tools_dir = os.path.join(project_root, 'tools')
-            tools_dir = os.path.join(project_root, "dist/dist_tools")
+            tools_dir = os.path.join(project_root, "dist")
             is_interactive_mode = False
             self.docker_manager = DockerManager(
                 image=docker_config.get("image"),
