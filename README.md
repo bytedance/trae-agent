@@ -180,8 +180,7 @@ trae-cli interactive --provider openai --model gpt-4o --max-steps 30
 
 ## Docker Mode Commands
 ### Preparation
-**Important**: You need to download a directory "_interal" from [Google Drive](https://drive.google.com/file/d/164ivShb7VrjhO7S_159dIqskZeABryok/view?usp=drive_link) and unzip it into
-trae-agent/trae_agent/dist/dist_tools. This is used to execute agent tools in Docker containers.
+**Important**: You need to make sure Docker is configured in your environment.
 
 ### Usage
 ```bash
