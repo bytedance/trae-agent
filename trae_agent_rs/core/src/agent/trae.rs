@@ -173,13 +173,16 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
     exec_agent.agent_state = AgentState::RUNNING;
 
     while step_number <= self.baseagent.max_step {
-
+        println!("Agent is running step: {}" , &step_number);
         let mut step = AgentStep::new(step_number, AgentStepState::THINKING);
 
         let exec_msg = self
             .baseagent
             .execute_step(&mut step, &self.initial_msgs, &mut exec_agent, None)
             .await;
+
+
+        dbg!(&self.initial_msgs); // TODO change it to trajectory
     
         match exec_msg {
             Err(e) => {
@@ -205,7 +208,6 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
                 }
             }
         }
-
         step_number += 1;
     }
 
