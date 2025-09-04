@@ -1,12 +1,9 @@
 // bash tool
 
-use std::clone;
-use std::f32::consts::E;
-use std::fmt::format;
-use std::io::{self, BufReader};
+use std::io::{self};
 use std::time::Duration;
 
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufStream, BufWriter};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 
 use tokio::time;
@@ -18,21 +15,19 @@ use std::process::Stdio;
 
 use crate::Tool;
 
-
 pub struct Bash {
     model_provider: String,
     bash: BashProcess,
 }
 
-impl Bash{
-    pub fn new(model_provider:String)-> Self{
+impl Bash {
+    pub fn new(model_provider: String) -> Self {
         Bash {
             model_provider: model_provider,
             bash: BashProcess::new(),
         }
     }
 }
-
 
 impl Tool for Bash {
     fn get_name(&self) -> &str {
@@ -42,7 +37,6 @@ impl Tool for Bash {
     fn reset(&mut self) {
         self.bash = BashProcess::new();
     }
-
 
     fn get_description(&self) -> &str {
         r#"Run commands in a bash shell
@@ -103,64 +97,67 @@ impl Tool for Bash {
         &mut self,
         arguments: std::collections::HashMap<String, serde_json::Value>,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
-
-            Box::pin(async move {
-                        let cmd = arguments.get("command")
-                            .and_then(|x| x.as_str())
-                            .unwrap_or("");
-
-                        let restart = arguments.get("restart")
-                            .and_then(|x| x.as_bool())
-                            .unwrap_or(false);
-
-                        // Assuming `self.bash.start()` is an asynchronous operation
-                        let starterr = self.bash.start().await;
+        Box::pin(async move {
+            let cmd = arguments
+                .get("command")
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
 
 
-                        if let Err(e) = starterr{
-                            return Err(format!("fail to start the bash {}", e.to_string()))
-                        }
+            let restart = arguments
+                .get("restart")
+                .and_then(|x| x.as_bool())
+                .unwrap_or(false);
+
+            // Assuming `self.bash.start()` is an asynchronous operation
+            let starterr = self.bash.start().await;
 
 
-                        // run the command
-                        let exec_result = self.bash.run(cmd).await;
+            if let Err(e) = starterr {
+                return Err(format!("fail to start the bash {}", e.to_string()));
+            }
 
-                        if let Err(e) = exec_result{
-                            return Err(format!("fail to execute command: {} , getting error: {}" ,cmd ,e));
-                        }
+            // run the command
+            let exec_result = self.bash.run(cmd).await;
+            if let Err(e) = exec_result {
+                return Err(format!(
+                    "fail to execute command: {} , getting error: {}",
+                    cmd, e
+                ));
+            }
 
-                        if restart {
-                            let restart_result = self.bash.stop().await;
+            if restart {
+                let restart_result = self.bash.stop().await;
 
-                            if let Err(e) = restart_result{
-                                return Err(format!("restart fail error: {}" , e));
-                            }
+                if let Err(e) = restart_result {
+                    return Err(format!("restart fail error: {}", e));
+                }
 
-                            let rebot_result = self.bash.start().await;
+                let rebot_result = self.bash.start().await;
 
-                            if let Err(e) = rebot_result{
-                                return Err(format!("rebot fail error: {}" , e));
-                            }
-                        }
+                if let Err(e) = rebot_result {
+                    return Err(format!("rebot fail error: {}", e));
+                }
+            }
 
-                        match exec_result{
-                            Ok(res)=>{
-                                if res.error != "" || res.error.len() != 0 || res.error_code != 0 {
-                                    return Err(format!("Error: {} , Error code: {} " , res.error , res.error_code))
-                                }
+            match exec_result {
+                Ok(res) => {
+                    if res.error != "" || res.error.len() != 0 || res.error_code != 0 {
+                        return Err(format!(
+                            "Error: {} , Error code: {} ",
+                            res.error, res.error_code
+                        ));
+                    }
 
-                                return Ok(res.output);
-
-                            },
-                            Err(e) => {
-                                return Err(format!("Unexpected Error {}" , e));// this should never happen due to previous check
-                            }
-                        }
-                    })
-
+                    return Ok(res.output);
+                }
+                Err(e) => {
+                    return Err(format!("Unexpected Error {}", e)); // this should never happen due to previous check
+                }
+            }
+        })
     }
 }
-
 
 // set the bash process to be private field
 struct BashProcess {
@@ -240,7 +237,10 @@ impl BashProcess {
     }
 
     async fn run(&mut self, command: &str) -> Result<BashExecResult, BashError> {
+     //   dbg!("Starting run function", command);
+
         if !self.started {
+        //    dbg!("Session not started");
             return Err(BashError::SessionNotStarted);
         }
 
@@ -261,6 +261,7 @@ impl BashProcess {
         }
 
         if self.timed_out {
+          //  dbg!("Already timed out");
             return Err(BashError::Timeout);
         }
 
@@ -268,6 +269,8 @@ impl BashProcess {
             let parts: Vec<_> = self.sentinel.split("__ERROR_CODE__").collect();
             (parts[0], "__ERROR_CODE__", parts[1])
         };
+
+    //   dbg!("Sentinel parts", sentinel_before, sentinel_after);
 
         #[cfg(windows)]
         let errcode_retriever = "!errorlevel!";
@@ -284,8 +287,11 @@ impl BashProcess {
             command, command_sep, sentinel_before, errcode_retriever, sentinel_after
         );
 
+       // dbg!("Full command to execute", &full_command);
+
         stdin.write_all(full_command.as_bytes()).await?;
         stdin.flush().await?;
+     //   dbg!("Command written and flushed to stdin");
 
         let mut output_accum = String::new();
         let mut error_accum = String::new();
@@ -294,42 +300,62 @@ impl BashProcess {
         // Timeout wrapper
         let timeout = self.timeout;
         let mut timed_out = false;
-        let mut buffer = String::new();
+        let mut buffer = [0u8; 4096]; // Changed: Use byte buffer instead of String
         let stdout_reader = stdout;
 
+      //  dbg!("Starting read loop with timeout", timeout);
+
         loop {
-            buffer.clear();
-            let read_fut = stdout_reader.read_to_string(&mut buffer);
+            // Changed: Use read() instead of read_to_string() to avoid hanging
+            let read_fut = stdout_reader.read(&mut buffer);
 
             match time::timeout(timeout, read_fut).await {
                 Ok(Ok(0)) => {
+                   // dbg!("Read 0 bytes, breaking");
                     break;
                 }
-                Ok(Ok(_)) => {
-                    // Check if sentinel is found
-                    if buffer.contains(sentinel_before) {
-                        if let Some(pos) = buffer.find(sentinel_before) {
-                            output_accum.push_str(&buffer[..pos]);
-                            let rest = &buffer[pos + sentinel_before.len()..];
+                Ok(Ok(bytes_read)) => {
+                    //dbg!("Read bytes", bytes_read);
 
-                            if rest.len() > sentinel_after.len() {
-                                if rest.ends_with(sentinel_after) {
-                                    let code_str = &rest[..rest.len() - sentinel_after.len()];
-                                    if let Ok(code) = code_str.trim().parse::<i32>() {
-                                        error_code = Some(code);
-                                    }
+                    // Convert bytes to string
+                    let chunk = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+                   // dbg!("Chunk content", &chunk);
+
+                    // Check if sentinel is found
+                    if chunk.contains(sentinel_before) {
+                        dbg!("Found sentinel_before in chunk");
+                        if let Some(pos) = chunk.find(sentinel_before) {
+                            output_accum.push_str(&chunk[..pos]);
+                            let rest = &chunk[pos + sentinel_before.len()..];
+                            //dbg!("Rest after sentinel_before", rest);
+
+                            // Look for sentinel_after in the rest
+                            if let Some(after_pos) = rest.find(sentinel_after) {
+                                let code_str = &rest[..after_pos];
+                                //dbg!("Found error code string", code_str);
+                                if let Ok(code) = code_str.trim().parse::<i32>() {
+                                    error_code = Some(code);
+                                    //dbg!("Parsed error code", code);
                                 }
+                            } else {
+                                //dbg!("sentinel_after not found in rest");
                             }
                         }
 
+                       // dbg!("Breaking after finding sentinel");
                         break;
                     } else {
                         // Accumulate output as normal
-                        output_accum.push_str(&buffer);
+                        output_accum.push_str(&chunk);
+                        //dbg!("Accumulated output length", output_accum.len());
                     }
                 }
-                Ok(Err(e)) => return Err(BashError::Io(e)),
+                Ok(Err(e)) => {
+                    //dbg!("Read error", &e);
+                    return Err(BashError::Io(e));
+                }
                 Err(_) => {
+                    //dbg!("Timeout occurred");
                     timed_out = true;
                     break;
                 }
@@ -337,17 +363,28 @@ impl BashProcess {
         }
 
         if timed_out {
+           // dbg!("Setting timed_out flag and returning timeout error");
             self.timed_out = true;
             return Err(BashError::Timeout);
         }
+        let mut error_accum = String::new();
 
+        // Try to read available stderr data without blocking
         if let Some(child) = &mut self.child {
-            if let Some(mut stderr) = child.stderr.take() {
-                let mut err_buf = Vec::new();
-                let _ = stderr.read_to_end(&mut err_buf).await;
-                error_accum = String::from_utf8_lossy(&err_buf).to_string();
-                // put stderr back (not strictly necessary here)
-                child.stderr.replace(stderr);
+            if let Some(stderr) = child.stderr.as_mut() {
+                let mut err_buf = [0u8; 4096];
+
+                // Use a very short timeout to avoid blocking
+                match time::timeout(Duration::from_millis(10), stderr.read(&mut err_buf)).await {
+                    Ok(Ok(bytes_read)) if bytes_read > 0 => {
+                        error_accum = String::from_utf8_lossy(&err_buf[..bytes_read]).to_string();
+                       //dbg!("Read stderr", &error_accum);
+                    }
+                    _ => {
+                        // No stderr data available or timeout - that's fine
+                        //dbg!("No stderr data available");
+                    }
+                }
             }
         }
 
@@ -358,6 +395,8 @@ impl BashProcess {
         if error_accum.ends_with('\n') {
             error_accum.pop();
         }
+
+      ///!("Final result", &output_accum, &error_accum, &error_code);
 
         Ok(BashExecResult {
             output: output_accum,
@@ -400,7 +439,6 @@ struct BashExecResult {
     pub error: String,
     pub error_code: i32,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -482,7 +520,10 @@ mod tests {
         assert!(!bash_process.timed_out);
         assert_eq!(bash_process.timeout, Duration::from_secs(120));
         assert_eq!(bash_process.output_delay, Duration::from_millis(200));
-        assert_eq!(bash_process.sentinel, ",,,,bash-command-exit-__ERROR_CODE__-banner,,,,");
+        assert_eq!(
+            bash_process.sentinel,
+            ",,,,bash-command-exit-__ERROR_CODE__-banner,,,,"
+        );
     }
 
     #[test]
@@ -510,7 +551,7 @@ mod tests {
         let run_result = run_async(bash_process.run("echo test"));
         match run_result {
             Ok(_) => panic!("Expected error when running without starting"),
-            Err(BashError::SessionNotStarted) => {}, // Expected
+            Err(BashError::SessionNotStarted) => {} // Expected
             Err(e) => panic!("Expected SessionNotStarted error, got: {:?}", e),
         }
     }
@@ -522,7 +563,7 @@ mod tests {
         let stop_result = run_async(bash_process.stop());
         match stop_result {
             Ok(_) => panic!("Expected error when stopping without starting"),
-            Err(BashError::SessionNotStarted) => {}, // Expected
+            Err(BashError::SessionNotStarted) => {} // Expected
             Err(e) => panic!("Expected SessionNotStarted error, got: {:?}", e),
         }
     }
@@ -587,7 +628,10 @@ mod tests {
 
         // We can't easily test execute without mocking, but we can test argument parsing
         let cmd = args.get("command").and_then(|x| x.as_str()).unwrap_or("");
-        let restart = args.get("restart").and_then(|x| x.as_bool()).unwrap_or(false);
+        let restart = args
+            .get("restart")
+            .and_then(|x| x.as_bool())
+            .unwrap_or(false);
 
         assert_eq!(cmd, "echo test");
         assert_eq!(restart, true);
@@ -637,12 +681,13 @@ mod tests {
             Ok(output) => {
                 // Check for common directories that should exist on most systems
                 assert!(
-                    output.contains("bin") ||
-                    output.contains("usr") ||
-                    output.contains("etc") ||
-                    output.contains("home") ||
-                    output.len() > 0, // At least some output
-                    "Expected ls output to contain common directories, got: {}", output
+                    output.contains("bin")
+                        || output.contains("usr")
+                        || output.contains("etc")
+                        || output.contains("home")
+                        || output.len() > 0, // At least some output
+                    "Expected ls output to contain common directories, got: {}",
+                    output
                 );
             }
             Err(e) => {
@@ -659,7 +704,10 @@ mod tests {
         bash.bash.timeout = Duration::from_millis(500);
 
         let mut args = HashMap::new();
-        args.insert("command".to_string(), json!("echo -e 'First line\\nSecond line\\nThird line'"));
+        args.insert(
+            "command".to_string(),
+            json!("echo -e 'First line\\nSecond line\\nThird line'"),
+        );
         args.insert("restart".to_string(), json!(false));
 
         let result = run_async(bash.execute(args));
@@ -667,21 +715,26 @@ mod tests {
             Ok(output) => {
                 // Check that all three lines are present in output
                 assert!(
-                    output.contains("First line") &&
-                    output.contains("Second line") &&
-                    output.contains("Third line"),
-                    "Expected multiline echo output to contain all lines, got: {}", output
+                    output.contains("First line")
+                        && output.contains("Second line")
+                        && output.contains("Third line"),
+                    "Expected multiline echo output to contain all lines, got: {}",
+                    output
                 );
 
                 // Verify it's actually multiple lines (contains newline or shows multiple lines)
                 assert!(
                     output.lines().count() >= 3 || output.contains("line"),
-                    "Expected output to be multiline, got: {}", output
+                    "Expected output to be multiline, got: {}",
+                    output
                 );
             }
             Err(e) => {
                 // If it fails due to timeout or other issues, that's acceptable in test environment
-                println!("multiline echo command failed (acceptable in test env): {:?}", e);
+                println!(
+                    "multiline echo command failed (acceptable in test env): {:?}",
+                    e
+                );
             }
         }
     }
