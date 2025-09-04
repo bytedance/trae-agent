@@ -210,7 +210,6 @@ class DockerManager:
         if self.shell is None:
             raise RuntimeError("Failed to start or restart the persistent shell.")
 
-        # print(f"Executing (interactive): `{command}`")
         marker = "---CMD_DONE---"
         full_command = command.strip()
         marker_command = f"echo {marker}$?"
