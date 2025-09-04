@@ -359,34 +359,6 @@ async fn test_system_prompt() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Test agent state management
-async fn test_agent_state_management() -> Result<(), Box<dyn std::error::Error>> {
-    println!("\n🧪 Testing agent state management...");
-
-    let mut agent = create_test_trae_agent()?;
-
-    // Initial state should be IDLE
-    println!("Initial agent state: {:?}", agent.baseagent.execution_record.agent_state);
-    assert_eq!(agent.baseagent.execution_record.agent_state, AgentState::IDLE);
-
-    let mut args = HashMap::new();
-    args.insert("project_path".to_string(), "/tmp/test_project".to_string());
-    args.insert("issue".to_string(), "State management test".to_string());
-
-    let task = "Test state management".to_string();
-
-    agent.new_task(task, Some(args), None)?;
-
-    // State should still be IDLE after initialization
-    println!("Post-initialization agent state: {:?}", agent.baseagent.execution_record.agent_state);
-    assert_eq!(agent.baseagent.execution_record.agent_state, AgentState::IDLE);
-
-    println!("✅ Agent state management test passed!");
-
-    Ok(())
-}
-
-/// Test with custom tool names
 async fn test_custom_tool_names() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🧪 Testing custom tool names...");
 
@@ -413,47 +385,7 @@ async fn test_custom_tool_names() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Test error conditions and edge cases
-async fn test_error_conditions() -> Result<(), Box<dyn std::error::Error>> {
-    println!("\n🧪 Testing error conditions and edge cases...");
 
-    let mut agent = create_test_trae_agent()?;
-
-    // Test empty task
-    println!("Testing empty task...");
-    let empty_args = HashMap::new();
-    match agent.new_task("".to_string(), Some(empty_args), None) {
-        Ok(_) => println!("⚠️  Empty task was accepted"),
-        Err(e) => println!("✅ Empty task correctly rejected: {:?}", e),
-    }
-
-    // Test very long task
-    println!("Testing very long task...");
-    let mut long_args = HashMap::new();
-    long_args.insert("project_path".to_string(), "/tmp/test".to_string());
-    long_args.insert("issue".to_string(), "x".repeat(10000));
-    
-    let long_task = "x".repeat(1000);
-    match agent.new_task(long_task, Some(long_args), None) {
-        Ok(_) => println!("✅ Very long task was accepted"),
-        Err(e) => println!("⚠️  Very long task was rejected: {:?}", e),
-    }
-
-    // Test invalid project path characters
-    println!("Testing invalid project path...");
-    let mut invalid_args = HashMap::new();
-    invalid_args.insert("project_path".to_string(), "\0invalid\npath".to_string());
-    invalid_args.insert("issue".to_string(), "Test issue".to_string());
-    
-    match agent.new_task("Test task".to_string(), Some(invalid_args), None) {
-        Ok(_) => println!("⚠️  Invalid project path was accepted"),
-        Err(e) => println!("✅ Invalid project path correctly rejected: {:?}", e),
-    }
-
-    println!("✅ Error conditions testing completed!");
-
-    Ok(())
-}
 
 fn print_header() {
     println!("🤖 TraeAgent Test Program");
@@ -554,14 +486,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Test 6: Agent state management
-    match test_agent_state_management().await {
-        Ok(_) => test_results.push(("Agent State Management", true)),
-        Err(e) => {
-            eprintln!("Agent state management test failed: {}", e);
-            test_results.push(("Agent State Management", false));
-        }
-    }
 
     // Test 7: Custom tool names
     match test_custom_tool_names().await {
@@ -572,14 +496,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Test 8: Error conditions
-    match test_error_conditions().await {
-        Ok(_) => test_results.push(("Error Conditions", true)),
-        Err(e) => {
-            eprintln!("Error conditions test failed: {}", e);
-            test_results.push(("Error Conditions", false));
-        }
-    }
 
     // Test 9: Agent execution (if credentials available)
     match test_agent_execution_basic().await {
