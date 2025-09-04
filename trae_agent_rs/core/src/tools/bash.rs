@@ -381,8 +381,6 @@ impl BashProcess {
                        //dbg!("Read stderr", &error_accum);
                     }
                     _ => {
-                        // No stderr data available or timeout - that's fine
-                        //dbg!("No stderr data available");
                     }
                 }
             }
@@ -395,8 +393,6 @@ impl BashProcess {
         if error_accum.ends_with('\n') {
             error_accum.pop();
         }
-
-      ///!("Final result", &output_accum, &error_accum, &error_code);
 
         Ok(BashExecResult {
             output: output_accum,

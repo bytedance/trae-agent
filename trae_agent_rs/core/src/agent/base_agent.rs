@@ -255,7 +255,13 @@ impl BaseAgent {
             exec.agent_state = AgentState::RUNNING;
             return Ok(vec![LLMMessage {
                 role: llm::MessageRole::User,
-                content: None, // TODO:  task_incomplete_message
+                content: Some(vec![
+                    ContentItem::Text(
+                        TextContent{
+                            text:"Your task is not finished. Please continue.".to_string(),
+                        }
+                    )
+                ]),
                 tool_call: None,
                 tool_result: None,
             }]); // return type here
@@ -287,12 +293,10 @@ impl BaseAgent {
 
         let default_vec = vec![];
 
-        dbg!(&tool_call);
         let unwrapped_tool = tool_call.as_ref().unwrap_or(&default_vec);
         
-        dbg!(&unwrapped_tool);
-
-        let agent_tools = self.tools_map.get_or_insert_with(HashMap::new);
+        let empty_map = HashMap::new();
+        let agent_tools = self.tools_map.as_ref().unwrap_or(&empty_map);
 
         let mut tool_results = vec![];
 
@@ -316,20 +320,23 @@ impl BaseAgent {
             let result = match tool.name.as_str() {
                 "bash" => {
                     // ensure `agent_tools` is a mutable variable in scope: `&mut agent_tools`
-                    match agent_tools.get_mut("bash") {
+                    match (*agent_tools).get("bash") {
                         Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
                         None => Err("Cannot find bash tool".to_string()),
                     }
                 }
 
                 "str_replace_based_edit_tool" => {
-                    match agent_tools.get_mut("str_replace_based_edit_tool") {
+                    match agent_tools.get("str_replace_based_edit_tool") {
                         Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
                         None => Err("Cannot find str_replace_based_edit tool".to_string()),
                     }
                 }
                 _ => Err("The requested tool is not found".to_string()),
             };
+
+            dbg!(&result);
+
             execresult_to_toolresult(result, &mut tool_result);
 
             tool_results.push(tool_result);
@@ -342,7 +349,13 @@ impl BaseAgent {
         for tool_result in &tool_results {
             msg.push(LLMMessage {
                 role: llm::MessageRole::User,
-                content: None,
+                content: Some(vec![
+                    ContentItem::Text(
+                        TextContent { 
+                            text: "Here are the tool resuls".to_string()
+                        }
+                    )
+                ]),
                 tool_call: None,
                 tool_result: Some(tool_result.clone()),
             })
@@ -386,6 +399,7 @@ impl BaseAgent {
             });
         }
 
+        dbg!(&msg);
         Ok(msg)
     }
 

@@ -68,7 +68,7 @@ impl Agent for TraeAgent {
                     }
                     "str_replace_based_edit_tool" => {
 
-                        tools.push(Box::new(Bash::new(provider.name.clone())));                        
+                        tools.push(Box::new(Edit::new()));                        
 
                         tools_map.insert(tool.to_string().clone(), tools.len() - 1);
                     }
@@ -171,7 +171,6 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
 
     while step_number <= self.baseagent.max_step {
 
-        dbg!(step_number);
 
         let mut step = AgentStep::new(step_number, AgentStepState::THINKING);
 
@@ -180,8 +179,6 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
             .execute_step(&mut step, &self.initial_msgs, &mut exec_agent, None)
             .await;
     
-        dbg!(&step);
-
         match exec_msg {
             Err(e) => {
                 // Handle error case
@@ -206,8 +203,6 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
                 }
             }
         }
-
-        //dbg!(&self.initial_msgs);
 
         step_number += 1;
     }
