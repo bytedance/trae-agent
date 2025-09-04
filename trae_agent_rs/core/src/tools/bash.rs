@@ -25,7 +25,7 @@ pub struct Bash {
 }
 
 impl Bash{
-    fn new(model_provider:String)-> Self{
+    pub fn new(model_provider:String)-> Self{
         Bash {
             model_provider: model_provider,
             bash: BashProcess::new(),

@@ -13,6 +13,11 @@ const TAB_WIDTH: usize = 8; // Python str.expandtabs() default
 
 pub struct Edit {}
 
+impl Edit{
+    pub fn new()->Self{
+        Edit{}
+    }
+}
 
 
 impl Tool for Edit {

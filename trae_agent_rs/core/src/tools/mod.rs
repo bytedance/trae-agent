@@ -6,6 +6,9 @@ pub mod edit;
 pub mod bash;
 pub use base::Tool;
 
+use crate::{bash::Bash};
+
+
 /// Tool call arguments type alias
 pub type ToolCallArguments = HashMap<String, serde_json::Value>;
 
@@ -93,3 +96,4 @@ pub struct ToolExecResult{
     pub error: Option<String>,
     pub error_code: Option<i32>,
 }
+

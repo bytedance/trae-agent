@@ -22,7 +22,6 @@ use crate::ContentItem;
 use crate::LLMClient;
 use crate::LLMMessage;
 use crate::LLMResponse;
-use crate::Tool;
 use crate::ToolCall;
 use crate::ToolResult;
 use crate::config;
@@ -59,11 +58,11 @@ pub struct BaseAgent {
 
     pub llm_client: LLMClient,
     pub tools: Option<HashMap<String, Box<dyn tools::Tool>>>,
-    model_config: config::ModelConfig,
+    pub model_config: config::ModelConfig,
 }
 
 impl BaseAgent {
-    fn new(
+    pub fn new(
         task: String,
         record: AgentExecution,
         client: LLMClient,
@@ -94,7 +93,7 @@ pub struct AgentExecution {
 }
 
 impl AgentExecution {
-    fn new(task: String, steps: Option<Vec<AgentStep>>) -> Self {
+    pub fn new(task: String, steps: Option<Vec<AgentStep>>) -> Self {
         AgentExecution {
             task: task,
             steps: match steps {
@@ -149,7 +148,7 @@ pub trait Agent {
         &mut self,
         task: String,
         args: Option<HashMap<String, String>>,
-        tool_names: Vec<String>,
+        tool_names: Option<Vec<String>>,
     ) -> Result<(), AgentError>;
 }
 
@@ -408,6 +407,12 @@ fn indicate_task_complete(response: &LLMResponse) -> bool {
 pub enum AgentError {
     #[error("Internal Error {0}")]
     InternalError(String),
+
+    #[error("Project path and issue information are required")]
+    NoExtraArgument,
+
+    #[error("Project path is required")]
+    NoProjectPath,
 }
 
 fn execresult_to_toolresult(execresult: Result<String, String>, toolresult: &mut ToolResult) {
