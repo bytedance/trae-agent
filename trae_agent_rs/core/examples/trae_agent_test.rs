@@ -114,7 +114,7 @@ fn create_test_trae_agent() -> Result<TraeAgent, Box<dyn std::error::Error>> {
         "".to_string(), // Empty task initially
         AgentExecution::new("".to_string(), None),
         llm_client,
-        5, // max_step
+        10, // max_step
         model_config,
         None, // tools will be set in new_task
         vec![]
