@@ -333,7 +333,7 @@ async fn test_error_handling() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = ModelConfig::new("gpt-4o-2024-11-20".to_string(), provider)
         .with_temperature(0.7)
-        //.with_max_tokens(100)
+        .with_max_tokens(100)
         .with_max_retries(1); // Reduce retries for faster error testing
 
     match LLMClient::new(config) {
@@ -452,8 +452,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_base_url(base_url);
 
     let model_config = ModelConfig::new("gpt-4o-2024-11-20".to_string(), provider)
-        .with_temperature(0.7);
-        //.with_max_tokens(500);
+        .with_temperature(0.7)
+        .with_max_tokens(500);
 
     // Create LLM client
     let mut client = LLMClient::new(model_config.clone())?;
