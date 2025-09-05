@@ -7,6 +7,8 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
+use crate::base_agent::AgentStep;
+
 // every recorde should have CRU feature
 pub trait Recorder {
     fn write_record(&self) -> Result<(), TrajectoryError>;
@@ -55,6 +57,8 @@ pub struct LLMRecord {
     pub model: Option<String>,
     pub provider: Option<String>,
     pub llmdetails: Option<TrajectoryDetails>,
+
+    pub Steps: Option<AgentStep>,
 }
 
 
