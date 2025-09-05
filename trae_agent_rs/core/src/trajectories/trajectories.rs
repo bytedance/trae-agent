@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::vec;
 use std::{fs, time::SystemTime};
 use thiserror::Error;
 
@@ -16,14 +17,14 @@ pub trait Recorder {
 pub struct Trajectory {
     pub path: String,
     pub start_time: String,
-    pub trajectory_data: TrajectoryData,
+    pub trajectory_data: Option<TrajectoryData>,
 }
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct TrajectoryData {
     pub task: String,
     pub start_time: String,
-    pub end_time: String,
+    pub end_time: Option<String>,
     pub provider: String,
     pub model: String,
     pub max_step: u64,
@@ -66,11 +67,29 @@ pub enum TrajectoryDetails {
 
 impl Trajectory {
     pub fn start_recording(&mut self, task: &str, provider: &str, model: &str, max_step: u64) {
-        self.trajectory_data.task = task.to_string();
-        self.trajectory_data.start_time = system_time_to_string(&SystemTime::now());
-        self.trajectory_data.max_step = max_step;
-        self.trajectory_data.provider = provider.to_string();
-        self.trajectory_data.model = model.to_string();
+
+        if let Some(trajectory) = &mut self.trajectory_data{
+            trajectory.task = task.to_string();
+            trajectory.start_time = system_time_to_string(&SystemTime::now());
+            trajectory.max_step = max_step;
+            trajectory.provider = provider.to_string();
+            trajectory.model = model.to_string();
+        }else {
+
+            self.trajectory_data = Some(TrajectoryData { 
+                task: task.to_string(), 
+                start_time: system_time_to_string(&SystemTime::now()), 
+                end_time: None, 
+                provider: provider.to_string(), 
+                model: model.to_string(), 
+                max_step: max_step, 
+                llm_interaction: vec![], 
+                success: false, 
+                final_result: None, 
+                execution_time: 0.,
+            })
+
+        }
     }
 }
 
@@ -96,7 +115,12 @@ impl Recorder for Trajectory {
             }
         };
         let mut writer = io::BufWriter::new(file);
-        let serializable_data = self.trajectory_data.to_serializable(); // Using a helper method
+
+        let serializable_data = self.trajectory_data
+                    .as_ref() 
+                    .unwrap()
+                    .to_serializable();
+
         let json_string = match serde_json::to_string_pretty(&serializable_data) {
             Ok(json) => json,
             Err(e) => {
@@ -159,40 +183,71 @@ impl Recorder for Trajectory {
                 ));
             }
         }
-        // Apply updates
+        
         if let Some(v) = update.task {
-            self.trajectory_data.task = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap()
+            .task = v;
         }
         if let Some(v) = update.start_time {
-            self.trajectory_data.start_time = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap() 
+            .start_time = v;
         }
         if let Some(v) = update.end_time {
-            self.trajectory_data.end_time = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap() 
+            .end_time = Some(v);
         }
         if let Some(v) = update.provider {
-            self.trajectory_data.provider = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap() 
+            .provider = v;
         }
         if let Some(v) = update.model {
-            self.trajectory_data.model = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap() 
+            .model = v;
         }
         if let Some(v) = update.max_step {
-            self.trajectory_data.max_step = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap() 
+            .max_step = v;
         }
         if let Some(v) = update.llm_interaction {
-            self.trajectory_data.llm_interaction = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap() 
+            .llm_interaction = v;
         }
         if let Some(v) = update.success {
-            self.trajectory_data.success = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap() 
+            .success = v;
         }
         if let Some(v) = update.final_result {
-            self.trajectory_data.final_result = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap() 
+            .final_result = v;
         }
         if let Some(v) = update.execution_time {
-            self.trajectory_data.execution_time = v;
+            self.trajectory_data
+            .as_mut()
+            .unwrap() 
+            .execution_time = v;
         }
 
         Ok(())
     }
+
     fn write_record(&self) -> Result<(), TrajectoryError> {
         let trajectory_path = Path::new(&self.path);
         // Ensure parent directory exists
@@ -216,7 +271,10 @@ impl Recorder for Trajectory {
         };
         let mut writer = io::BufWriter::new(file);
         // Serialize to pretty JSON
-        let serializable_data = self.trajectory_data.to_serializable();
+        let serializable_data = self.trajectory_data
+            .as_ref()
+            .unwrap() 
+            .to_serializable();
         let json_string = match serde_json::to_string_pretty(&serializable_data) {
             Ok(json) => json,
             Err(e) => {
@@ -252,7 +310,7 @@ pub enum TrajectoryError {
     Validation(String),
 }
 
-fn system_time_to_string(st: &SystemTime) -> String {
+pub fn system_time_to_string(st: &SystemTime) -> String {
     st.duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs().to_string())
         .unwrap_or_else(|_| "N/A".to_string())
@@ -276,11 +334,9 @@ impl TrajectoryData {
 }
 
 // UNIT TEST:
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use std::fs;
     use std::io::Read;
     use std::path::Path;
@@ -291,10 +347,10 @@ mod tests {
         Trajectory {
             path: path.into(),
             start_time: "0".to_string(),
-            trajectory_data: TrajectoryData {
+            trajectory_data: Some(TrajectoryData {
                 task: "test-task".to_string(),
                 start_time: "1234567890".to_string(),
-                end_time: "1234567899".to_string(),
+                end_time: Some("1234567899".to_string()),
                 provider: "openai".to_string(),
                 model: "gpt-4o".to_string(),
                 max_step: 5,
@@ -302,7 +358,7 @@ mod tests {
                 success: true,
                 final_result: Some("done".to_string()),
                 execution_time: 1.23,
-            },
+            }),
         }
     }
 
@@ -470,10 +526,10 @@ mod tests {
         Trajectory {
             path: "/tmp/traj.json".into(),
             start_time: "2024-01-01T00:00:00Z".into(),
-            trajectory_data: TrajectoryData {
+            trajectory_data: Some(TrajectoryData {
                 task: "initial task".into(),
                 start_time: "2024-01-01T00:00:00Z".into(),
-                end_time: "2024-01-01T01:00:00Z".into(),
+                end_time: Some("2024-01-01T01:00:00Z".into()),
                 provider: "openai".into(),
                 model: "gpt-4".into(),
                 max_step: 5,
@@ -481,7 +537,7 @@ mod tests {
                 success: false,
                 final_result: Some("pending".into()),
                 execution_time: 3600.0,
-            },
+            }),
         }
     }
     #[test]
@@ -492,9 +548,9 @@ mod tests {
             ..Default::default()
         };
         t.update_record(upd).unwrap();
-        assert_eq!(t.trajectory_data.task, "new task");
+        assert_eq!(t.trajectory_data.as_ref().unwrap().task, "new task");
         // Unchanged others
-        assert_eq!(t.trajectory_data.provider, "openai");
+        assert_eq!(t.trajectory_data.as_ref().unwrap().provider, "openai");
     }
     #[test]
     fn update_multiple_fields() {
@@ -508,11 +564,11 @@ mod tests {
             ..Default::default()
         };
         t.update_record(upd).unwrap();
-        assert_eq!(t.trajectory_data.provider, "anthropic");
-        assert_eq!(t.trajectory_data.model, "claude-3");
-        assert_eq!(t.trajectory_data.max_step, 42);
-        assert!(t.trajectory_data.success);
-        assert!((t.trajectory_data.execution_time - 123.45).abs() < f64::EPSILON);
+        assert_eq!(t.trajectory_data.as_ref().unwrap().provider, "anthropic");
+        assert_eq!(t.trajectory_data.as_ref().unwrap().model, "claude-3");
+        assert_eq!(t.trajectory_data.as_ref().unwrap().max_step, 42);
+        assert!(t.trajectory_data.as_ref().unwrap().success);
+        assert!((t.trajectory_data.as_ref().unwrap().execution_time - 123.45).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -524,7 +580,7 @@ mod tests {
             ..Default::default()
         };
         t.update_record(upd).unwrap();
-        assert_eq!(t.trajectory_data.final_result, None);
+        assert_eq!(t.trajectory_data.as_ref().unwrap().final_result, None);
     }
     #[test]
     fn set_final_result() {
@@ -534,7 +590,7 @@ mod tests {
             ..Default::default()
         };
         t.update_record(upd).unwrap();
-        assert_eq!(t.trajectory_data.final_result, Some("done".into()));
+        assert_eq!(t.trajectory_data.as_ref().unwrap().final_result, Some("done".into()));
     }
 
     #[test]
@@ -617,8 +673,8 @@ mod tests {
             ..Default::default()
         };
         t.update_record(upd).unwrap();
-        assert_eq!(t.trajectory_data.end_time, "2024-01-01T02:00:00Z");
-        assert!(t.trajectory_data.success);
+        assert_eq!(t.trajectory_data.as_ref().unwrap().end_time, Some("2024-01-01T02:00:00Z".to_string()));
+        assert!(t.trajectory_data.as_ref().unwrap().success);
     }
 
     #[test]
@@ -631,10 +687,10 @@ mod tests {
         let mut traj = Trajectory {
             path: path_str.clone(),
             start_time: "2024-01-01T00:00:00Z".to_string(),
-            trajectory_data: TrajectoryData {
+            trajectory_data: Some(TrajectoryData {
                 task: "".to_string(),
                 start_time: "".to_string(),
-                end_time: "2024-01-01T01:00:00Z".to_string(),
+                end_time: Some("2024-01-01T01:00:00Z".to_string()),
                 provider: "".to_string(),
                 model: "".to_string(),
                 max_step: 0,
@@ -642,13 +698,13 @@ mod tests {
                 success: true,
                 final_result: Some("done".to_string()),
                 execution_time: 3.14,
-            },
+            }),
         };
 
         // This sets task = "test-task", plus other fields
         traj.start_recording("test-task", "prov", "m1", 42);
-        traj.trajectory_data.end_time = "2024-01-01T01:00:00Z".to_string(); // if needed
-        traj.trajectory_data.execution_time = 3.14;
+        traj.trajectory_data.as_mut().unwrap().end_time = Some("2024-01-01T01:00:00Z".to_string()); // if needed
+        traj.trajectory_data.as_mut().unwrap().execution_time = 3.14;
 
         // Ensure file does not exist
         assert!(!file_path.exists());
@@ -664,7 +720,7 @@ mod tests {
         assert_eq!(v["task"], serde_json::json!("test-task"));
         assert_eq!(
             v["start_time"],
-            serde_json::json!(traj.trajectory_data.start_time)
+            serde_json::json!(traj.trajectory_data.as_ref().unwrap().start_time)
         );
         assert_eq!(v["end_time"], serde_json::json!("2024-01-01T01:00:00Z"));
         assert_eq!(v["provider"], serde_json::json!("prov"));
@@ -686,14 +742,14 @@ mod tests {
         fs::write(&file_path, br#"{"old":"data"}"#).unwrap();
         // First write
         let mut traj = sample_trajectory(path_str.clone());
-        traj.trajectory_data.task = "first".into();
+        traj.trajectory_data.as_mut().unwrap().task = "first".into();
         traj.write_record()
             .expect("first write_record should succeed");
         let first_content = fs::read_to_string(&file_path).unwrap();
         assert!(first_content.contains("\"first\""));
         assert!(!first_content.contains("\"old\""));
         // Second write with different content
-        traj.trajectory_data.task = "second".into();
+        traj.trajectory_data.as_mut().unwrap().task = "second".into();
         traj.write_record()
             .expect("second write_record should succeed");
         let second_content = fs::read_to_string(&file_path).unwrap();
