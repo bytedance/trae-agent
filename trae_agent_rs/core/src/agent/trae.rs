@@ -1,25 +1,24 @@
 // the implementation of trae agent
 
-use core::task;
+use std::alloc::System;
 use std::collections::HashMap;
-use std::env::args;
-use std::time::{Duration, SystemTime};
+use std::time::{SystemTime};
 use std::vec;
-
-use serde_json::to_string;
-use yaml_rust::yaml::Hash;
 
 use crate::agent::base_agent::*;
 use crate::bash::Bash;
 use crate::edit::Edit;
 use crate::llm_basics::{LLMUsage, TextContent};
-use crate::{ContentItem, LLMMessage, Tool, agent, base};
+use crate::trajectories::trajectories::{system_time_to_string, Trajectory, TrajectoryData};
+use crate::{ContentItem, LLMMessage, Tool, agent};
 
-const TraeAgentToolNames: [&str; 2] = ["str_replace_based_edit_tool", "bash"];
+const TRAE_AGENT_TOOL_NAMES: [&str; 2] = ["str_replace_based_edit_tool", "bash"];
 
 pub struct TraeAgent {
     pub baseagent: agent::base_agent::BaseAgent,
     pub initial_msgs: Vec<LLMMessage>,
+
+    pub trajectory_recorder: Trajectory,
 
     pub base_commit: Option<String>, 
     pub must_patch: Option<String>, 
@@ -27,10 +26,19 @@ pub struct TraeAgent {
 }
 
 impl TraeAgent {
-    pub fn new(base_agent: agent::base_agent::BaseAgent) -> Self {
+    pub fn new(
+        base_agent: agent::base_agent::BaseAgent,
+        path: Option<String>,
+    ) -> Self {
         TraeAgent {
             baseagent: base_agent,
             initial_msgs: vec![],
+
+            trajectory_recorder: Trajectory { 
+                path: path.unwrap_or("./".to_string()), 
+                start_time: system_time_to_string(&SystemTime::now()),
+                trajectory_data: None
+            },
 
             base_commit: None,
             must_patch: None,
@@ -55,7 +63,7 @@ impl Agent for TraeAgent {
             let mut tools_map: HashMap<String, usize> = HashMap::new();
             let mut tools: Vec<Box<dyn Tool>> = Vec::new();
 
-            for tool in TraeAgentToolNames {
+            for tool in TRAE_AGENT_TOOL_NAMES {
                 match tool {
                     "bash" => {
 
@@ -150,6 +158,7 @@ impl Agent for TraeAgent {
             }
         );
 
+        
 
         // todo trajectory recorder 
         Ok(())
