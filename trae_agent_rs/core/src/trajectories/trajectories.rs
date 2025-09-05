@@ -58,7 +58,7 @@ pub struct LLMRecord {
     pub provider: Option<String>,
     pub llmdetails: Option<TrajectoryDetails>,
 
-    pub Steps: Option<AgentStep>,
+    pub steps: Option<AgentStep>,
 }
 
 
