@@ -22,7 +22,18 @@ model_providers:
     anthropic:
         api_key: your_anthropic_api_key
         provider: anthropic
-
+    doubao:
+        api_key: your_doubao_api_key
+        provider: doubao
+        base_url: https://ark.cn-beijing.volces.com/api/v3
+    deepseek:
+        api_key: your_deepseek_api_key
+        provider: deepseek
+        base_url: https://api.deepseek.com
+    qwen:
+        api_key: your_qwen_api_key
+        provider: qwen
+        base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
 models:
     trae_agent_model:
         model_provider: anthropic
