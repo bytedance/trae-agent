@@ -223,7 +223,7 @@ impl LLMMessage {
 }
 
 /// LLM usage format
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq,Debug, Clone, Serialize, Deserialize)]
 pub struct LLMUsage {
     pub input_tokens: i32,
     pub output_tokens: i32,
@@ -308,7 +308,7 @@ impl fmt::Display for LLMUsage {
 }
 
 ///Enum of finish reason
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FinishReason {
     Stop,
     ToolCalls,
@@ -317,7 +317,7 @@ pub enum FinishReason {
 }
 
 /// Standard LLM response format
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LLMResponse {
     pub content: Vec<ContentItem>,
     pub usage: Option<LLMUsage>,

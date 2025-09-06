@@ -158,7 +158,6 @@ impl Agent for TraeAgent {
             }
         );
 
-
         self.trajectory_recorder
             .start_recording(
                 &self.baseagent.task, 
@@ -197,6 +196,7 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
             model: Some(self.baseagent.model_config.model.to_string().clone()),
             provider: Some(self.baseagent.model_config.model_provider.name.to_string().clone()),
             llmdetails: None,
+            steps: None,
         };
 
         let mut step = AgentStep::new(step_number, AgentStepState::THINKING);
@@ -207,13 +207,11 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
                 &mut step, 
                 &self.initial_msgs, 
                 &mut exec_agent, 
-                &mut new_llm_record,
                 None
             )
             .await;
 
 
-        dbg!(&self.initial_msgs); // TODO change it to trajectory
         // update the record
     
         match exec_msg {
@@ -241,6 +239,8 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
             }
         }
 
+        new_llm_record.steps = Some(step.clone());
+        
         // save the record
         self.trajectory_recorder.trajectory_data
             .as_mut()
@@ -277,12 +277,27 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
         cache_read_input_tokens:0,
     }); //TODO full implementation of total token
 
+
+    // TODO: refactor & extract it to another function
+    self
+        .trajectory_recorder
+        .trajectory_data
+        .as_mut()
+        .unwrap()
+        .execution_time = exec_agent.execution_time.clone();
+
+    self
+        .trajectory_recorder
+        .trajectory_data
+        .as_mut()
+        .unwrap()
+        .success = exec_agent.success;
+
     // Close tools implementation
     self.baseagent.close_tools();
 
     // TODO: update CLI here if needed
     // You might want to add CLI updates for final results
-
     // Update the initial_msgs with the final message state for potential future use
 
     Ok(exec_agent)

@@ -90,7 +90,7 @@ impl BaseAgent {
 }
 
 // this struct should be private Agent
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AgentExecution {
     pub task: String,
     pub steps: Vec<AgentStep>,
@@ -169,10 +169,7 @@ impl BaseAgent {
         execution: &mut AgentExecution,
     ) {
         step.state = AgentStepState::COMPLETED;
-
-        // TODO: Trajectory has to be implemented her  message is needed here
         // TODO: CLI has to be update here message is needed here
-
         execution.steps.push(step.clone());
     }
 
@@ -195,7 +192,6 @@ impl BaseAgent {
         msgs: &Vec<LLMMessage>,
         exec: &mut AgentExecution,
 
-        record: &mut LLMRecord,
         is_task_complete: Option<Box<dyn FnOnce(&LLMResponse) -> bool>>,
     ) -> Result<Vec<LLMMessage>, AgentError> {
 
@@ -231,7 +227,6 @@ impl BaseAgent {
         let unwrap_response = llm_response.as_ref().expect("It should never be None");
         // update console
         // update llm usage
-
         // indicate task complete here
         if indicate_task_complete(&unwrap_response) {
             let check_complete: Box<dyn FnOnce(&LLMResponse) -> bool> = match is_task_complete {
