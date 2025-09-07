@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
+data
 
 # Virtual environments
 .venv
@@ -183,6 +184,9 @@ trae_config.yaml
 # VS Code settings
 .vscode/
 !.vscode/launch.template.json
+.gitignore
+
+hello.py
 
 # Patch selection python binary
 py312/
