@@ -14,7 +14,7 @@ class TestBashTool(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         # Cleanup any active session
         if self.tool._session:
-            self.tool._session.stop()
+            await self.tool._session.stop()
 
     async def test_tool_initialization(self):
         self.assertEqual(self.tool.get_name(), "bash")

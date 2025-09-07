@@ -83,6 +83,14 @@ class OpenAICompatibleClient(BaseLLMClient):
         extra_headers: dict[str, str] | None = None,
     ) -> ChatCompletion:
         """Create a response using the provider's API. This method will be decorated with retry logic."""
+        """Select the correct token parameter based on model configuration.
+        If max_completion_tokens is set, use it. Otherwise, use max_tokens."""
+        token_params = {}
+        if model_config.should_use_max_completion_tokens():
+            token_params["max_completion_tokens"] = model_config.get_max_tokens_param()
+        else:
+            token_params["max_tokens"] = model_config.get_max_tokens_param()
+
         return self.client.chat.completions.create(
             model=model_config.model,
             messages=self.message_history,
@@ -93,9 +101,9 @@ class OpenAICompatibleClient(BaseLLMClient):
             and "gpt-5" not in model_config.model
             else openai.NOT_GIVEN,
             top_p=model_config.top_p,
-            max_tokens=model_config.max_tokens,
             extra_headers=extra_headers if extra_headers else None,
             n=1,
+            **token_params,
         )
 
     @override

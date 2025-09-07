@@ -187,3 +187,6 @@ trae_config.yaml
 .gitignore
 
 hello.py
+
+# Patch selection python binary
+py312/

@@ -60,7 +60,7 @@ class _BashSession:
 
         self._started = True
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Terminate the bash shell."""
         if not self._started:
             raise ToolError("Session has not started.")
@@ -68,7 +68,21 @@ class _BashSession:
             return
         if self._process.returncode is not None:
             return
-        self._process.terminate()
+        try:
+            self._process.terminate()
+
+            # Wait until the process has truly terminated.
+            stdout, stderr = await asyncio.wait_for(self._process.communicate(), timeout=5.0)
+        except asyncio.TimeoutError:
+            self._process.kill()
+            try:
+                # Set a shorter timeout for the cleanup process
+                stdout, stderr = await asyncio.wait_for(self._process.communicate(), timeout=2.0)
+            except asyncio.TimeoutError:
+                # If it still timeout, return None.
+                return None
+        except Exception:
+            return None
 
     async def run(self, command: str) -> ToolExecResult:
         """Execute a command in the bash shell."""
@@ -199,7 +213,7 @@ class BashTool(Tool):
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
         if arguments.get("restart"):
             if self._session:
-                self._session.stop()
+                await self._session.stop()
             self._session = _BashSession()
             await self._session.start()
 
@@ -222,3 +236,11 @@ class BashTool(Tool):
             return await self._session.run(command)
         except Exception as e:
             return ToolExecResult(error=f"Error running bash command: {e}", error_code=-1)
+
+    @override
+    async def close(self):
+        """Properly close self._process."""
+        if self._session:
+            ret = await self._session.stop()
+            self._session = None
+            return ret
