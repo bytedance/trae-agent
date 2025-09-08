@@ -23,8 +23,8 @@ pub struct ToolResult {
 impl ToolResult {
     pub fn new(call_id: String, name: String) -> Self {
         ToolResult {
-            call_id: call_id,
-            name: name,
+            call_id,
+            name,
             success: false,
             result: None,
             error: None,

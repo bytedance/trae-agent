@@ -4,7 +4,7 @@ use std::io::{self};
 use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 
 use tokio::time;
 
@@ -23,7 +23,7 @@ pub struct Bash {
 impl Bash {
     pub fn new(model_provider: String) -> Self {
         Bash {
-            model_provider: model_provider,
+            model_provider,
             bash: BashProcess::new(),
         }
     }
@@ -140,14 +140,32 @@ impl Tool for Bash {
 
             match exec_result {
                 Ok(res) => {
-                    if res.error != "" || res.error.len() != 0 || res.error_code != 0 {
+                    // Store values to avoid borrow checker issues
+                    let stdout = res.output;
+                    let stderr = res.error;
+                    let exit_code = res.error_code;
+                    
+                    // Create combined output showing both stdout and stderr
+                    let mut result = stdout.clone();
+                    
+                    // If there's stderr content, append it with a clear separator
+                    if !stderr.is_empty() {
+                        if !result.is_empty() {
+                            result.push_str("\n");
+                        }
+                        result.push_str("STDERR:\n");
+                        result.push_str(&stderr);
+                    }
+                    
+                    // Only treat it as an error if exit code is non-zero
+                    if exit_code != 0 {
                         return Err(format!(
-                            "Error: {} , Error code: {} ",
-                            res.error, res.error_code
+                            "Command failed with exit code {}\nSTDOUT:\n{}\nSTDERR:\n{}",
+                            exit_code, stdout, stderr
                         ));
                     }
 
-                    return Ok(res.output);
+                    return Ok(result);
                 }
                 Err(e) => {
                     return Err(format!("Unexpected Error {}", e)); // this should never happen due to previous check
@@ -162,7 +180,7 @@ struct BashProcess {
     child: Option<Child>,
     stdin: Option<ChildStdin>,
     stdout: Option<ChildStdout>,
-    // We do not capture stderr separately here, but can be extended.
+    stderr: Option<ChildStderr>,
     started: bool,
     timed_out: bool,
     timeout: Duration,
@@ -204,9 +222,11 @@ impl BashProcess {
 
         let stdin = child.stdin.take().ok_or(BashError::SessionNotStarted)?;
         let stdout = child.stdout.take().ok_or(BashError::SessionNotStarted)?;
+        let stderr = child.stderr.take().ok_or(BashError::SessionNotStarted)?;
 
         self.stdin = Some(stdin);
         self.stdout = Some(stdout);
+        self.stderr = Some(stderr);
 
         self.child = Some(child);
         self.started = true;
@@ -253,6 +273,7 @@ impl BashProcess {
             .as_mut()
             .ok_or_else(|| BashError::Other("stdin not available".to_string()))?;
         let stdout = self.stdout.as_mut().ok_or(BashError::SessionNotStarted)?;
+        let stderr = self.stderr.as_mut().ok_or(BashError::SessionNotStarted)?;
 
         if let Some(code) = child.try_wait()? {
             return Err(BashError::BashExited(code.code().unwrap_or(-1)));
@@ -298,61 +319,69 @@ impl BashProcess {
         // Timeout wrapper
         let timeout = self.timeout;
         let mut timed_out = false;
-        let mut buffer = [0u8; 4096]; // Changed: Use byte buffer instead of String
-        let stdout_reader = stdout;
+        let mut stdout_buffer = [0u8; 4096];
+        let mut stderr_buffer = [0u8; 4096];
 
-        //  dbg!("Starting read loop with timeout", timeout);
+        //  dbg!("Starting concurrent read loop with timeout", timeout);
 
+        // Use tokio::select! to read from both stdout and stderr concurrently
         loop {
-            // Changed: Use read() instead of read_to_string() to avoid hanging
-            let read_fut = stdout_reader.read(&mut buffer);
-
-            match time::timeout(timeout, read_fut).await {
-                Ok(Ok(0)) => {
-                    // dbg!("Read 0 bytes, breaking");
-                    break;
-                }
-                Ok(Ok(bytes_read)) => {
-                    //dbg!("Read bytes", bytes_read);
-
-                    // Convert bytes to string
-                    let chunk = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
-                    // dbg!("Chunk content", &chunk);
-
-                    // Check if sentinel is found
-                    if chunk.contains(sentinel_before) {
-                        if let Some(pos) = chunk.find(sentinel_before) {
-                            output_accum.push_str(&chunk[..pos]);
-                            let rest = &chunk[pos + sentinel_before.len()..];
-                            //dbg!("Rest after sentinel_before", rest);
-
-                            // Look for sentinel_after in the rest
-                            if let Some(after_pos) = rest.find(sentinel_after) {
-                                let code_str = &rest[..after_pos];
-                                //dbg!("Found error code string", code_str);
-                                if let Ok(code) = code_str.trim().parse::<i32>() {
-                                    error_code = Some(code);
-                                    //dbg!("Parsed error code", code);
+            tokio::select! {
+                // Read from stdout
+                stdout_result = stdout.read(&mut stdout_buffer) => {
+                    match stdout_result {
+                        Ok(0) => {
+                            // EOF on stdout
+                            break;
+                        }
+                        Ok(bytes_read) => {
+                            // Convert bytes to string
+                            let chunk = String::from_utf8_lossy(&stdout_buffer[..bytes_read]).to_string();
+                            
+                            // Check if sentinel is found
+                            if chunk.contains(sentinel_before) {
+                                if let Some(pos) = chunk.find(sentinel_before) {
+                                    output_accum.push_str(&chunk[..pos]);
+                                    let rest = &chunk[pos + sentinel_before.len()..];
+                                    
+                                    // Look for sentinel_after in the rest
+                                    if let Some(after_pos) = rest.find(sentinel_after) {
+                                        let code_str = &rest[..after_pos];
+                                        if let Ok(code) = code_str.trim().parse::<i32>() {
+                                            error_code = Some(code);
+                                        }
+                                    }
                                 }
+                                break;
                             } else {
-                                //dbg!("sentinel_after not found in rest");
+                                // Accumulate output as normal
+                                output_accum.push_str(&chunk);
                             }
                         }
-
-                        // dbg!("Breaking after finding sentinel");
-                        break;
-                    } else {
-                        // Accumulate output as normal
-                        output_accum.push_str(&chunk);
-                        //dbg!("Accumulated output length", output_accum.len());
+                        Err(e) => {
+                            return Err(BashError::Io(e));
+                        }
                     }
                 }
-                Ok(Err(e)) => {
-                    //dbg!("Read error", &e);
-                    return Err(BashError::Io(e));
+                
+                // Read from stderr
+                stderr_result = stderr.read(&mut stderr_buffer) => {
+                    match stderr_result {
+                        Ok(0) => {
+                            // EOF on stderr, continue reading stdout
+                        }
+                        Ok(bytes_read) => {
+                            let chunk = String::from_utf8_lossy(&stderr_buffer[..bytes_read]).to_string();
+                            error_accum.push_str(&chunk);
+                        }
+                        Err(_) => {
+                            // Stderr read error, but continue with stdout
+                        }
+                    }
                 }
-                Err(_) => {
-                    //dbg!("Timeout occurred");
+                
+                // Global timeout
+                _ = time::sleep(timeout) => {
                     timed_out = true;
                     break;
                 }
@@ -360,25 +389,19 @@ impl BashProcess {
         }
 
         if timed_out {
-            // dbg!("Setting timed_out flag and returning timeout error");
             self.timed_out = true;
             return Err(BashError::Timeout);
         }
-        let mut error_accum = String::new();
 
-        // Try to read available stderr data without blocking
-        if let Some(child) = &mut self.child {
-            if let Some(stderr) = child.stderr.as_mut() {
-                let mut err_buf = [0u8; 4096];
-
-                // Use a very short timeout to avoid blocking
-                match time::timeout(Duration::from_millis(10), stderr.read(&mut err_buf)).await {
-                    Ok(Ok(bytes_read)) if bytes_read > 0 => {
-                        error_accum = String::from_utf8_lossy(&err_buf[..bytes_read]).to_string();
-                        //dbg!("Read stderr", &error_accum);
-                    }
-                    _ => {}
+        // Try to read any remaining stderr data with a short timeout
+        let mut final_stderr_buffer = [0u8; 4096];
+        loop {
+            match time::timeout(Duration::from_millis(50), stderr.read(&mut final_stderr_buffer)).await {
+                Ok(Ok(bytes_read)) if bytes_read > 0 => {
+                    let chunk = String::from_utf8_lossy(&final_stderr_buffer[..bytes_read]).to_string();
+                    error_accum.push_str(&chunk);
                 }
+                _ => break,
             }
         }
 
@@ -402,6 +425,7 @@ impl BashProcess {
             child: None,
             stdin: None,
             stdout: None,
+            stderr: None,
             started: false,
             timed_out: false,
             timeout: Duration::from_secs(120),
@@ -438,21 +462,7 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
     use std::time::Duration;
-    use tokio::runtime::Runtime;
 
-    // helper to run async function synchronously in tests with timeout
-    fn run_async<F, R>(f: F) -> R
-    where
-        F: std::future::Future<Output = R>,
-    {
-        // Use a small runtime per test with 3s timeout
-        let rt = Runtime::new().expect("create runtime");
-        rt.block_on(async {
-            tokio::time::timeout(Duration::from_secs(3), f)
-                .await
-                .expect("Test timed out after 3 seconds")
-        })
-    }
 
     #[test]
     fn test_bash_new() {
@@ -518,29 +528,29 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_bash_process_start_and_stop() {
+    #[tokio::test]
+    async fn test_bash_process_start_and_stop() {
         let mut bash_process = BashProcess::new();
         bash_process.timeout = Duration::from_millis(500); // Very short timeout
 
-        let start_result = run_async(bash_process.start());
+        let start_result = bash_process.start().await;
         assert!(start_result.is_ok());
         assert!(bash_process.started);
 
         // Starting again should be ok (idempotent)
-        let start_again_result = run_async(bash_process.start());
+        let start_again_result = bash_process.start().await;
         assert!(start_again_result.is_ok());
 
-        let stop_result = run_async(bash_process.stop());
+        let stop_result = bash_process.stop().await;
         assert!(stop_result.is_ok());
         assert!(!bash_process.started);
     }
 
-    #[test]
-    fn test_bash_process_run_without_start() {
+    #[tokio::test]
+    async fn test_bash_process_run_without_start() {
         let mut bash_process = BashProcess::new();
 
-        let run_result = run_async(bash_process.run("echo test"));
+        let run_result = bash_process.run("echo test").await;
         match run_result {
             Ok(_) => panic!("Expected error when running without starting"),
             Err(BashError::SessionNotStarted) => {} // Expected
@@ -548,11 +558,11 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_stop_without_start() {
+    #[tokio::test]
+    async fn test_stop_without_start() {
         let mut bash_process = BashProcess::new();
 
-        let stop_result = run_async(bash_process.stop());
+        let stop_result = bash_process.stop().await;
         match stop_result {
             Ok(_) => panic!("Expected error when stopping without starting"),
             Err(BashError::SessionNotStarted) => {} // Expected
@@ -583,27 +593,115 @@ mod tests {
         assert_eq!(error.to_string(), "other error: custom error");
     }
 
-    // Test that timeout mechanism works properly
-    #[test]
-    fn test_bash_process_timeout() {
+    // Test that basic command execution works
+    #[tokio::test]
+    async fn test_bash_process_basic_run() {
         let mut bash_process = BashProcess::new();
-        bash_process.timeout = Duration::from_millis(100); // Very short timeout
+        bash_process.timeout = Duration::from_secs(5); // Reasonable timeout
 
-        run_async(bash_process.start()).expect("start should succeed");
+        bash_process.start().await.expect("start should succeed");
 
-        // This command should timeout due to the very short timeout
-        let run_result = run_async(bash_process.run("echo 'test'"));
+        // This command should complete quickly and successfully
+        let run_result = bash_process.run("echo 'hello world'").await;
+        
         match run_result {
-            Ok(_) => {
-                // If it succeeds, that's fine too (very fast execution)
+            Ok(result) => {
+                assert!(!bash_process.timed_out);
+                assert!(result.output.contains("hello world"));
             }
+            Err(error) => {
+                panic!("Expected success, got error: {:?}", error);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_bash_process_stderr_output() {
+        let mut bash_process = BashProcess::new();
+        bash_process.timeout = Duration::from_millis(500); // Very short timeout
+
+        bash_process.start().await.expect("start should succeed");
+
+        let run_result = bash_process.run("echo 'hello world' >&2").await;
+        assert!(run_result.is_ok());
+        assert!(run_result.unwrap().error.contains("hello world"));
+    }
+
+    #[tokio::test]
+    async fn test_multiple_commands_in_one_line() {
+        let mut bash_process = BashProcess::new();
+        bash_process.timeout = Duration::from_millis(500); // Very short timeout
+
+        bash_process.start().await.expect("start should succeed");
+
+        let run_result = bash_process.run("echo 'hello world' && echo 'error message' >&2").await.unwrap();
+        assert!(run_result.output.contains("hello world"));
+        assert!(run_result.error.contains("error message"));
+    }
+
+    #[tokio::test]
+    async fn test_multiple_commands_one_by_one() {
+        let mut bash_process = BashProcess::new();
+        bash_process.timeout = Duration::from_millis(500); // Very short timeout
+
+        bash_process.start().await.expect("start should succeed");
+
+        let run_result = bash_process.run("echo 'hello world'").await.unwrap();
+        assert!(run_result.output.contains("hello world"));
+
+        let run_result = bash_process.run("echo 'error message' >&2").await.unwrap();
+        assert!(run_result.error.contains("error message"));
+
+        let run_result = bash_process.run("echo 'hello world'").await.unwrap();
+        assert!(run_result.output.contains("hello world"));
+
+        let run_result = bash_process.run("echo 'error message' >&2").await.unwrap();
+        assert!(run_result.error.contains("error message"));
+    }
+
+    #[tokio::test]
+    async fn test_bash_process_restart() {
+        let mut bash_process = BashProcess::new();
+        bash_process.timeout = Duration::from_millis(500); // Very short timeout
+
+        bash_process.start().await.expect("start should succeed");
+
+        let run_result = bash_process.run("echo 'hello world'").await;
+        assert!(run_result.is_ok());
+        assert!(run_result.unwrap().output.contains("hello world"));
+
+        let restart_result = bash_process.stop().await;
+        assert!(restart_result.is_ok());
+
+        bash_process.start().await.expect("start should succeed");
+
+        let run_result = bash_process.run("echo 'hello world'").await;
+        assert!(run_result.is_ok());
+        assert!(run_result.unwrap().output.contains("hello world"));
+    }
+
+    // Test that timeout mechanism works properly
+    #[tokio::test]
+    async fn test_bash_process_timeout() {
+        let mut bash_process = BashProcess::new();
+        bash_process.timeout = Duration::from_millis(200); // Short but reasonable timeout
+
+        bash_process.start().await.expect("start should succeed");
+
+        // This command should timeout due to the short timeout
+        // Use a command that will definitely take longer than 200ms
+        let run_result = bash_process.run("sleep 10").await;
+        
+        // The result should be a timeout error
+        match run_result {
             Err(BashError::Timeout) => {
-                // This is expected with very short timeout
                 assert!(bash_process.timed_out);
             }
-            Err(e) => {
-                // Other errors might occur due to timing
-                println!("Got error (acceptable): {:?}", e);
+            Err(other_error) => {
+                panic!("Expected timeout error, got: {:?}", other_error);
+            }
+            Ok(_) => {
+                panic!("Expected timeout error, but command succeeded");
             }
         }
     }
@@ -611,7 +709,7 @@ mod tests {
     // Mock test for execute function that avoids actual bash execution
     #[test]
     fn test_execute_argument_parsing() {
-        let bash = Bash::new("openai".to_string());
+        let _bash = Bash::new("openai".to_string());
 
         // Test that arguments are parsed correctly
         let mut args = HashMap::new();
@@ -630,8 +728,8 @@ mod tests {
     }
 
     // Integration test with timeout - this might still hang but will be killed by outer timeout
-    #[test]
-    fn test_basic_integration() {
+    #[tokio::test]
+    async fn test_basic_integration() {
         let mut bash = Bash::new("openai".to_string());
         bash.bash.timeout = Duration::from_millis(200); // Very short timeout
 
@@ -640,8 +738,9 @@ mod tests {
         args.insert("restart".to_string(), json!(false));
 
         // This might timeout, succeed, or fail - all are acceptable for this test
-        let _result = run_async(bash.execute(args));
-        // We don't assert on result since bash execution might be flaky in test environment
+        let _result = bash.execute(args).await;
+        
+        assert!(!bash.bash.timed_out);
     }
 
     // Test the Tool trait implementation
@@ -659,8 +758,8 @@ mod tests {
     }
 
     // Test ls command execution
-    #[test]
-    fn test_execute_ls_command() {
+    #[tokio::test]
+    async fn test_execute_ls_command() {
         let mut bash = Bash::new("openai".to_string());
         bash.bash.timeout = Duration::from_millis(1000);
 
@@ -668,7 +767,7 @@ mod tests {
         args.insert("command".to_string(), json!("ls /"));
         args.insert("restart".to_string(), json!(false));
 
-        let result = run_async(bash.execute(args));
+        let result = bash.execute(args).await;
         match result {
             Ok(output) => {
                 // Check for common directories that should exist on most systems
@@ -690,8 +789,8 @@ mod tests {
     }
 
     // Test echo with multiple lines
-    #[test]
-    fn test_execute_echo_multiline() {
+    #[tokio::test]
+    async fn test_execute_echo_multiline() {
         let mut bash = Bash::new("openai".to_string());
         bash.bash.timeout = Duration::from_millis(500);
 
@@ -702,7 +801,7 @@ mod tests {
         );
         args.insert("restart".to_string(), json!(false));
 
-        let result = run_async(bash.execute(args));
+        let result = bash.execute(args).await;
         match result {
             Ok(output) => {
                 // Check that all three lines are present in output

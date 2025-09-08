@@ -90,11 +90,11 @@ impl Trajectory {
                 end_time: None,
                 provider: provider.to_string(),
                 model: model.to_string(),
-                max_step: max_step,
+                max_step,
                 llm_interaction: vec![],
                 success: false,
                 final_result: None,
-                execution_time: 0.,
+                execution_time: 0.0,
             })
         }
     }

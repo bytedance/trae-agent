@@ -75,13 +75,13 @@ impl BaseAgent {
         tools: Vec<Box<dyn tools::Tool>>,
     ) -> Self {
         BaseAgent {
-            task: task,
+            task,
             execution_record: record,
             llm_client: client,
-            model_config: model_config,
-            max_step: max_step,
-            tools: tools,
-            tools_map: tools_map,
+            model_config,
+            max_step,
+            tools,
+            tools_map,
         }
     }
 }
@@ -101,7 +101,7 @@ pub struct AgentExecution {
 impl AgentExecution {
     pub fn new(task: String, steps: Option<Vec<AgentStep>>) -> Self {
         AgentExecution {
-            task: task,
+            task,
             steps: match steps {
                 None => vec![],
                 Some(t) => t,
@@ -135,8 +135,8 @@ pub struct AgentStep {
 impl AgentStep {
     pub fn new(step_number: u32, state: AgentStepState) -> Self {
         AgentStep {
-            step_number: step_number,
-            state: state,
+            step_number,
+            state,
             thought: None,
             llm_response: None,
             tool_calls: None,
