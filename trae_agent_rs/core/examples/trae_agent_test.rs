@@ -120,7 +120,7 @@ fn create_test_trae_agent() -> Result<TraeAgent, Box<dyn std::error::Error>> {
         vec![]
     );
 
-    Ok(TraeAgent::new(base_agent))
+    Ok(TraeAgent::new(base_agent, None))
 }
 
 /// Test TraeAgent initialization

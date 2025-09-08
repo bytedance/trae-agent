@@ -1,25 +1,24 @@
 // the implementation of trae agent
 
-use core::task;
+use std::alloc::System;
 use std::collections::HashMap;
-use std::env::args;
-use std::time::{Duration, SystemTime};
+use std::time::{SystemTime};
 use std::vec;
-
-use serde_json::to_string;
-use yaml_rust::yaml::Hash;
 
 use crate::agent::base_agent::*;
 use crate::bash::Bash;
 use crate::edit::Edit;
 use crate::llm_basics::{LLMUsage, TextContent};
-use crate::{ContentItem, LLMMessage, Tool, agent, base};
+use crate::trajectories::trajectories::{system_time_to_string, LLMRecord, Recorder, Trajectory, TrajectoryData};
+use crate::{agent, llm_provider, ContentItem, LLMMessage, Tool};
 
-const TraeAgentToolNames: [&str; 2] = ["str_replace_based_edit_tool", "bash"];
+const TRAE_AGENT_TOOL_NAMES: [&str; 2] = ["str_replace_based_edit_tool", "bash"];
 
 pub struct TraeAgent {
     pub baseagent: agent::base_agent::BaseAgent,
     pub initial_msgs: Vec<LLMMessage>,
+
+    pub trajectory_recorder: Trajectory,
 
     pub base_commit: Option<String>, 
     pub must_patch: Option<String>, 
@@ -27,10 +26,19 @@ pub struct TraeAgent {
 }
 
 impl TraeAgent {
-    pub fn new(base_agent: agent::base_agent::BaseAgent) -> Self {
+    pub fn new(
+        base_agent: agent::base_agent::BaseAgent,
+        path: Option<String>,
+    ) -> Self {
         TraeAgent {
             baseagent: base_agent,
             initial_msgs: vec![],
+
+            trajectory_recorder: Trajectory { 
+                path: path.unwrap_or("./".to_string()), 
+                start_time: system_time_to_string(&SystemTime::now()),
+                trajectory_data: None
+            },
 
             base_commit: None,
             must_patch: None,
@@ -55,7 +63,7 @@ impl Agent for TraeAgent {
             let mut tools_map: HashMap<String, usize> = HashMap::new();
             let mut tools: Vec<Box<dyn Tool>> = Vec::new();
 
-            for tool in TraeAgentToolNames {
+            for tool in TRAE_AGENT_TOOL_NAMES {
                 match tool {
                     "bash" => {
 
@@ -150,8 +158,14 @@ impl Agent for TraeAgent {
             }
         );
 
+        self.trajectory_recorder
+            .start_recording(
+                &self.baseagent.task, 
+                &self.baseagent.model_config.model_provider.name.to_string(), 
+                &self.baseagent.model_config.model.to_string(), 
+                self.baseagent.max_step.into(),
+            );        
 
-        // todo trajectory recorder 
         Ok(())
     }
 async fn run(&mut self) -> Result<AgentExecution, &'static str> {
@@ -174,15 +188,31 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
 
     while step_number <= self.baseagent.max_step {
         println!("Agent is running step: {}" , &step_number);
+
+        // start a new step record
+        let mut new_llm_record = LLMRecord{
+            content:"".to_string(),
+            token_usage: None, 
+            model: Some(self.baseagent.model_config.model.to_string().clone()),
+            provider: Some(self.baseagent.model_config.model_provider.name.to_string().clone()),
+            llmdetails: None,
+            steps: None,
+        };
+
         let mut step = AgentStep::new(step_number, AgentStepState::THINKING);
 
         let exec_msg = self
             .baseagent
-            .execute_step(&mut step, &self.initial_msgs, &mut exec_agent, None)
+            .execute_step(
+                &mut step, 
+                &self.initial_msgs, 
+                &mut exec_agent, 
+                None
+            )
             .await;
 
 
-        dbg!(&self.initial_msgs); // TODO change it to trajectory
+        // update the record
     
         match exec_msg {
             Err(e) => {
@@ -208,6 +238,16 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
                 }
             }
         }
+
+        new_llm_record.steps = Some(step.clone());
+        
+        // save the record
+        self.trajectory_recorder.trajectory_data
+            .as_mut()
+            .unwrap()
+            .llm_interaction
+            .push(new_llm_record);
+        
         step_number += 1;
     }
 
@@ -237,12 +277,27 @@ async fn run(&mut self) -> Result<AgentExecution, &'static str> {
         cache_read_input_tokens:0,
     }); //TODO full implementation of total token
 
+
+    // TODO: refactor & extract it to another function
+    self
+        .trajectory_recorder
+        .trajectory_data
+        .as_mut()
+        .unwrap()
+        .execution_time = exec_agent.execution_time.clone();
+
+    self
+        .trajectory_recorder
+        .trajectory_data
+        .as_mut()
+        .unwrap()
+        .success = exec_agent.success;
+
     // Close tools implementation
     self.baseagent.close_tools();
 
     // TODO: update CLI here if needed
     // You might want to add CLI updates for final results
-
     // Update the initial_msgs with the final message state for potential future use
 
     Ok(exec_agent)

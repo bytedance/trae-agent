@@ -16,8 +16,11 @@
 
 use std::collections::HashMap;
 use std::vec;
+use serde::Serialize;
 use thiserror::Error;
 
+use crate::trajectories::trajectories::LLMRecord;
+use crate::trajectories::trajectories::TrajectoryData;
 use crate::ContentItem;
 use crate::LLMClient;
 use crate::LLMMessage;
@@ -31,7 +34,7 @@ use crate::llm_basics::LLMUsage;
 use crate::llm_basics::TextContent;
 use crate::tools;
 
-#[derive(Clone,Debug)]
+#[derive(Serialize, Clone,Debug, PartialEq)]
 pub enum AgentStepState {
     THINKING,
     CALLINGTOOL,
@@ -40,7 +43,7 @@ pub enum AgentStepState {
     COMPLETED,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentState {
     IDLE,
     RUNNING,
@@ -87,7 +90,7 @@ impl BaseAgent {
 }
 
 // this struct should be private Agent
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AgentExecution {
     pub task: String,
     pub steps: Vec<AgentStep>,
@@ -116,7 +119,7 @@ impl AgentExecution {
 }
 
 // the execution of that specific step
-#[derive(Clone, Debug)]
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct AgentStep {
     pub step_number: u32,
 
@@ -166,10 +169,7 @@ impl BaseAgent {
         execution: &mut AgentExecution,
     ) {
         step.state = AgentStepState::COMPLETED;
-
-        // TODO: Trajectory has to be implemented her  message is needed here
         // TODO: CLI has to be update here message is needed here
-
         execution.steps.push(step.clone());
     }
 
@@ -197,8 +197,6 @@ impl BaseAgent {
 
         step.state = AgentStepState::THINKING;
         // a cli api should place here currently there's not cli api
-
-
         let response = self
             .llm_client
             .chat(msgs.clone(), &self.model_config, Some(&self.tools), false)
@@ -207,7 +205,7 @@ impl BaseAgent {
 
         let llm_response = match response {
             Ok(t) => Some(t),
-            Err(e) => Some(LLMResponse {
+            Err(_e) => Some(LLMResponse {
                 content: vec![ContentItem::Text(TextContent {
                     text: "error occur for llm responses".to_string(),
                 })],
@@ -229,7 +227,6 @@ impl BaseAgent {
         let unwrap_response = llm_response.as_ref().expect("It should never be None");
         // update console
         // update llm usage
-
         // indicate task complete here
         if indicate_task_complete(&unwrap_response) {
             let check_complete: Box<dyn FnOnce(&LLMResponse) -> bool> = match is_task_complete {
