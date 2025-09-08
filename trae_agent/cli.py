@@ -5,6 +5,8 @@
 
 import asyncio
 import os
+import shutil
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -47,6 +49,62 @@ def resolve_config_file(config_file: str) -> str:
         return config_file
 
 
+def check_docker(timeout=3):
+    # 1) Check whether the docker CLI is installed
+    if shutil.which("docker") is None:
+        return {"cli": False, "daemon": False, "version": None, "error": "docker CLI not found"}
+    # 2) Check whether the Docker daemon is reachable (this makes a real request)
+    try:
+        cp = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if cp.returncode == 0 and cp.stdout.strip():
+            return {"cli": True, "daemon": True, "version": cp.stdout.strip(), "error": None}
+        else:
+            # The daemon may not be running or permissions may be insufficient
+            return {
+                "cli": True,
+                "daemon": False,
+                "version": None,
+                "error": (cp.stderr or cp.stdout).strip(),
+            }
+    except Exception as e:
+        return {"cli": True, "daemon": False, "version": None, "error": str(e)}
+
+
+def build_with_pyinstaller():
+    os.system("rm -rf trae_agent/dist")
+    print("--- Building edit_tool ---")
+    subprocess.run(
+        [
+            "pyinstaller",
+            "--name",
+            "edit_tool",
+            "trae_agent/tools/edit_tool_cli.py",
+        ],
+        check=True,
+    )
+    print("\n--- Building json_edit_tool ---")
+    subprocess.run(
+        [
+            "pyinstaller",
+            "--name",
+            "json_edit_tool",
+            "--hidden-import=jsonpath_ng",
+            "trae_agent/tools/json_edit_tool_cli.py",
+        ],
+        check=True,
+    )
+    os.system("mkdir trae_agent/dist")
+    os.system("cp dist/edit_tool/edit_tool trae_agent/dist")
+    os.system("cp -r dist/json_edit_tool/_internal trae_agent/dist")
+    os.system("cp dist/json_edit_tool/json_edit_tool trae_agent/dist")
+    os.system("rm -rf dist")
+
+
 @click.group()
 @click.version_option(version="0.1.0")
 def cli():
@@ -72,6 +130,39 @@ def cli():
 )
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 @click.option("--patch-path", "-pp", help="Path to patch file")
+# --- Docker Mode Start ---
+@click.option(
+    "--docker-image",
+    type=str,
+    default=None,
+    help="Specify a Docker image to run the task in a new container",
+)
+@click.option(
+    "--docker-container-id",
+    type=str,
+    default=None,
+    help="Attach to an existing Docker container by ID",
+)
+@click.option(
+    "--dockerfile-path",
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    default=None,
+    help="Absolute path to a Dockerfile to build an environment",
+)
+@click.option(
+    "--docker-image-file",
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    default=None,
+    help="Path to a local Docker image file (tar archive) to load.",
+)
+@click.option(
+    "--docker-keep",
+    type=bool,
+    default=True,
+    help="Keep or remove the Docker container after finishing the task",
+)
+# --- Docker Mode End ---
+
 @click.option(
     "--console-type",
     "-ct",
@@ -101,6 +192,12 @@ def run(
     trajectory_file: str | None = None,
     console_type: str | None = "simple",
     agent_type: str | None = "trae_agent",
+    # --- Add Docker Mode ---
+    docker_image: str | None = None,
+    docker_container_id: str | None = None,
+    dockerfile_path: str | None = None,
+    docker_image_file: str | None = None,
+    docker_keep: bool = True,
 ):
     """
     Run is the main function of trae. it runs a task using Trae Agent.
@@ -113,8 +210,57 @@ def run(
         None (it is expected to be ended after calling the run function)
     """
 
+    docker_config: dict[str, str | None] | None = None
+    if (
+        sum(
+            [
+                bool(docker_image),
+                bool(docker_container_id),
+                bool(dockerfile_path),
+                bool(docker_image_file),
+            ]
+        )
+        > 1
+    ):
+        console.print(
+            "[red]Error: --docker-image, --docker-container-id, --dockerfile-path, and --docker-image-file are mutually exclusive.[/red]"
+        )
+        sys.exit(1)
+
+    if dockerfile_path:
+        docker_config = {"dockerfile_path": dockerfile_path}
+        console.print(
+            f"[blue]Docker mode enabled. Building from Dockerfile: {dockerfile_path}[/blue]"
+        )
+    elif docker_image_file:
+        docker_config = {"docker_image_file": docker_image_file}
+        console.print(
+            f"[blue]Docker mode enabled. Loading from image file: {docker_image_file}[/blue]"
+        )
+    elif docker_container_id:
+        docker_config = {"container_id": docker_container_id}
+        console.print(
+            f"[blue]Docker mode enabled. Attaching to container: {docker_container_id}[/blue]"
+        )
+    elif docker_image:
+        docker_config = {"image": docker_image}
+        console.print(f"[blue]Docker mode enabled. Using image: {docker_image}[/blue]")
+    # --- ADDED END ---
+
     # Apply backward compatibility for config file
     config_file = resolve_config_file(config_file)
+
+    if docker_config:
+        check_msg = check_docker()
+        if check_msg["cli"] and check_msg["daemon"] and check_msg["version"]:
+            print("Docker is configured correctly.")
+        else:
+            print(f"Docker is configured incorrectly. {check_msg['error']}")
+            sys.exit(1)
+        if not (os.path.exists("trae_agent/dist") and os.path.exists("trae_agent/dist/_internal")):
+            print("Building tools of Docker mode for the first use, waiting for a few seconds...")
+            build_with_pyinstaller()
+            print("Building finished.")
 
     if file_path:
         if task:
@@ -164,18 +310,24 @@ def run(
     if selected_console_type == ConsoleType.RICH and hasattr(cli_console, "set_initial_task"):
         cli_console.set_initial_task(task)
 
-    agent = Agent(agent_type, config, trajectory_file, cli_console)
+    # agent = Agent(agent_type, config, trajectory_file, cli_console)
+
+    if docker_config is not None:
+        docker_config["workspace_dir"] = working_dir  # now type-safe
 
     # Change working directory if specified
     if working_dir:
         try:
-            os.chdir(working_dir)
+            Path(working_dir).mkdir(parents=True, exist_ok=True)
+            # os.chdir(working_dir)
             console.print(f"[blue]Changed working directory to: {working_dir}[/blue]")
+            working_dir = os.path.abspath(working_dir)
         except Exception as e:
             console.print(f"[red]Error changing directory: {e}[/red]")
             sys.exit(1)
     else:
         working_dir = os.getcwd()
+        console.print(f"[blue]Using current directory as working directory: {working_dir}[/blue]")
 
     # Ensure working directory is an absolute path
     if not Path(working_dir).is_absolute():
@@ -183,6 +335,22 @@ def run(
             f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
         )
         sys.exit(1)
+
+    agent = Agent(
+        agent_type,
+        config,
+        trajectory_file,
+        cli_console,
+        docker_config=docker_config,
+        docker_keep=docker_keep,
+    )
+
+    if not docker_config:
+        try:
+            os.chdir(working_dir)
+        except Exception as e:
+            console.print(f"[red]Error changing directory: {e}[/red]")
+            sys.exit(1)
 
     try:
         task_args = {
@@ -206,8 +374,22 @@ def run(
         console.print(f"[blue]Partial trajectory saved to: {agent.trajectory_file}[/blue]")
         sys.exit(1)
     except Exception as e:
-        console.print(f"\n[red]Unexpected error: {e}[/red]")
-        console.print(traceback.format_exc())
+        try:
+            from docker.errors import DockerException
+
+            if isinstance(e, DockerException):
+                console.print(f"\n[red]Docker Error: {e}[/red]")
+                console.print(
+                    "[yellow]Please ensure the Docker daemon is running and you have the necessary permissions.[/yellow]"
+                )
+            else:
+                raise e
+        except ImportError:
+            console.print(f"\n[red]Unexpected error: {e}[/red]")
+            console.print(traceback.format_exc())
+        except Exception:
+            console.print(f"\n[red]Unexpected error: {e}[/red]")
+            console.print(traceback.format_exc())
         console.print(f"[blue]Trajectory saved to: {agent.trajectory_file}[/blue]")
         sys.exit(1)
 
