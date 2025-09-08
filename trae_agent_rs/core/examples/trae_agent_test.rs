@@ -18,11 +18,9 @@ use std::{collections::HashMap, pin::Pin};
 use std::{env, vec};
 use trae_core::trae::TraeAgent;
 use trae_core::{
-    agent::{
-        base_agent::{Agent, AgentError, AgentExecution, AgentState, BaseAgent},
-    },
+    agent::base_agent::{Agent, AgentError, AgentExecution, AgentState, BaseAgent},
     config::{ModelConfig, ModelProvider},
-    llm::{LLMClient, LLMMessage, MessageRole, ContentItem},
+    llm::{ContentItem, LLMClient, LLMMessage, MessageRole},
     tools::{Tool, bash::Bash, edit::Edit},
 };
 
@@ -35,7 +33,10 @@ struct MockTool {
 
 impl MockTool {
     fn new(name: String) -> Self {
-        MockTool { name, call_count: 0 }
+        MockTool {
+            name,
+            call_count: 0,
+        }
     }
 }
 
@@ -71,18 +72,24 @@ impl Tool for MockTool {
     ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
         use std::future::Future;
         use std::pin::Pin;
-        
+
         self.call_count += 1;
-        
+
         let command = arguments
             .get("command")
             .and_then(|v| v.as_str())
             .unwrap_or("no_command");
 
         let result = match command {
-            "success" => Ok(format!("Mock tool {} executed successfully (call #{})", self.name, self.call_count)),
+            "success" => Ok(format!(
+                "Mock tool {} executed successfully (call #{})",
+                self.name, self.call_count
+            )),
             "error" => Err(format!("Mock tool {} failed intentionally", self.name)),
-            _ => Ok(format!("Mock tool {} executed with command: {} (call #{})", self.name, command, self.call_count)),
+            _ => Ok(format!(
+                "Mock tool {} executed with command: {} (call #{})",
+                self.name, command, self.call_count
+            )),
         };
 
         Box::pin(async move { result })
@@ -92,9 +99,9 @@ impl Tool for MockTool {
 /// Helper function to create a test TraeAgent
 fn create_test_trae_agent() -> Result<TraeAgent, Box<dyn std::error::Error>> {
     // Get configuration from environment or use defaults
-    let api_key = env::var("OPENAI_COMPATIBLE_API_KEY")
-        .unwrap_or_else(|_| "test-api-key".to_string());
-    
+    let api_key =
+        env::var("OPENAI_COMPATIBLE_API_KEY").unwrap_or_else(|_| "test-api-key".to_string());
+
     let base_url = env::var("OPENAI_COMPATIBLE_BASE_URL")
         .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
 
@@ -103,8 +110,8 @@ fn create_test_trae_agent() -> Result<TraeAgent, Box<dyn std::error::Error>> {
         .with_api_key(api_key)
         .with_base_url(base_url);
 
-    let model_config = ModelConfig::new("gpt-4.1-2025-04-14".to_string(), provider)
-        .with_temperature(0.1);
+    let model_config =
+        ModelConfig::new("gpt-4.1-2025-04-14".to_string(), provider).with_temperature(0.1);
 
     // Create LLM client
     let llm_client = LLMClient::new(model_config.clone())?;
@@ -117,7 +124,7 @@ fn create_test_trae_agent() -> Result<TraeAgent, Box<dyn std::error::Error>> {
         10, // max_step
         model_config,
         None, // tools will be set in new_task
-        vec![]
+        vec![],
     );
 
     Ok(TraeAgent::new(base_agent, None))
@@ -150,7 +157,10 @@ async fn test_new_task_valid_args() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut args = HashMap::new();
     args.insert("project_path".to_string(), "/tmp/test_project".to_string());
-    args.insert("issue".to_string(), "Fix the bug in the main function".to_string());
+    args.insert(
+        "issue".to_string(),
+        "Fix the bug in the main function".to_string(),
+    );
     args.insert("base_commit".to_string(), "abc123".to_string());
     args.insert("must_patch".to_string(), "true".to_string());
     args.insert("patch_path".to_string(), "/tmp/patches".to_string());
@@ -162,11 +172,14 @@ async fn test_new_task_valid_args() -> Result<(), Box<dyn std::error::Error>> {
             println!("✅ new_task with valid arguments successful!");
             println!("Task set: {}", task);
             println!("Initial messages count: {}", agent.initial_msgs.len());
-            
+
             // Verify the agent state
-            assert!(!agent.initial_msgs.is_empty(), "Initial messages should not be empty");
+            assert!(
+                !agent.initial_msgs.is_empty(),
+                "Initial messages should not be empty"
+            );
             assert_eq!(agent.baseagent.task, task, "Task should be set correctly");
-            
+
             // Check if optional fields are set
             if let Some(base_commit) = &agent.base_commit {
                 println!("Base commit: {}", base_commit);
@@ -248,7 +261,7 @@ async fn test_tool_initialization() -> Result<(), Box<dyn std::error::Error>> {
     // Since the tools field is private, we can't directly check, but we can verify
     // that the initialization completed without errors
     println!("✅ Tool initialization completed without errors");
-    
+
     // The TraeAgentToolNames should include "bash" and "str_replace_based_edit_tool"
     println!("Expected tools: bash, str_replace_based_edit_tool");
 
@@ -262,10 +275,12 @@ async fn test_agent_execution_basic() -> Result<(), Box<dyn std::error::Error>> 
     // Only run this test if we have valid API credentials
     let api_key = env::var("OPENAI_COMPATIBLE_API_KEY");
     let base_url = env::var("OPENAI_COMPATIBLE_BASE_URL");
-    
+
     if api_key.is_err() || base_url.is_err() {
         println!("⚠️  Skipping execution test - missing API credentials");
-        println!("   Set OPENAI_COMPATIBLE_API_KEY and OPENAI_COMPATIBLE_BASE_URL to run this test");
+        println!(
+            "   Set OPENAI_COMPATIBLE_API_KEY and OPENAI_COMPATIBLE_BASE_URL to run this test"
+        );
         return Ok(());
     }
 
@@ -273,12 +288,22 @@ async fn test_agent_execution_basic() -> Result<(), Box<dyn std::error::Error>> 
 
     let mut args = HashMap::new();
     args.insert("project_path".to_string(), "./test".to_string());
-    args.insert("issue".to_string(), "Create a simple hello world script".to_string());
+    args.insert(
+        "issue".to_string(),
+        "Create a simple hello world script".to_string(),
+    );
 
     let task = "Create a hello world script in the project directory".to_string();
 
     // Initialize the agent
-    agent.new_task(task, Some(args), Some(vec!["bash".to_string() , "str_replace_based_edit_tool".to_string()]))?;
+    agent.new_task(
+        task,
+        Some(args),
+        Some(vec![
+            "bash".to_string(),
+            "str_replace_based_edit_tool".to_string(),
+        ]),
+    )?;
 
     println!("🚀 Starting agent execution...");
     println!("⚠️  Note: This will attempt to make real API calls");
@@ -292,13 +317,16 @@ async fn test_agent_execution_basic() -> Result<(), Box<dyn std::error::Error>> 
             println!("Success: {}", execution.success);
             println!("Final state: {:?}", execution.agent_state);
             println!("Execution time: {:.2}s", execution.execution_time);
-            
+
             if let Some(final_result) = &execution.final_result {
                 println!("Final result: {}", final_result);
             }
         }
         Err(e) => {
-            println!("❌ Agent execution failed (expected due to incomplete implementation): {}", e);
+            println!(
+                "❌ Agent execution failed (expected due to incomplete implementation): {}",
+                e
+            );
             // This is expected since the implementation returns an error
         }
     }
@@ -314,7 +342,10 @@ async fn test_system_prompt() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut args = HashMap::new();
     args.insert("project_path".to_string(), "/tmp/test_project".to_string());
-    args.insert("issue".to_string(), "Test issue for system prompt".to_string());
+    args.insert(
+        "issue".to_string(),
+        "Test issue for system prompt".to_string(),
+    );
 
     let task = "Test task".to_string();
 
@@ -324,7 +355,10 @@ async fn test_system_prompt() -> Result<(), Box<dyn std::error::Error>> {
     println!("Initial messages count: {}", agent.initial_msgs.len());
 
     // Verify we have at least system and user messages
-    assert!(agent.initial_msgs.len() >= 2, "Should have at least system and user messages");
+    assert!(
+        agent.initial_msgs.len() >= 2,
+        "Should have at least system and user messages"
+    );
 
     // Check message types
     if let Some(first_msg) = agent.initial_msgs.first() {
@@ -385,8 +419,6 @@ async fn test_custom_tool_names() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
-
 fn print_header() {
     println!("🤖 TraeAgent Test Program");
     println!("==========================");
@@ -401,7 +433,7 @@ fn print_configuration_info() {
     // Check API configuration
     if let Ok(api_key) = env::var("OPENAI_COMPATIBLE_API_KEY") {
         let masked_key = if api_key.len() > 8 {
-            format!("{}...{}", &api_key[..4], &api_key[api_key.len()-4..])
+            format!("{}...{}", &api_key[..4], &api_key[api_key.len() - 4..])
         } else {
             "***".to_string()
         };
@@ -486,7 +518,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-
     // Test 7: Custom tool names
     match test_custom_tool_names().await {
         Ok(_) => test_results.push(("Custom Tool Names", true)),
@@ -495,7 +526,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             test_results.push(("Custom Tool Names", false));
         }
     }
-
 
     // Test 9: Agent execution (if credentials available)
     match test_agent_execution_basic().await {
@@ -509,7 +539,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Print comprehensive summary
     println!("\n📊 Comprehensive Test Summary");
     println!("==============================");
-    
+
     let mut passed = 0;
     let total = test_results.len();
 
@@ -521,13 +551,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("\n📈 Results: {}/{} tests passed ({:.1}%)", 
-             passed, total, (passed as f32 / total as f32) * 100.0);
+    println!(
+        "\n📈 Results: {}/{} tests passed ({:.1}%)",
+        passed,
+        total,
+        (passed as f32 / total as f32) * 100.0
+    );
 
     if passed == total {
         println!("🎉 All tests passed! TraeAgent appears to be functioning correctly.");
     } else if passed > total / 2 {
-        println!("⚠️  Most tests passed, but some issues were found. Check the failed tests above.");
+        println!(
+            "⚠️  Most tests passed, but some issues were found. Check the failed tests above."
+        );
     } else {
         println!("❌ Many tests failed. TraeAgent may have significant issues.");
     }

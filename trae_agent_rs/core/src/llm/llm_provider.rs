@@ -1,10 +1,10 @@
 // Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
-use async_trait::async_trait;
-use crate::llm::{LLMMessage, LLMResponse, LLMStream, error::LLMResult};
 use crate::config::ModelConfig;
+use crate::llm::{LLMMessage, LLMResponse, LLMStream, error::LLMResult};
 use crate::tools::Tool;
+use async_trait::async_trait;
 
 /// Base trait for all LLM clients
 #[async_trait]

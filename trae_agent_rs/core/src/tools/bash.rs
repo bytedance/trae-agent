@@ -103,7 +103,6 @@ impl Tool for Bash {
                 .and_then(|x| x.as_str())
                 .unwrap_or("");
 
-
             let restart = arguments
                 .get("restart")
                 .and_then(|x| x.as_bool())
@@ -111,7 +110,6 @@ impl Tool for Bash {
 
             // Assuming `self.bash.start()` is an asynchronous operation
             let starterr = self.bash.start().await;
-
 
             if let Err(e) = starterr {
                 return Err(format!("fail to start the bash {}", e.to_string()));
@@ -237,10 +235,10 @@ impl BashProcess {
     }
 
     async fn run(&mut self, command: &str) -> Result<BashExecResult, BashError> {
-     //   dbg!("Starting run function", command);
+        //   dbg!("Starting run function", command);
 
         if !self.started {
-        //    dbg!("Session not started");
+            //    dbg!("Session not started");
             return Err(BashError::SessionNotStarted);
         }
 
@@ -261,7 +259,7 @@ impl BashProcess {
         }
 
         if self.timed_out {
-          //  dbg!("Already timed out");
+            //  dbg!("Already timed out");
             return Err(BashError::Timeout);
         }
 
@@ -270,7 +268,7 @@ impl BashProcess {
             (parts[0], "__ERROR_CODE__", parts[1])
         };
 
-    //   dbg!("Sentinel parts", sentinel_before, sentinel_after);
+        //   dbg!("Sentinel parts", sentinel_before, sentinel_after);
 
         #[cfg(windows)]
         let errcode_retriever = "!errorlevel!";
@@ -287,11 +285,11 @@ impl BashProcess {
             command, command_sep, sentinel_before, errcode_retriever, sentinel_after
         );
 
-       // dbg!("Full command to execute", &full_command);
+        // dbg!("Full command to execute", &full_command);
 
         stdin.write_all(full_command.as_bytes()).await?;
         stdin.flush().await?;
-     //   dbg!("Command written and flushed to stdin");
+        //   dbg!("Command written and flushed to stdin");
 
         let mut output_accum = String::new();
         let mut error_accum = String::new();
@@ -303,7 +301,7 @@ impl BashProcess {
         let mut buffer = [0u8; 4096]; // Changed: Use byte buffer instead of String
         let stdout_reader = stdout;
 
-      //  dbg!("Starting read loop with timeout", timeout);
+        //  dbg!("Starting read loop with timeout", timeout);
 
         loop {
             // Changed: Use read() instead of read_to_string() to avoid hanging
@@ -311,7 +309,7 @@ impl BashProcess {
 
             match time::timeout(timeout, read_fut).await {
                 Ok(Ok(0)) => {
-                   // dbg!("Read 0 bytes, breaking");
+                    // dbg!("Read 0 bytes, breaking");
                     break;
                 }
                 Ok(Ok(bytes_read)) => {
@@ -319,7 +317,7 @@ impl BashProcess {
 
                     // Convert bytes to string
                     let chunk = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
-                   // dbg!("Chunk content", &chunk);
+                    // dbg!("Chunk content", &chunk);
 
                     // Check if sentinel is found
                     if chunk.contains(sentinel_before) {
@@ -341,7 +339,7 @@ impl BashProcess {
                             }
                         }
 
-                       // dbg!("Breaking after finding sentinel");
+                        // dbg!("Breaking after finding sentinel");
                         break;
                     } else {
                         // Accumulate output as normal
@@ -362,7 +360,7 @@ impl BashProcess {
         }
 
         if timed_out {
-           // dbg!("Setting timed_out flag and returning timeout error");
+            // dbg!("Setting timed_out flag and returning timeout error");
             self.timed_out = true;
             return Err(BashError::Timeout);
         }
@@ -377,10 +375,9 @@ impl BashProcess {
                 match time::timeout(Duration::from_millis(10), stderr.read(&mut err_buf)).await {
                     Ok(Ok(bytes_read)) if bytes_read > 0 => {
                         error_accum = String::from_utf8_lossy(&err_buf[..bytes_read]).to_string();
-                       //dbg!("Read stderr", &error_accum);
+                        //dbg!("Read stderr", &error_accum);
                     }
-                    _ => {
-                    }
+                    _ => {}
                 }
             }
         }

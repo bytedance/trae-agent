@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 use serde::{Deserialize, Serialize};
-use yaml_rust::{YamlLoader, Yaml};
 use std::collections::HashMap;
 use std::fs::File;
 use thiserror::Error;
+use yaml_rust::{Yaml, YamlLoader};
 
 /// Config errors
 #[derive(Debug, Clone, Serialize, Deserialize, Error)]
@@ -150,7 +150,7 @@ fn get_f32_value_or_none_from_yaml(item: &Yaml, key: &str) -> Option<f32> {
         None => match item[key].as_i64() {
             Some(value) => Some(value as f32),
             None => None,
-        }
+        },
     }
 }
 
@@ -163,14 +163,15 @@ fn get_bool_value_or_none_from_yaml(item: &Yaml, key: &str) -> Option<bool> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub trae_agent_config: TraeAgentConfig
+    pub trae_agent_config: TraeAgentConfig,
 }
 
 impl Config {
     pub fn from_yaml(path: &str) -> Result<Self, ConfigError> {
         match File::open(path) {
             Ok(_file) => {
-                let source = std::fs::read_to_string(path).map_err(|e| ConfigError::LoadFileError(e.to_string()))?;
+                let source = std::fs::read_to_string(path)
+                    .map_err(|e| ConfigError::LoadFileError(e.to_string()))?;
                 Self::from_str(&source)
             }
             Err(_e) => Err(ConfigError::LoadFileError(path.to_string())),
@@ -178,7 +179,8 @@ impl Config {
     }
 
     pub fn from_str(source: &str) -> Result<Self, ConfigError> {
-        let docs = YamlLoader::load_from_str(source).map_err(|e| ConfigError::LoadFileError(e.to_string()))?;
+        let docs = YamlLoader::load_from_str(source)
+            .map_err(|e| ConfigError::LoadFileError(e.to_string()))?;
 
         let doc = &docs[0];
 
@@ -200,10 +202,23 @@ impl Config {
             let provider_name = value["model_provider"].as_str().unwrap().to_string();
             let model_provider = match model_providers.get(&provider_name) {
                 Some(model_provider) => model_provider,
-                None => return Err(ConfigError::LoadFileError(format!("Model provider not found: {}", provider_name))),
+                None => {
+                    return Err(ConfigError::LoadFileError(format!(
+                        "Model provider not found: {}",
+                        provider_name
+                    )));
+                }
             };
             let extra_headers = if let Some(headers_hash) = value["extra_headers"].as_hash() {
-                headers_hash.iter().map(|(k, v)| (k.as_str().unwrap().to_string(), v.as_str().unwrap().to_string())).collect()
+                headers_hash
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.as_str().unwrap().to_string(),
+                            v.as_str().unwrap().to_string(),
+                        )
+                    })
+                    .collect()
             } else {
                 HashMap::new()
             };
@@ -222,18 +237,29 @@ impl Config {
         let agent_config_yaml = &doc["agents"];
 
         let trae_agent_config_yaml = &agent_config_yaml["trae_agent"];
-        let tools: Vec<String> = trae_agent_config_yaml["tools"].as_vec().unwrap().iter()
-            .map(|s| s.as_str().unwrap().to_string()).collect();
+        let tools: Vec<String> = trae_agent_config_yaml["tools"]
+            .as_vec()
+            .unwrap()
+            .iter()
+            .map(|s| s.as_str().unwrap().to_string())
+            .collect();
 
-        let model_name = trae_agent_config_yaml["model"].as_str().unwrap().to_string();
-        let model_config = models.get(&model_name)
+        let model_name = trae_agent_config_yaml["model"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let model_config = models
+            .get(&model_name)
             .ok_or_else(|| ConfigError::LoadFileError(format!("Model not found: {}", model_name)))?
             .clone();
 
         let max_steps = trae_agent_config_yaml["max_steps"].as_i64().unwrap() as u32;
 
         let allow_mcp_servers = if let Some(servers) = doc["allow_mcp_servers"].as_vec() {
-            servers.iter().map(|s| s.as_str().unwrap().to_string()).collect()
+            servers
+                .iter()
+                .map(|s| s.as_str().unwrap().to_string())
+                .collect()
         } else {
             Vec::new()
         };
@@ -244,12 +270,32 @@ impl Config {
                 let server_name = key.as_str().unwrap().to_string();
                 let server_config = MCPServerConfig {
                     command: get_str_value_or_none_from_yaml(value, "command"),
-                    args: value["args"].as_vec().map(|v| v.iter().map(|s| s.as_str().unwrap().to_string()).collect()),
-                    env: value["env"].as_hash().map(|h| h.iter().map(|(k, v)| (k.as_str().unwrap().to_string(), v.as_str().unwrap().to_string())).collect()),
+                    args: value["args"]
+                        .as_vec()
+                        .map(|v| v.iter().map(|s| s.as_str().unwrap().to_string()).collect()),
+                    env: value["env"].as_hash().map(|h| {
+                        h.iter()
+                            .map(|(k, v)| {
+                                (
+                                    k.as_str().unwrap().to_string(),
+                                    v.as_str().unwrap().to_string(),
+                                )
+                            })
+                            .collect()
+                    }),
                     cwd: get_str_value_or_none_from_yaml(value, "cwd"),
                     url: get_str_value_or_none_from_yaml(value, "url"),
                     http_url: get_str_value_or_none_from_yaml(value, "http_url"),
-                    headers: value["headers"].as_hash().map(|h| h.iter().map(|(k, v)| (k.as_str().unwrap().to_string(), v.as_str().unwrap().to_string())).collect()),
+                    headers: value["headers"].as_hash().map(|h| {
+                        h.iter()
+                            .map(|(k, v)| {
+                                (
+                                    k.as_str().unwrap().to_string(),
+                                    v.as_str().unwrap().to_string(),
+                                )
+                            })
+                            .collect()
+                    }),
                     tcp: get_str_value_or_none_from_yaml(value, "tcp"),
                     timeout: value["timeout"].as_i64().map(|t| t as u64),
                     trust: get_bool_value_or_none_from_yaml(value, "trust"),
@@ -270,9 +316,7 @@ impl Config {
             mcp_servers_config,
         };
 
-        Ok(Config {
-            trae_agent_config,
-        })
+        Ok(Config { trae_agent_config })
     }
 }
 
@@ -340,42 +384,154 @@ models:
         max_retries: 10
         parallel_tool_calls: true
 
-"#.trim().to_string()
+"#
+        .trim()
+        .to_string()
     }
 
     #[test]
     fn test_config_from_yaml_success() {
         // Test loading the config
-        let config = Config::from_str(create_test_yaml_content().as_str()).expect("Failed to load config");
+        let config =
+            Config::from_str(create_test_yaml_content().as_str()).expect("Failed to load config");
 
         println!("{:?}", config);
 
         // Verify agent config
         assert_eq!(config.trae_agent_config.tools.len(), 4);
-        assert_eq!(config.trae_agent_config.tools, vec!["bash", "str_replace_based_edit_tool", "sequentialthinking", "task_done"]);
-        assert_eq!(config.trae_agent_config.model.model, "anthropic/claude-sonnet-4");
+        assert_eq!(
+            config.trae_agent_config.tools,
+            vec![
+                "bash",
+                "str_replace_based_edit_tool",
+                "sequentialthinking",
+                "task_done"
+            ]
+        );
+        assert_eq!(
+            config.trae_agent_config.model.model,
+            "anthropic/claude-sonnet-4"
+        );
         assert_eq!(config.trae_agent_config.model.temperature, Some(0.5));
         assert_eq!(config.trae_agent_config.model.top_p, Some(1.0));
         assert_eq!(config.trae_agent_config.model.max_tokens, Some(4096));
         assert_eq!(config.trae_agent_config.model.max_retries, Some(10));
         assert_eq!(config.trae_agent_config.model.extra_headers.len(), 0);
-        assert_eq!(config.trae_agent_config.model.extra_headers.get("X-Agent-Header"), None);
+        assert_eq!(
+            config
+                .trae_agent_config
+                .model
+                .extra_headers
+                .get("X-Agent-Header"),
+            None
+        );
         assert_eq!(config.trae_agent_config.allow_mcp_servers.len(), 1);
         assert_eq!(config.trae_agent_config.allow_mcp_servers, vec!["abcoder"]);
         assert_eq!(config.trae_agent_config.mcp_servers_config.len(), 1);
 
         assert_eq!(config.trae_agent_config.max_steps, 200);
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().command, Some("/data00/home/pengchao.x/go/bin/abcoder".to_string()));
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().args, Some(vec!["mcp".to_string(), "/data00/home/pengchao.x/abcoder-asts".to_string()]));
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().env, None);
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().cwd, None);
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().url, None);
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().http_url, None);
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().headers, None);
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().tcp, None);
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().timeout, None);
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().trust, None);
-        assert_eq!(config.trae_agent_config.mcp_servers_config.get("abcoder").unwrap().description, None);
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .command,
+            Some("/data00/home/pengchao.x/go/bin/abcoder".to_string())
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .args,
+            Some(vec![
+                "mcp".to_string(),
+                "/data00/home/pengchao.x/abcoder-asts".to_string()
+            ])
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .env,
+            None
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .cwd,
+            None
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .url,
+            None
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .http_url,
+            None
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .headers,
+            None
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .tcp,
+            None
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .timeout,
+            None
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .trust,
+            None
+        );
+        assert_eq!(
+            config
+                .trae_agent_config
+                .mcp_servers_config
+                .get("abcoder")
+                .unwrap()
+                .description,
+            None
+        );
     }
 
     #[test]
@@ -418,7 +574,10 @@ models:
         assert_eq!(config.max_tokens, Some(4096));
         assert_eq!(config.max_retries, Some(5));
         assert_eq!(config.extra_headers.len(), 1);
-        assert_eq!(config.extra_headers.get("X-Test"), Some(&"test-value".to_string()));
+        assert_eq!(
+            config.extra_headers.get("X-Test"),
+            Some(&"test-value".to_string())
+        );
     }
 
     #[test]
@@ -440,9 +599,7 @@ models:
             mcp_servers_config: HashMap::new(),
         };
 
-        let _original_config = Config {
-            trae_agent_config,
-        };
+        let _original_config = Config { trae_agent_config };
 
         // Skip YAML serialization test for now as we need serde_yaml crate
         // let yaml_string = serde_yaml::to_string(&original_config).expect("Failed to serialize to YAML");

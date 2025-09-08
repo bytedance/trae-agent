@@ -30,14 +30,13 @@
 use async_trait::async_trait;
 use std::fmt;
 
+use crate::config::ModelConfig;
 use crate::llm::{
+    AnthropicClient, LLMMessage, LLMResponse, LLMStream, OpenAIClient,
+    OpenAICompatibleGenericClient,
     error::{LLMError, LLMResult},
     llm_provider::LLMProvider as LLMProviderTrait,
-    LLMMessage, LLMResponse, LLMStream,
-    OpenAIClient, AnthropicClient,
-    OpenAICompatibleGenericClient,
 };
-use crate::config::ModelConfig;
 use crate::tools::Tool;
 
 /// Supported LLM providers.
@@ -60,7 +59,10 @@ impl LLMProvider {
             "openai" => Ok(LLMProvider::OpenAI),
             "anthropic" => Ok(LLMProvider::Anthropic),
             "openai_compatible" => Ok(LLMProvider::OpenAICompatible),
-            _ => Err(LLMError::ConfigError(format!("Unsupported provider: {}", provider)))
+            _ => Err(LLMError::ConfigError(format!(
+                "Unsupported provider: {}",
+                provider
+            ))),
         }
     }
 
@@ -113,9 +115,21 @@ impl LLMProviderTrait for ClientWrapper {
         reuse_history: Option<bool>,
     ) -> LLMResult<LLMResponse> {
         match self {
-            ClientWrapper::OpenAI(client) => client.chat(messages, model_config, tools, reuse_history).await,
-            ClientWrapper::Anthropic(client) => client.chat(messages, model_config, tools, reuse_history).await,
-            ClientWrapper::OpenAICompatible(client) => client.chat(messages, model_config, tools, reuse_history).await,
+            ClientWrapper::OpenAI(client) => {
+                client
+                    .chat(messages, model_config, tools, reuse_history)
+                    .await
+            }
+            ClientWrapper::Anthropic(client) => {
+                client
+                    .chat(messages, model_config, tools, reuse_history)
+                    .await
+            }
+            ClientWrapper::OpenAICompatible(client) => {
+                client
+                    .chat(messages, model_config, tools, reuse_history)
+                    .await
+            }
         }
     }
 
@@ -127,9 +141,21 @@ impl LLMProviderTrait for ClientWrapper {
         reuse_history: Option<bool>,
     ) -> LLMResult<LLMStream> {
         match self {
-            ClientWrapper::OpenAI(client) => client.chat_stream(messages, model_config, tools, reuse_history).await,
-            ClientWrapper::Anthropic(client) => client.chat_stream(messages, model_config, tools, reuse_history).await,
-            ClientWrapper::OpenAICompatible(client) => client.chat_stream(messages, model_config, tools, reuse_history).await,
+            ClientWrapper::OpenAI(client) => {
+                client
+                    .chat_stream(messages, model_config, tools, reuse_history)
+                    .await
+            }
+            ClientWrapper::Anthropic(client) => {
+                client
+                    .chat_stream(messages, model_config, tools, reuse_history)
+                    .await
+            }
+            ClientWrapper::OpenAICompatible(client) => {
+                client
+                    .chat_stream(messages, model_config, tools, reuse_history)
+                    .await
+            }
         }
     }
 
@@ -190,15 +216,16 @@ impl LLMClient {
             LLMProvider::OpenAI => {
                 let openai_client = OpenAIClient::new(&model_config)?;
                 ClientWrapper::OpenAI(openai_client)
-            },
+            }
             LLMProvider::Anthropic => {
                 let anthropic_client = AnthropicClient::new(&model_config)?;
                 ClientWrapper::Anthropic(anthropic_client)
-            },
+            }
             LLMProvider::OpenAICompatible => {
-                let openai_compatible_client = OpenAICompatibleGenericClient::with_config(model_config.clone())?;
+                let openai_compatible_client =
+                    OpenAICompatibleGenericClient::with_config(model_config.clone())?;
                 ClientWrapper::OpenAICompatible(openai_compatible_client)
-            },
+            }
         };
 
         Ok(Self {
@@ -252,7 +279,9 @@ impl LLMClient {
         tools: Option<&Vec<Box<dyn Tool>>>,
         reuse_history: bool,
     ) -> LLMResult<LLMResponse> {
-        self.client.chat(messages, model_config, tools, Some(reuse_history)).await
+        self.client
+            .chat(messages, model_config, tools, Some(reuse_history))
+            .await
     }
 
     /// Send chat messages to the LLM with streaming response.
@@ -277,7 +306,9 @@ impl LLMClient {
         tools: Option<&Vec<Box<dyn Tool>>>,
         reuse_history: bool,
     ) -> LLMResult<LLMStream> {
-        self.client.chat_stream(messages, model_config, tools, Some(reuse_history)).await
+        self.client
+            .chat_stream(messages, model_config, tools, Some(reuse_history))
+            .await
     }
 
     /// Get the provider name for this client.
@@ -315,9 +346,18 @@ mod tests {
 
     #[test]
     fn test_llm_provider_from_str() {
-        assert_eq!(LLMProvider::from_str("openai").unwrap(), LLMProvider::OpenAI);
-        assert_eq!(LLMProvider::from_str("ANTHROPIC").unwrap(), LLMProvider::Anthropic);
-        assert_eq!(LLMProvider::from_str("openai_compatible").unwrap(), LLMProvider::OpenAICompatible);
+        assert_eq!(
+            LLMProvider::from_str("openai").unwrap(),
+            LLMProvider::OpenAI
+        );
+        assert_eq!(
+            LLMProvider::from_str("ANTHROPIC").unwrap(),
+            LLMProvider::Anthropic
+        );
+        assert_eq!(
+            LLMProvider::from_str("openai_compatible").unwrap(),
+            LLMProvider::OpenAICompatible
+        );
 
         assert!(LLMProvider::from_str("invalid").is_err());
     }
@@ -343,8 +383,8 @@ mod tests {
 
     #[test]
     fn test_llm_client_creation_openai() {
-        let model_provider = ModelProvider::new("openai".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("openai".to_string()).with_api_key("test_key".to_string());
         let model_config = ModelConfig::new("gpt-4".to_string(), model_provider);
 
         let client = LLMClient::new(model_config);
@@ -370,8 +410,8 @@ mod tests {
 
     #[test]
     fn test_llm_client_accessors() {
-        let model_provider = ModelProvider::new("openai".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("openai".to_string()).with_api_key("test_key".to_string());
         let model_config = ModelConfig::new("gpt-4".to_string(), model_provider);
 
         let client = LLMClient::new(model_config.clone()).unwrap();

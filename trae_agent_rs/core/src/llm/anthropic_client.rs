@@ -2,20 +2,23 @@
 // SPDX-License-Identifier: MIT
 
 use async_trait::async_trait;
+use futures::stream;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use futures::stream;
 
 use crate::{
-    llm::{
-        llm_provider::LLMProvider,
-        error::{LLMError, LLMResult},
-        retry_utils::{retry_with_backoff, RetryConfig},
-        llm_basics::{LLMMessage, LLMResponse, LLMUsage, LLMStream, StreamChunk, FinishReason, ContentItem, MessageRole},
-    },
     config::ModelConfig,
+    llm::{
+        error::{LLMError, LLMResult},
+        llm_basics::{
+            ContentItem, FinishReason, LLMMessage, LLMResponse, LLMStream, LLMUsage, MessageRole,
+            StreamChunk,
+        },
+        llm_provider::LLMProvider,
+        retry_utils::{RetryConfig, retry_with_backoff},
+    },
     tools::{Tool, ToolCall, ToolResult},
 };
 
@@ -80,10 +83,7 @@ enum AnthropicContentBlock {
 #[serde(tag = "type")]
 enum AnthropicImageSource {
     #[serde(rename = "base64")]
-    Base64 {
-        media_type: String,
-        data: String,
-    },
+    Base64 { media_type: String, data: String },
 }
 
 /// Anthropic tool definition
@@ -265,21 +265,24 @@ impl AnthropicClient {
 
         // Read the entire response body for parsing
         let text = response.text().await.map_err(LLMError::HttpError)?;
-        let chunks: Vec<_> = text.lines().filter_map(|line| {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
-                if data == "[DONE]" {
-                    return None;
+        let chunks: Vec<_> = text
+            .lines()
+            .filter_map(|line| {
+                if line.starts_with("data: ") {
+                    let data = &line[6..];
+                    if data == "[DONE]" {
+                        return None;
+                    }
+                    match self.parse_sse_chunk(line) {
+                        Ok(Some(chunk)) => Some(Ok(chunk)),
+                        Ok(None) => None,
+                        Err(e) => Some(Err(e)),
+                    }
+                } else {
+                    None
                 }
-                match self.parse_sse_chunk(line) {
-                    Ok(Some(chunk)) => Some(Ok(chunk)),
-                    Ok(None) => None,
-                    Err(e) => Some(Err(e))
-                }
-            } else {
-                None
-            }
-        }).collect();
+            })
+            .collect();
 
         let stream = stream::iter(chunks);
         Ok(Box::pin(stream))
@@ -293,13 +296,15 @@ impl AnthropicClient {
                     return Ok(None);
                 }
 
-                let event: AnthropicStreamEvent = serde_json::from_str(data)
-                    .map_err(LLMError::JsonError)?;
+                let event: AnthropicStreamEvent =
+                    serde_json::from_str(data).map_err(LLMError::JsonError)?;
 
                 match event.event_type.as_str() {
                     "message_start" => {
                         if let Some(data) = event.data {
-                            if let Ok(start_event) = serde_json::from_value::<MessageStartEvent>(data) {
+                            if let Ok(start_event) =
+                                serde_json::from_value::<MessageStartEvent>(data)
+                            {
                                 return Ok(Some(StreamChunk {
                                     content: None,
                                     finish_reason: None,
@@ -308,8 +313,14 @@ impl AnthropicClient {
                                     usage: Some(LLMUsage {
                                         input_tokens: start_event.message.usage.input_tokens,
                                         output_tokens: start_event.message.usage.output_tokens,
-                                        cache_creation_input_tokens: start_event.message.usage.cache_creation_input_tokens,
-                                        cache_read_input_tokens: start_event.message.usage.cache_read_input_tokens,
+                                        cache_creation_input_tokens: start_event
+                                            .message
+                                            .usage
+                                            .cache_creation_input_tokens,
+                                        cache_read_input_tokens: start_event
+                                            .message
+                                            .usage
+                                            .cache_read_input_tokens,
                                         reasoning_tokens: 0,
                                     }),
                                 }));
@@ -318,7 +329,9 @@ impl AnthropicClient {
                     }
                     "content_block_delta" => {
                         if let Some(data) = event.data {
-                            if let Ok(delta_event) = serde_json::from_value::<ContentBlockDeltaEvent>(data) {
+                            if let Ok(delta_event) =
+                                serde_json::from_value::<ContentBlockDeltaEvent>(data)
+                            {
                                 match delta_event.delta {
                                     ContentDelta::TextDelta { text } => {
                                         return Ok(Some(StreamChunk {
@@ -336,15 +349,17 @@ impl AnthropicClient {
                     }
                     "message_delta" => {
                         if let Some(data) = event.data {
-                            if let Ok(delta_event) = serde_json::from_value::<MessageDeltaEvent>(data) {
-                                let finish_reason = delta_event.delta.stop_reason.as_ref().map(|reason| {
-                                    match reason.as_str() {
+                            if let Ok(delta_event) =
+                                serde_json::from_value::<MessageDeltaEvent>(data)
+                            {
+                                let finish_reason = delta_event.delta.stop_reason.as_ref().map(
+                                    |reason| match reason.as_str() {
                                         "end_turn" => FinishReason::Stop,
                                         "tool_use" => FinishReason::ToolCalls,
                                         "max_tokens" => FinishReason::Stop,
                                         _ => FinishReason::Stop,
-                                    }
-                                });
+                                    },
+                                );
 
                                 return Ok(Some(StreamChunk {
                                     content: None,
@@ -400,7 +415,11 @@ impl AnthropicClient {
         result
     }
 
-    fn convert_content(&self, content: &Option<Vec<ContentItem>>, tool_call: &Option<ToolCall>) -> AnthropicContent {
+    fn convert_content(
+        &self,
+        content: &Option<Vec<ContentItem>>,
+        tool_call: &Option<ToolCall>,
+    ) -> AnthropicContent {
         let mut blocks = Vec::new();
 
         // Add content items
@@ -574,7 +593,8 @@ impl LLMProvider for AnthropicClient {
 
         // Add the assistant's response to chat history
         let first_tool_call = tool_calls.first();
-        let assistant_content = self.convert_content(&Some(content_items.clone()), &first_tool_call.cloned());
+        let assistant_content =
+            self.convert_content(&Some(content_items.clone()), &first_tool_call.cloned());
         let assistant_message = AnthropicMessage {
             role: "assistant".to_string(),
             content: assistant_content,
@@ -586,7 +606,11 @@ impl LLMProvider for AnthropicClient {
             usage: Some(usage),
             model: Some(response.model),
             finish_reason,
-            tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
+            tool_calls: if tool_calls.is_empty() {
+                None
+            } else {
+                Some(tool_calls)
+            },
         })
     }
 
@@ -676,8 +700,8 @@ mod tests {
 
     #[test]
     fn test_content_conversion() {
-        let model_provider = ModelProvider::new("anthropic".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("anthropic".to_string()).with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let client = AnthropicClient::new(&config).unwrap();
 
@@ -691,10 +715,7 @@ mod tests {
         }
 
         // Test multiple content items
-        let content = vec![
-            ContentItem::text("Hello"),
-            ContentItem::text("world"),
-        ];
+        let content = vec![ContentItem::text("Hello"), ContentItem::text("world")];
         let result = client.convert_content(&Some(content), &None);
 
         match result {
@@ -711,8 +732,8 @@ mod tests {
 
     #[test]
     fn test_message_conversion() {
-        let model_provider = ModelProvider::new("anthropic".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("anthropic".to_string()).with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let client = AnthropicClient::new(&config).unwrap();
 
@@ -739,8 +760,8 @@ mod tests {
 
     #[test]
     fn test_system_message_extraction() {
-        let model_provider = ModelProvider::new("anthropic".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("anthropic".to_string()).with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let mut client = AnthropicClient::new(&config).unwrap();
 
@@ -750,7 +771,10 @@ mod tests {
         ];
 
         client.extract_system_message(&messages);
-        assert_eq!(client.system_message, Some("You are a helpful assistant".to_string()));
+        assert_eq!(
+            client.system_message,
+            Some("You are a helpful assistant".to_string())
+        );
 
         let converted = client.convert_messages(&messages);
         // System message should be filtered out from regular messages
@@ -760,8 +784,8 @@ mod tests {
 
     #[test]
     fn test_tool_result_conversion() {
-        let model_provider = ModelProvider::new("anthropic".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("anthropic".to_string()).with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let client = AnthropicClient::new(&config).unwrap();
 
@@ -776,7 +800,11 @@ mod tests {
             AnthropicContent::Array(blocks) => {
                 assert_eq!(blocks.len(), 1);
                 match &blocks[0] {
-                    AnthropicContentBlock::ToolResult { tool_use_id, content, is_error } => {
+                    AnthropicContentBlock::ToolResult {
+                        tool_use_id,
+                        content,
+                        is_error,
+                    } => {
                         assert_eq!(tool_use_id, "call_123");
                         assert_eq!(content, "Success result");
                         assert_eq!(*is_error, Some(false));

@@ -14,18 +14,15 @@
 
 */
 
+use serde::Serialize;
 use std::collections::HashMap;
 use std::vec;
-use serde::Serialize;
 use thiserror::Error;
 
-use crate::trajectories::trajectories::LLMRecord;
-use crate::trajectories::trajectories::TrajectoryData;
 use crate::ContentItem;
 use crate::LLMClient;
 use crate::LLMMessage;
 use crate::LLMResponse;
-use crate::Tool;
 use crate::ToolCall;
 use crate::ToolResult;
 use crate::config;
@@ -34,7 +31,7 @@ use crate::llm_basics::LLMUsage;
 use crate::llm_basics::TextContent;
 use crate::tools;
 
-#[derive(Serialize, Clone,Debug, PartialEq)]
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub enum AgentStepState {
     THINKING,
     CALLINGTOOL,
@@ -74,7 +71,7 @@ impl BaseAgent {
         client: LLMClient,
         max_step: u32,
         model_config: config::ModelConfig,
-        tools_map:Option<HashMap<String, usize>>,
+        tools_map: Option<HashMap<String, usize>>,
         tools: Vec<Box<dyn tools::Tool>>,
     ) -> Self {
         BaseAgent {
@@ -194,14 +191,12 @@ impl BaseAgent {
 
         is_task_complete: Option<Box<dyn FnOnce(&LLMResponse) -> bool>>,
     ) -> Result<Vec<LLMMessage>, AgentError> {
-
         step.state = AgentStepState::THINKING;
         // a cli api should place here currently there's not cli api
         let response = self
             .llm_client
             .chat(msgs.clone(), &self.model_config, Some(&self.tools), false)
             .await;
-
 
         let llm_response = match response {
             Ok(t) => Some(t),
@@ -251,13 +246,9 @@ impl BaseAgent {
             exec.agent_state = AgentState::RUNNING;
             return Ok(vec![LLMMessage {
                 role: llm::MessageRole::User,
-                content: Some(vec![
-                    ContentItem::Text(
-                        TextContent{
-                            text:"Your task is not finished. Please continue.".to_string(),
-                        }
-                    )
-                ]),
+                content: Some(vec![ContentItem::Text(TextContent {
+                    text: "Your task is not finished. Please continue.".to_string(),
+                })]),
                 tool_call: None,
                 tool_result: None,
             }]); // return type here
@@ -290,7 +281,7 @@ impl BaseAgent {
         let default_vec = vec![];
 
         let unwrapped_tool = tool_call.as_ref().unwrap_or(&default_vec);
-        
+
         let empty_map = HashMap::new();
         let agent_tools = self.tools_map.as_ref().unwrap_or(&empty_map);
 
@@ -331,7 +322,6 @@ impl BaseAgent {
                 _ => Err("The requested tool is not found".to_string()),
             };
 
-
             execresult_to_toolresult(result, &mut tool_result);
 
             tool_results.push(tool_result);
@@ -344,13 +334,9 @@ impl BaseAgent {
         for tool_result in &tool_results {
             msg.push(LLMMessage {
                 role: llm::MessageRole::User,
-                content: Some(vec![
-                    ContentItem::Text(
-                        TextContent { 
-                            text: "Here are the tool resuls".to_string()
-                        }
-                    )
-                ]),
+                content: Some(vec![ContentItem::Text(TextContent {
+                    text: "Here are the tool results".to_string(),
+                })]),
                 tool_call: None,
                 tool_result: Some(tool_result.clone()),
             })
@@ -396,7 +382,6 @@ impl BaseAgent {
 
         Ok(msg)
     }
-
 }
 
 fn indicate_task_complete(response: &LLMResponse) -> bool {
@@ -450,15 +435,14 @@ fn execresult_to_toolresult(execresult: Result<String, String>, toolresult: &mut
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ContentItem, LLMMessage, LLMResponse, ToolCall, ToolResult};
-    use crate::llm::{MessageRole, FinishReason};
+    use crate::llm::{FinishReason, MessageRole};
     use crate::llm_basics::{LLMUsage, TextContent};
+    use crate::{ContentItem, LLMMessage, LLMResponse, ToolCall, ToolResult};
+    use serde_json::{Value, json};
     use std::collections::HashMap;
-    use serde_json::{json, Value};
 
     // Test fixtures and helper functions
     fn create_test_llm_usage() -> LLMUsage {
@@ -500,7 +484,7 @@ mod tests {
             name: name.to_string(),
             arguments: args,
             id: Some(format!("call_{}", name)),
-            call_id: "testing_call_id".to_string()
+            call_id: "testing_call_id".to_string(),
         }
     }
 

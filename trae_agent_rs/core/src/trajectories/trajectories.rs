@@ -60,38 +60,42 @@ pub struct LLMRecord {
     pub steps: Option<AgentStep>,
 }
 
-
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub enum TrajectoryDetails {
-    Chat { messages: Vec<String>, temperature: f32 },
-    Embedding { dims: usize },
-    Completion { prompt_tokens: u32, completion_tokens: u32 },
+    Chat {
+        messages: Vec<String>,
+        temperature: f32,
+    },
+    Embedding {
+        dims: usize,
+    },
+    Completion {
+        prompt_tokens: u32,
+        completion_tokens: u32,
+    },
 }
 
 impl Trajectory {
     pub fn start_recording(&mut self, task: &str, provider: &str, model: &str, max_step: u64) {
-
-        if let Some(trajectory) = &mut self.trajectory_data{
+        if let Some(trajectory) = &mut self.trajectory_data {
             trajectory.task = task.to_string();
             trajectory.start_time = system_time_to_string(&SystemTime::now());
             trajectory.max_step = max_step;
             trajectory.provider = provider.to_string();
             trajectory.model = model.to_string();
-        }else {
-
-            self.trajectory_data = Some(TrajectoryData { 
-                task: task.to_string(), 
-                start_time: system_time_to_string(&SystemTime::now()), 
-                end_time: None, 
-                provider: provider.to_string(), 
-                model: model.to_string(), 
-                max_step: max_step, 
-                llm_interaction: vec![], 
-                success: false, 
-                final_result: None, 
+        } else {
+            self.trajectory_data = Some(TrajectoryData {
+                task: task.to_string(),
+                start_time: system_time_to_string(&SystemTime::now()),
+                end_time: None,
+                provider: provider.to_string(),
+                model: model.to_string(),
+                max_step: max_step,
+                llm_interaction: vec![],
+                success: false,
+                final_result: None,
                 execution_time: 0.,
             })
-
         }
     }
 }
@@ -119,10 +123,7 @@ impl Recorder for Trajectory {
         };
         let mut writer = io::BufWriter::new(file);
 
-        let serializable_data = self.trajectory_data
-                    .as_ref() 
-                    .unwrap()
-                    .to_serializable();
+        let serializable_data = self.trajectory_data.as_ref().unwrap().to_serializable();
 
         let json_string = match serde_json::to_string_pretty(&serializable_data) {
             Ok(json) => json,
@@ -186,66 +187,36 @@ impl Recorder for Trajectory {
                 ));
             }
         }
-        
+
         if let Some(v) = update.task {
-            self.trajectory_data
-            .as_mut()
-            .unwrap()
-            .task = v;
+            self.trajectory_data.as_mut().unwrap().task = v;
         }
         if let Some(v) = update.start_time {
-            self.trajectory_data
-            .as_mut()
-            .unwrap() 
-            .start_time = v;
+            self.trajectory_data.as_mut().unwrap().start_time = v;
         }
         if let Some(v) = update.end_time {
-            self.trajectory_data
-            .as_mut()
-            .unwrap() 
-            .end_time = Some(v);
+            self.trajectory_data.as_mut().unwrap().end_time = Some(v);
         }
         if let Some(v) = update.provider {
-            self.trajectory_data
-            .as_mut()
-            .unwrap() 
-            .provider = v;
+            self.trajectory_data.as_mut().unwrap().provider = v;
         }
         if let Some(v) = update.model {
-            self.trajectory_data
-            .as_mut()
-            .unwrap() 
-            .model = v;
+            self.trajectory_data.as_mut().unwrap().model = v;
         }
         if let Some(v) = update.max_step {
-            self.trajectory_data
-            .as_mut()
-            .unwrap() 
-            .max_step = v;
+            self.trajectory_data.as_mut().unwrap().max_step = v;
         }
         if let Some(v) = update.llm_interaction {
-            self.trajectory_data
-            .as_mut()
-            .unwrap() 
-            .llm_interaction = v;
+            self.trajectory_data.as_mut().unwrap().llm_interaction = v;
         }
         if let Some(v) = update.success {
-            self.trajectory_data
-            .as_mut()
-            .unwrap() 
-            .success = v;
+            self.trajectory_data.as_mut().unwrap().success = v;
         }
         if let Some(v) = update.final_result {
-            self.trajectory_data
-            .as_mut()
-            .unwrap() 
-            .final_result = v;
+            self.trajectory_data.as_mut().unwrap().final_result = v;
         }
         if let Some(v) = update.execution_time {
-            self.trajectory_data
-            .as_mut()
-            .unwrap() 
-            .execution_time = v;
+            self.trajectory_data.as_mut().unwrap().execution_time = v;
         }
 
         Ok(())
@@ -274,10 +245,7 @@ impl Recorder for Trajectory {
         };
         let mut writer = io::BufWriter::new(file);
         // Serialize to pretty JSON
-        let serializable_data = self.trajectory_data
-            .as_ref()
-            .unwrap() 
-            .to_serializable();
+        let serializable_data = self.trajectory_data.as_ref().unwrap().to_serializable();
         let json_string = match serde_json::to_string_pretty(&serializable_data) {
             Ok(json) => json,
             Err(e) => {
@@ -593,7 +561,10 @@ mod tests {
             ..Default::default()
         };
         t.update_record(upd).unwrap();
-        assert_eq!(t.trajectory_data.as_ref().unwrap().final_result, Some("done".into()));
+        assert_eq!(
+            t.trajectory_data.as_ref().unwrap().final_result,
+            Some("done".into())
+        );
     }
 
     #[test]
@@ -676,7 +647,10 @@ mod tests {
             ..Default::default()
         };
         t.update_record(upd).unwrap();
-        assert_eq!(t.trajectory_data.as_ref().unwrap().end_time, Some("2024-01-01T02:00:00Z".to_string()));
+        assert_eq!(
+            t.trajectory_data.as_ref().unwrap().end_time,
+            Some("2024-01-01T02:00:00Z".to_string())
+        );
         assert!(t.trajectory_data.as_ref().unwrap().success);
     }
 

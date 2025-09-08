@@ -7,17 +7,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-
-use crate::{
-    llm::{
-        llm_provider::LLMProvider,
-        error::{LLMError, LLMResult},
-        retry_utils::{retry_with_backoff, RetryConfig},
-        llm_basics::{LLMMessage, LLMResponse, LLMUsage, LLMStream, StreamChunk, FinishReason, ContentItem, MessageRole},
-    },
-    config::ModelConfig,
-};
 use crate::tools::{Tool, ToolCall, ToolResult, ToolSchema};
+use crate::{
+    config::ModelConfig,
+    llm::{
+        error::{LLMError, LLMResult},
+        llm_basics::{
+            ContentItem, FinishReason, LLMMessage, LLMResponse, LLMStream, LLMUsage, MessageRole,
+            StreamChunk,
+        },
+        llm_provider::LLMProvider,
+        retry_utils::{RetryConfig, retry_with_backoff},
+    },
+};
 
 #[derive(Debug, Clone, Serialize)]
 struct OpenAIResponsesRequest {
@@ -161,7 +163,10 @@ impl OpenAIClient {
         response.json().await.map_err(LLMError::HttpError)
     }
 
-    async fn create_stream_response(&self, request: OpenAIResponsesRequest) -> LLMResult<LLMStream> {
+    async fn create_stream_response(
+        &self,
+        request: OpenAIResponsesRequest,
+    ) -> LLMResult<LLMStream> {
         let url = format!("{}/responses", self.base_url);
 
         let response = self
@@ -186,21 +191,24 @@ impl OpenAIClient {
         use futures::stream;
 
         let text = response.text().await.map_err(LLMError::HttpError)?;
-        let chunks: Vec<_> = text.lines().filter_map(|line| {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
-                if data == "[DONE]" {
-                    return None;
+        let chunks: Vec<_> = text
+            .lines()
+            .filter_map(|line| {
+                if line.starts_with("data: ") {
+                    let data = &line[6..];
+                    if data == "[DONE]" {
+                        return None;
+                    }
+                    match self.parse_sse_chunk(line) {
+                        Ok(Some(chunk)) => Some(Ok(chunk)),
+                        Ok(None) => None,
+                        Err(e) => Some(Err(e)),
+                    }
+                } else {
+                    None
                 }
-                match self.parse_sse_chunk(line) {
-                    Ok(Some(chunk)) => Some(Ok(chunk)),
-                    Ok(None) => None,
-                    Err(e) => Some(Err(e))
-                }
-            } else {
-                None
-            }
-        }).collect();
+            })
+            .collect();
 
         let stream = stream::iter(chunks);
 
@@ -219,7 +227,11 @@ impl OpenAIClient {
                     Ok(response) => {
                         if let Some(choice) = response.choices.first() {
                             return Ok(Some(StreamChunk {
-                                content: choice.delta.content.as_ref().map(|c| vec![ContentItem::text(c.clone())]),
+                                content: choice
+                                    .delta
+                                    .content
+                                    .as_ref()
+                                    .map(|c| vec![ContentItem::text(c.clone())]),
                                 finish_reason: choice.finish_reason.as_ref().map(|fr| match fr {
                                     FinishReason::Stop => FinishReason::Stop,
                                     FinishReason::ToolCalls => FinishReason::ToolCalls,
@@ -227,17 +239,20 @@ impl OpenAIClient {
                                 }),
                                 model: response.model.clone(),
                                 tool_calls: choice.delta.tool_calls.as_ref().map(|calls| {
-                                    calls.iter().map(|call| {
-                                        let arguments: HashMap<String, Value> =
-                                            serde_json::from_str(&call.function.arguments)
-                                                .unwrap_or_default();
-                                        ToolCall {
-                                            name: call.function.name.clone(),
-                                            call_id: call.id.clone(),
-                                            arguments,
-                                            id: Some(call.id.clone()),
-                                        }
-                                    }).collect()
+                                    calls
+                                        .iter()
+                                        .map(|call| {
+                                            let arguments: HashMap<String, Value> =
+                                                serde_json::from_str(&call.function.arguments)
+                                                    .unwrap_or_default();
+                                            ToolCall {
+                                                name: call.function.name.clone(),
+                                                call_id: call.id.clone(),
+                                                arguments,
+                                                id: Some(call.id.clone()),
+                                            }
+                                        })
+                                        .collect()
                                 }),
                                 usage: response.usage.map(|u| LLMUsage {
                                     input_tokens: u.prompt_tokens.unwrap_or(0),
@@ -248,7 +263,7 @@ impl OpenAIClient {
                                 }),
                             }));
                         }
-                    },
+                    }
                     Err(_) => continue,
                 }
             }
@@ -257,26 +272,32 @@ impl OpenAIClient {
     }
 
     fn parse_messages(&self, messages: &[LLMMessage]) -> Vec<OpenAIMessage> {
-        messages.iter().map(|msg| {
-            match msg.role {
+        messages
+            .iter()
+            .map(|msg| match msg.role {
                 MessageRole::Tool => self.parse_tool_result(msg.tool_result.as_ref().unwrap()),
                 _ => OpenAIMessage {
                     role: msg.role.as_str().to_string(),
                     content: msg.content.as_ref().and_then(|content_vec| {
-                        content_vec.iter().find_map(|item| item.as_text()).map(|s| s.to_string())
+                        content_vec
+                            .iter()
+                            .find_map(|item| item.as_text())
+                            .map(|s| s.to_string())
                     }),
-                    tool_calls: msg.tool_call.as_ref().map(|tc| vec![OpenAIToolCall {
-                        id: tc.call_id.clone(),
-                        tool_type: "function".to_string(),
-                        function: OpenAIFunction {
-                            name: tc.name.clone(),
-                            arguments: serde_json::to_string(&tc.arguments).unwrap_or_default(),
-                        },
-                    }]),
+                    tool_calls: msg.tool_call.as_ref().map(|tc| {
+                        vec![OpenAIToolCall {
+                            id: tc.call_id.clone(),
+                            tool_type: "function".to_string(),
+                            function: OpenAIFunction {
+                                name: tc.name.clone(),
+                                arguments: serde_json::to_string(&tc.arguments).unwrap_or_default(),
+                            },
+                        }]
+                    }),
                     tool_call_id: None,
-                }
-            }
-        }).collect()
+                },
+            })
+            .collect()
     }
 
     fn parse_tool_result(&self, tool_result: &ToolResult) -> OpenAIMessage {
@@ -344,7 +365,10 @@ impl LLMProvider for OpenAIClient {
         )
         .await?;
 
-        let choice = response.choices.into_iter().next()
+        let choice = response
+            .choices
+            .into_iter()
+            .next()
             .ok_or_else(|| LLMError::ApiError {
                 status_code: 500,
                 message: "No choices in response".to_string(),
@@ -353,8 +377,8 @@ impl LLMProvider for OpenAIClient {
         let mut tool_calls = Vec::new();
         if let Some(response_tool_calls) = &choice.message.tool_calls {
             for tool_call in response_tool_calls {
-                let arguments: HashMap<String, Value> = serde_json::from_str(&tool_call.function.arguments)
-                    .unwrap_or_default();
+                let arguments: HashMap<String, Value> =
+                    serde_json::from_str(&tool_call.function.arguments).unwrap_or_default();
 
                 tool_calls.push(ToolCall {
                     name: tool_call.function.name.clone(),
@@ -375,10 +399,17 @@ impl LLMProvider for OpenAIClient {
 
         // Create the response
         let llm_response = LLMResponse {
-            content: choice.message.content.as_ref()
+            content: choice
+                .message
+                .content
+                .as_ref()
                 .map(|c| vec![ContentItem::text(c.clone())])
                 .unwrap_or_default(),
-            tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
+            tool_calls: if tool_calls.is_empty() {
+                None
+            } else {
+                Some(tool_calls)
+            },
             finish_reason: match choice.finish_reason.unwrap_or(FinishReason::Stop) {
                 FinishReason::Stop => FinishReason::Stop,
                 FinishReason::ToolCalls => FinishReason::ToolCalls,
