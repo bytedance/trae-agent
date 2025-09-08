@@ -10,7 +10,7 @@ pub use base::Tool;
 pub type ToolCallArguments = HashMap<String, serde_json::Value>;
 
 /// Represents a tool call result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ToolResult {
     pub call_id: String,
     pub name: String, // Gemini specific field
@@ -34,7 +34,7 @@ impl ToolResult {
 }
 
 /// Represents a parsed tool call
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ToolCall {
     pub name: String,
     pub call_id: String,
