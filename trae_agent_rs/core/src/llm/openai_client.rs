@@ -76,6 +76,7 @@ struct OpenAIChoice {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OpenAIResponseMessage {
     role: String,
     content: Option<String>,
@@ -194,8 +195,9 @@ impl OpenAIClient {
         let chunks: Vec<_> = text
             .lines()
             .filter_map(|line| {
-                if line.starts_with("data: ") {
-                    let data = &line[6..];
+                if line.starts_with("data: ")
+                    && let Some(data) = line.strip_prefix("data: ")
+                {
                     if data == "[DONE]" {
                         return None;
                     }
@@ -217,8 +219,9 @@ impl OpenAIClient {
 
     fn parse_sse_chunk(&self, chunk: &str) -> LLMResult<Option<StreamChunk>> {
         for line in chunk.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
+            if line.starts_with("data: ")
+                && let Some(data) = line.strip_prefix("data: ")
+            {
                 if data == "[DONE]" {
                     return Ok(None);
                 }

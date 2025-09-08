@@ -27,9 +27,6 @@
 //! let response = client.chat(messages, &client.model_config, None, true).await?;
 //! ```
 
-use async_trait::async_trait;
-use std::fmt;
-
 use crate::config::ModelConfig;
 use crate::llm::{
     AnthropicClient, LLMMessage, LLMResponse, LLMStream, OpenAIClient,
@@ -38,6 +35,9 @@ use crate::llm::{
     llm_provider::LLMProvider as LLMProviderTrait,
 };
 use crate::tools::Tool;
+use async_trait::async_trait;
+use std::fmt;
+use std::str::FromStr;
 
 /// Supported LLM providers.
 ///
@@ -53,25 +53,26 @@ pub enum LLMProvider {
 }
 
 impl LLMProvider {
-    /// Create LLMProvider from string
-    pub fn from_str(provider: &str) -> LLMResult<Self> {
-        match provider.to_lowercase().as_str() {
-            "openai" => Ok(LLMProvider::OpenAI),
-            "anthropic" => Ok(LLMProvider::Anthropic),
-            "openai_compatible" => Ok(LLMProvider::OpenAICompatible),
-            _ => Err(LLMError::ConfigError(format!(
-                "Unsupported provider: {}",
-                provider
-            ))),
-        }
-    }
-
     /// Get string representation of the provider
     pub fn as_str(&self) -> &'static str {
         match self {
             LLMProvider::OpenAI => "openai",
             LLMProvider::Anthropic => "anthropic",
             LLMProvider::OpenAICompatible => "openai_compatible",
+        }
+    }
+}
+
+/// Create LLMProvider from string
+impl std::str::FromStr for LLMProvider {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "openai" => Ok(LLMProvider::OpenAI),
+            "anthropic" => Ok(LLMProvider::Anthropic),
+            "openai_compatible" => Ok(LLMProvider::OpenAICompatible),
+            _ => Err(format!("Unsupported provider: {}", s)),
         }
     }
 }
@@ -210,7 +211,8 @@ impl LLMClient {
     /// let client = LLMClient::new(model_config)?;
     /// ```
     pub fn new(model_config: ModelConfig) -> LLMResult<Self> {
-        let provider = LLMProvider::from_str(&model_config.model_provider.name)?;
+        let provider = LLMProvider::from_str(&model_config.model_provider.name)
+            .map_err(|e| LLMError::ConfigError(e.to_string()))?;
 
         let client = match provider {
             LLMProvider::OpenAI => {

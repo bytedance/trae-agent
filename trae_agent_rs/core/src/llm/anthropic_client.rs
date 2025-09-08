@@ -96,6 +96,7 @@ struct AnthropicTool {
 
 /// Anthropic response structure
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct AnthropicResponse {
     id: String,
     #[serde(rename = "type")]
@@ -150,6 +151,7 @@ struct MessageStartEvent {
 
 /// Content block delta event
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct ContentBlockDeltaEvent {
     index: u32,
     delta: ContentDelta,
@@ -158,6 +160,7 @@ struct ContentBlockDeltaEvent {
 /// Content delta
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
+#[allow(dead_code)]
 enum ContentDelta {
     #[serde(rename = "text_delta")]
     TextDelta { text: String },
@@ -174,6 +177,7 @@ struct MessageDeltaEvent {
 
 /// Message delta
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct MessageDelta {
     stop_reason: Option<String>,
     stop_sequence: Option<String>,
@@ -268,8 +272,9 @@ impl AnthropicClient {
         let chunks: Vec<_> = text
             .lines()
             .filter_map(|line| {
-                if line.starts_with("data: ") {
-                    let data = &line[6..];
+                if line.starts_with("data: ")
+                    && let Some(data) = line.strip_prefix("data: ")
+                {
                     if data == "[DONE]" {
                         return None;
                     }
@@ -290,8 +295,9 @@ impl AnthropicClient {
 
     fn parse_sse_chunk(&self, chunk: &str) -> LLMResult<Option<StreamChunk>> {
         for line in chunk.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
+            if line.starts_with("data: ")
+                && let Some(data) = line.strip_prefix("data: ")
+            {
                 if data == "[DONE]" {
                     return Ok(None);
                 }
@@ -301,80 +307,78 @@ impl AnthropicClient {
 
                 match event.event_type.as_str() {
                     "message_start" => {
-                        if let Some(data) = event.data {
-                            if let Ok(start_event) =
+                        if let Some(data) = event.data
+                            && let Ok(start_event) =
                                 serde_json::from_value::<MessageStartEvent>(data)
-                            {
-                                return Ok(Some(StreamChunk {
-                                    content: None,
-                                    finish_reason: None,
-                                    model: Some(start_event.message.model),
-                                    tool_calls: None,
-                                    usage: Some(LLMUsage {
-                                        input_tokens: start_event.message.usage.input_tokens,
-                                        output_tokens: start_event.message.usage.output_tokens,
-                                        cache_creation_input_tokens: start_event
-                                            .message
-                                            .usage
-                                            .cache_creation_input_tokens,
-                                        cache_read_input_tokens: start_event
-                                            .message
-                                            .usage
-                                            .cache_read_input_tokens,
-                                        reasoning_tokens: 0,
-                                    }),
-                                }));
-                            }
+                        {
+                            return Ok(Some(StreamChunk {
+                                content: None,
+                                finish_reason: None,
+                                model: Some(start_event.message.model),
+                                tool_calls: None,
+                                usage: Some(LLMUsage {
+                                    input_tokens: start_event.message.usage.input_tokens,
+                                    output_tokens: start_event.message.usage.output_tokens,
+                                    cache_creation_input_tokens: start_event
+                                        .message
+                                        .usage
+                                        .cache_creation_input_tokens,
+                                    cache_read_input_tokens: start_event
+                                        .message
+                                        .usage
+                                        .cache_read_input_tokens,
+                                    reasoning_tokens: 0,
+                                }),
+                            }));
                         }
                     }
                     "content_block_delta" => {
-                        if let Some(data) = event.data {
-                            if let Ok(delta_event) =
+                        if let Some(data) = event.data
+                            && let Ok(delta_event) =
                                 serde_json::from_value::<ContentBlockDeltaEvent>(data)
-                            {
-                                match delta_event.delta {
-                                    ContentDelta::TextDelta { text } => {
-                                        return Ok(Some(StreamChunk {
-                                            content: Some(vec![ContentItem::text(text)]),
-                                            finish_reason: None,
-                                            model: None,
-                                            tool_calls: None,
-                                            usage: None,
-                                        }));
-                                    }
-                                    _ => continue,
+                        {
+                            match delta_event.delta {
+                                ContentDelta::TextDelta { text } => {
+                                    return Ok(Some(StreamChunk {
+                                        content: Some(vec![ContentItem::text(text)]),
+                                        finish_reason: None,
+                                        model: None,
+                                        tool_calls: None,
+                                        usage: None,
+                                    }));
                                 }
+                                _ => continue,
                             }
                         }
                     }
                     "message_delta" => {
-                        if let Some(data) = event.data {
-                            if let Ok(delta_event) =
+                        if let Some(data) = event.data
+                            && let Ok(delta_event) =
                                 serde_json::from_value::<MessageDeltaEvent>(data)
-                            {
-                                let finish_reason = delta_event.delta.stop_reason.as_ref().map(
-                                    |reason| match reason.as_str() {
+                        {
+                            let finish_reason =
+                                delta_event.delta.stop_reason.as_ref().map(|reason| {
+                                    match reason.as_str() {
                                         "end_turn" => FinishReason::Stop,
                                         "tool_use" => FinishReason::ToolCalls,
                                         "max_tokens" => FinishReason::Stop,
                                         _ => FinishReason::Stop,
-                                    },
-                                );
+                                    }
+                                });
 
-                                return Ok(Some(StreamChunk {
-                                    content: None,
-                                    finish_reason,
-                                    model: None,
-                                    tool_calls: None,
-                                    usage: delta_event.usage.map(|u| LLMUsage {
-                                        input_tokens: u.input_tokens,
-                                        output_tokens: u.output_tokens,
-                                        cache_creation_input_tokens: u.cache_creation_input_tokens,
-                                        cache_read_input_tokens: u.cache_read_input_tokens,
-                                        reasoning_tokens: 0,
-                                    }),
-                                }));
-                            }
+                            return Ok(Some(StreamChunk {
+                                content: None,
+                                finish_reason,
+                                model: None,
+                                tool_calls: None,
+                                usage: delta_event.usage.map(|u| LLMUsage {
+                                    input_tokens: u.input_tokens,
+                                    output_tokens: u.output_tokens,
+                                    cache_creation_input_tokens: u.cache_creation_input_tokens,
+                                    cache_read_input_tokens: u.cache_read_input_tokens,
+                                    reasoning_tokens: 0,
+                                }),
+                            }));
                         }
                     }
                     _ => continue,
@@ -461,10 +465,10 @@ impl AnthropicClient {
         }
 
         // If only one text block, use string format
-        if blocks.len() == 1 {
-            if let AnthropicContentBlock::Text { text } = &blocks[0] {
-                return AnthropicContent::String(text.clone());
-            }
+        if blocks.len() == 1
+            && let AnthropicContentBlock::Text { text } = &blocks[0]
+        {
+            return AnthropicContent::String(text.clone());
         }
 
         AnthropicContent::Array(blocks)
@@ -489,11 +493,11 @@ impl AnthropicClient {
 
     fn extract_system_message(&mut self, messages: &[LLMMessage]) {
         for msg in messages {
-            if msg.role == MessageRole::System {
-                if let Some(text) = msg.get_text() {
-                    self.system_message = Some(text.to_string());
-                    break;
-                }
+            if msg.role == MessageRole::System
+                && let Some(text) = msg.get_text()
+            {
+                self.system_message = Some(text.to_string());
+                break;
             }
         }
     }

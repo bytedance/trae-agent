@@ -37,9 +37,13 @@ impl MessageRole {
             MessageRole::System => "system",
         }
     }
+}
 
-    /// Parse from string
-    pub fn from_str(s: &str) -> Result<Self, String> {
+/// Parse MessageRole from string
+impl std::str::FromStr for MessageRole {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "user" => Ok(MessageRole::User),
             "assistant" => Ok(MessageRole::Assistant),
@@ -429,6 +433,7 @@ pub type LLMStream = Pin<Box<dyn Stream<Item = LLMResult<StreamChunk>> + Send>>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_llm_usage_add() {

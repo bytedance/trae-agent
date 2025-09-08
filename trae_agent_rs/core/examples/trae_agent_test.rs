@@ -14,87 +14,14 @@
 //! 5. PLEASE MAKE SURE YOU CHANGE THE PATH TO YOUR ABSOLUTE PATH.
 //! 6. Run: cargo run --example trae_agent_test
 
-use std::{collections::HashMap, pin::Pin};
+use std::collections::HashMap;
 use std::{env, vec};
 use trae_core::trae::TraeAgent;
 use trae_core::{
-    agent::base_agent::{Agent, AgentError, AgentExecution, AgentState, BaseAgent},
+    agent::base_agent::{Agent, AgentError, AgentExecution, BaseAgent},
     config::{ModelConfig, ModelProvider},
-    llm::{ContentItem, LLMClient, LLMMessage, MessageRole},
-    tools::{Tool, bash::Bash, edit::Edit},
+    llm::{LLMClient, MessageRole},
 };
-
-/// Mock tool for testing purposes
-#[derive(Debug)]
-struct MockTool {
-    name: String,
-    call_count: usize,
-}
-
-impl MockTool {
-    fn new(name: String) -> Self {
-        MockTool {
-            name,
-            call_count: 0,
-        }
-    }
-}
-
-impl Tool for MockTool {
-    fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    fn reset(&mut self) {
-        self.call_count = 0;
-    }
-
-    fn get_description(&self) -> &str {
-        "Mock tool for testing"
-    }
-
-    fn get_input_schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "Mock command to execute"
-                }
-            },
-            "required": ["command"]
-        })
-    }
-
-    fn execute(
-        &mut self,
-        arguments: HashMap<String, serde_json::Value>,
-    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + '_>> {
-        use std::future::Future;
-        use std::pin::Pin;
-
-        self.call_count += 1;
-
-        let command = arguments
-            .get("command")
-            .and_then(|v| v.as_str())
-            .unwrap_or("no_command");
-
-        let result = match command {
-            "success" => Ok(format!(
-                "Mock tool {} executed successfully (call #{})",
-                self.name, self.call_count
-            )),
-            "error" => Err(format!("Mock tool {} failed intentionally", self.name)),
-            _ => Ok(format!(
-                "Mock tool {} executed with command: {} (call #{})",
-                self.name, command, self.call_count
-            )),
-        };
-
-        Box::pin(async move { result })
-    }
-}
 
 /// Helper function to create a test TraeAgent
 fn create_test_trae_agent() -> Result<TraeAgent, Box<dyn std::error::Error>> {
@@ -378,15 +305,15 @@ async fn test_system_prompt() -> Result<(), Box<dyn std::error::Error>> {
     // Print message contents (truncated for readability)
     for (i, msg) in agent.initial_msgs.iter().enumerate() {
         println!("Message {}: Role = {:?}", i + 1, msg.role);
-        if let Some(content) = &msg.content {
-            if let Some(text_content) = content.first().and_then(|c| c.as_text()) {
-                let truncated = if text_content.len() > 100 {
-                    format!("{}...", &text_content[..100])
-                } else {
-                    text_content.to_string()
-                };
-                println!("  Content: {}", truncated);
-            }
+        if let Some(content) = &msg.content
+            && let Some(text_content) = content.first().and_then(|c| c.as_text())
+        {
+            let truncated = if text_content.len() > 100 {
+                format!("{}...", &text_content[..100])
+            } else {
+                text_content.to_string()
+            };
+            println!("  Content: {}", truncated);
         }
     }
 

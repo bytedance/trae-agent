@@ -112,7 +112,7 @@ impl Tool for Bash {
             let starterr = self.bash.start().await;
 
             if let Err(e) = starterr {
-                return Err(format!("fail to start the bash {}", e.to_string()));
+                return Err(format!("fail to start the bash {}", e));
             }
 
             // run the command
@@ -144,19 +144,19 @@ impl Tool for Bash {
                     let stdout = res.output;
                     let stderr = res.error;
                     let exit_code = res.error_code;
-                    
+
                     // Create combined output showing both stdout and stderr
                     let mut result = stdout.clone();
-                    
+
                     // If there's stderr content, append it with a clear separator
                     if !stderr.is_empty() {
                         if !result.is_empty() {
-                            result.push_str("\n");
+                            result.push('\n');
                         }
                         result.push_str("STDERR:\n");
                         result.push_str(&stderr);
                     }
-                    
+
                     // Only treat it as an error if exit code is non-zero
                     if exit_code != 0 {
                         return Err(format!(
@@ -165,10 +165,10 @@ impl Tool for Bash {
                         ));
                     }
 
-                    return Ok(result);
+                    Ok(result)
                 }
                 Err(e) => {
-                    return Err(format!("Unexpected Error {}", e)); // this should never happen due to previous check
+                    Err(format!("Unexpected Error {}", e)) // this should never happen due to previous check
                 }
             }
         })
@@ -176,6 +176,7 @@ impl Tool for Bash {
 }
 
 // set the bash process to be private field
+#[allow(dead_code)]
 struct BashProcess {
     child: Option<Child>,
     stdin: Option<ChildStdin>,
@@ -240,7 +241,7 @@ impl BashProcess {
             return Err(BashError::SessionNotStarted);
         }
         if let Some(child) = &mut self.child {
-            if let Some(_) = child.try_wait()? {
+            if child.try_wait()?.is_some() {
                 self.started = false;
                 return Ok(());
             }
@@ -264,14 +265,11 @@ impl BashProcess {
 
         //WARNING ALL REFERENCE ARE NOW MUTABLE !
         //CONCURRENT RUNNING IN SAME PROCESS IS NOT ALLOWED
-        let child = self
-            .child
-            .as_mut()
-            .ok_or_else(|| BashError::SessionNotStarted)?;
+        let child = self.child.as_mut().ok_or(BashError::SessionNotStarted)?;
         let stdin = self
             .stdin
             .as_mut()
-            .ok_or_else(|| BashError::Other("stdin not available".to_string()))?;
+            .ok_or(BashError::Other("stdin not available".to_string()))?;
         let stdout = self.stdout.as_mut().ok_or(BashError::SessionNotStarted)?;
         let stderr = self.stderr.as_mut().ok_or(BashError::SessionNotStarted)?;
 
@@ -337,13 +335,13 @@ impl BashProcess {
                         Ok(bytes_read) => {
                             // Convert bytes to string
                             let chunk = String::from_utf8_lossy(&stdout_buffer[..bytes_read]).to_string();
-                            
+
                             // Check if sentinel is found
                             if chunk.contains(sentinel_before) {
                                 if let Some(pos) = chunk.find(sentinel_before) {
                                     output_accum.push_str(&chunk[..pos]);
                                     let rest = &chunk[pos + sentinel_before.len()..];
-                                    
+
                                     // Look for sentinel_after in the rest
                                     if let Some(after_pos) = rest.find(sentinel_after) {
                                         let code_str = &rest[..after_pos];
@@ -363,7 +361,7 @@ impl BashProcess {
                         }
                     }
                 }
-                
+
                 // Read from stderr
                 stderr_result = stderr.read(&mut stderr_buffer) => {
                     match stderr_result {
@@ -379,7 +377,7 @@ impl BashProcess {
                         }
                     }
                 }
-                
+
                 // Global timeout
                 _ = time::sleep(timeout) => {
                     timed_out = true;
@@ -396,9 +394,15 @@ impl BashProcess {
         // Try to read any remaining stderr data with a short timeout
         let mut final_stderr_buffer = [0u8; 4096];
         loop {
-            match time::timeout(Duration::from_millis(50), stderr.read(&mut final_stderr_buffer)).await {
+            match time::timeout(
+                Duration::from_millis(50),
+                stderr.read(&mut final_stderr_buffer),
+            )
+            .await
+            {
                 Ok(Ok(bytes_read)) if bytes_read > 0 => {
-                    let chunk = String::from_utf8_lossy(&final_stderr_buffer[..bytes_read]).to_string();
+                    let chunk =
+                        String::from_utf8_lossy(&final_stderr_buffer[..bytes_read]).to_string();
                     error_accum.push_str(&chunk);
                 }
                 _ => break,
@@ -462,7 +466,6 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
     use std::time::Duration;
-
 
     #[test]
     fn test_bash_new() {
@@ -603,7 +606,7 @@ mod tests {
 
         // This command should complete quickly and successfully
         let run_result = bash_process.run("echo 'hello world'").await;
-        
+
         match run_result {
             Ok(result) => {
                 assert!(!bash_process.timed_out);
@@ -634,7 +637,10 @@ mod tests {
 
         bash_process.start().await.expect("start should succeed");
 
-        let run_result = bash_process.run("echo 'hello world' && echo 'error message' >&2").await.unwrap();
+        let run_result = bash_process
+            .run("echo 'hello world' && echo 'error message' >&2")
+            .await
+            .unwrap();
         assert!(run_result.output.contains("hello world"));
         assert!(run_result.error.contains("error message"));
     }
@@ -691,7 +697,7 @@ mod tests {
         // This command should timeout due to the short timeout
         // Use a command that will definitely take longer than 200ms
         let run_result = bash_process.run("sleep 10").await;
-        
+
         // The result should be a timeout error
         match run_result {
             Err(BashError::Timeout) => {
@@ -724,7 +730,7 @@ mod tests {
             .unwrap_or(false);
 
         assert_eq!(cmd, "echo test");
-        assert_eq!(restart, true);
+        assert!(restart);
     }
 
     // Integration test with timeout - this might still hang but will be killed by outer timeout
@@ -739,7 +745,7 @@ mod tests {
 
         // This might timeout, succeed, or fail - all are acceptable for this test
         let _result = bash.execute(args).await;
-        
+
         assert!(!bash.bash.timed_out);
     }
 
@@ -776,7 +782,7 @@ mod tests {
                         || output.contains("usr")
                         || output.contains("etc")
                         || output.contains("home")
-                        || output.len() > 0, // At least some output
+                        || !output.is_empty(), // At least some output
                     "Expected ls output to contain common directories, got: {}",
                     output
                 );

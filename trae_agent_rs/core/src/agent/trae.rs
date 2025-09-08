@@ -8,7 +8,7 @@ use crate::agent::base_agent::*;
 use crate::bash::Bash;
 use crate::edit::Edit;
 use crate::llm_basics::{LLMUsage, TextContent};
-use crate::trajectories::trajectories::{LLMRecord, Trajectory, system_time_to_string};
+use crate::utils::trajectory::{LLMRecord, Trajectory, system_time_to_string};
 use crate::{ContentItem, LLMMessage, Tool, agent};
 
 const TRAE_AGENT_TOOL_NAMES: [&str; 2] = ["str_replace_based_edit_tool", "bash"];
@@ -52,7 +52,7 @@ impl Agent for TraeAgent {
     ) -> Result<(), AgentError> {
         self.baseagent.task = task;
 
-        if tool_names.is_some() || tool_names.unwrap_or(vec![]).len() == 0 {
+        if tool_names.is_some() || tool_names.unwrap_or_default().is_empty() {
             let provider = &self.baseagent.model_config.model_provider;
 
             let mut tools_map: HashMap<String, usize> = HashMap::new();
@@ -66,7 +66,7 @@ impl Agent for TraeAgent {
                         tools_map.insert(tool.to_string().clone(), tools.len() - 1);
                     }
                     "str_replace_based_edit_tool" => {
-                        tools.push(Box::new(Edit::new()));
+                        tools.push(Box::new(Edit::default()));
 
                         tools_map.insert(tool.to_string().clone(), tools.len() - 1);
                     }
@@ -272,7 +272,7 @@ impl Agent for TraeAgent {
             .trajectory_data
             .as_mut()
             .unwrap()
-            .execution_time = exec_agent.execution_time.clone();
+            .execution_time = exec_agent.execution_time;
 
         self.trajectory_recorder
             .trajectory_data

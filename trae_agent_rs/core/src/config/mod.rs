@@ -131,34 +131,22 @@ pub struct TraeAgentConfig {
 
 /// Get a value or default (None) from Yaml. Supports generic types
 fn get_str_value_or_none_from_yaml(item: &Yaml, key: &str) -> Option<String> {
-    match item[key].as_str() {
-        Some(value) => Some(value.to_string()),
-        None => None,
-    }
+    item[key].as_str().map(|value| value.to_string())
 }
 
 fn get_u32_value_or_none_from_yaml(item: &Yaml, key: &str) -> Option<u32> {
-    match item[key].as_i64() {
-        Some(value) => Some(value as u32),
-        None => None,
-    }
+    item[key].as_i64().map(|value| value as u32)
 }
 
 fn get_f32_value_or_none_from_yaml(item: &Yaml, key: &str) -> Option<f32> {
     match item[key].as_f64() {
         Some(value) => Some(value as f32),
-        None => match item[key].as_i64() {
-            Some(value) => Some(value as f32),
-            None => None,
-        },
+        None => item[key].as_i64().map(|value| value as f32),
     }
 }
 
 fn get_bool_value_or_none_from_yaml(item: &Yaml, key: &str) -> Option<bool> {
-    match item[key].as_bool() {
-        Some(value) => Some(value),
-        None => None,
-    }
+    item[key].as_bool()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -172,13 +160,13 @@ impl Config {
             Ok(_file) => {
                 let source = std::fs::read_to_string(path)
                     .map_err(|e| ConfigError::LoadFileError(e.to_string()))?;
-                Self::from_str(&source)
+                Self::from_yaml_str(&source)
             }
             Err(_e) => Err(ConfigError::LoadFileError(path.to_string())),
         }
     }
 
-    pub fn from_str(source: &str) -> Result<Self, ConfigError> {
+    pub fn from_yaml_str(source: &str) -> Result<Self, ConfigError> {
         let docs = YamlLoader::load_from_str(source)
             .map_err(|e| ConfigError::LoadFileError(e.to_string()))?;
 
@@ -392,8 +380,8 @@ models:
     #[test]
     fn test_config_from_yaml_success() {
         // Test loading the config
-        let config =
-            Config::from_str(create_test_yaml_content().as_str()).expect("Failed to load config");
+        let config = Config::from_yaml_str(create_test_yaml_content().as_str())
+            .expect("Failed to load config");
 
         println!("{:?}", config);
 

@@ -160,10 +160,10 @@ async fn test_basic_chat(
             if let Some(usage) = &response.usage {
                 println!("Usage: {}", usage);
             }
-            if !response.content.is_empty() {
-                if let Some(text) = response.content[0].as_text() {
-                    println!("Response: {}", text);
-                }
+            if !response.content.is_empty()
+                && let Some(text) = response.content[0].as_text()
+            {
+                println!("Response: {}", text);
             }
         }
         Err(e) => {
@@ -226,10 +226,10 @@ async fn test_tool_calling(
                 );
             }
 
-            if !response.content.is_empty() {
-                if let Some(text) = response.content[0].as_text() {
-                    println!("Response: {}", text);
-                }
+            if !response.content.is_empty()
+                && let Some(text) = response.content[0].as_text()
+            {
+                println!("Response: {}", text);
             }
         }
         Err(e) => {
@@ -281,17 +281,16 @@ async fn test_streaming(
                     Ok(chunk) => {
                         chunk_count += 1;
 
-                        if let Some(content) = &chunk.content {
-                            if !content.is_empty() {
-                                if let Some(text) = content[0].as_text() {
-                                    print!("{}", text);
-                                    // Flush stdout to ensure real-time output
-                                    io::stdout().flush().unwrap();
-                                    // Typewriter effect delay (configurable via TYPEWRITER_DELAY_MS env var)
-                                    if typewriter_delay > 0 {
-                                        sleep(Duration::from_millis(typewriter_delay)).await;
-                                    }
-                                }
+                        if let Some(content) = &chunk.content
+                            && !content.is_empty()
+                            && let Some(text) = content[0].as_text()
+                        {
+                            print!("{}", text);
+                            // Flush stdout to ensure real-time output
+                            io::stdout().flush().unwrap();
+                            // Typewriter effect delay (configurable via TYPEWRITER_DELAY_MS env var)
+                            if typewriter_delay > 0 {
+                                sleep(Duration::from_millis(typewriter_delay)).await;
                             }
                         }
 

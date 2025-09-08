@@ -76,6 +76,7 @@ struct OpenAIResponseMessage {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 struct OpenAIUsage {
     prompt_tokens: i32,
     completion_tokens: i32,
@@ -136,7 +137,7 @@ impl OpenAICompatibleClient {
         } else if base_url.ends_with("/") {
             format!("{}chat/completions", base_url)
         } else {
-            format!("{}", base_url)
+            base_url.to_string()
         };
 
         println!("url: {}", url);
@@ -160,24 +161,24 @@ impl OpenAICompatibleClient {
         );
 
         // Add provider-specific headers from environment variables
-        if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL") {
-            if let Ok(header_value) = site_url.parse::<reqwest::header::HeaderValue>() {
-                headers.insert(
-                    "HTTP-Referer"
-                        .parse::<reqwest::header::HeaderName>()
-                        .unwrap(),
-                    header_value,
-                );
-            }
+        if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL")
+            && let Ok(header_value) = site_url.parse::<reqwest::header::HeaderValue>()
+        {
+            headers.insert(
+                "HTTP-Referer"
+                    .parse::<reqwest::header::HeaderName>()
+                    .unwrap(),
+                header_value,
+            );
         }
 
-        if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME") {
-            if let Ok(header_value) = site_name.parse::<reqwest::header::HeaderValue>() {
-                headers.insert(
-                    "X-Title".parse::<reqwest::header::HeaderName>().unwrap(),
-                    header_value,
-                );
-            }
+        if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME")
+            && let Ok(header_value) = site_name.parse::<reqwest::header::HeaderValue>()
+        {
+            headers.insert(
+                "X-Title".parse::<reqwest::header::HeaderName>().unwrap(),
+                header_value,
+            );
         }
 
         // Add extra headers from config
@@ -239,7 +240,7 @@ impl OpenAICompatibleClient {
         } else if base_url.ends_with("/") {
             format!("{}chat/completions", base_url)
         } else {
-            format!("{}", base_url)
+            base_url.to_string()
         };
 
         let mut headers = reqwest::header::HeaderMap::new();
@@ -261,24 +262,24 @@ impl OpenAICompatibleClient {
         );
 
         // Add provider-specific headers from environment variables
-        if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL") {
-            if let Ok(header_value) = site_url.parse::<reqwest::header::HeaderValue>() {
-                headers.insert(
-                    "HTTP-Referer"
-                        .parse::<reqwest::header::HeaderName>()
-                        .unwrap(),
-                    header_value,
-                );
-            }
+        if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL")
+            && let Ok(header_value) = site_url.parse::<reqwest::header::HeaderValue>()
+        {
+            headers.insert(
+                "HTTP-Referer"
+                    .parse::<reqwest::header::HeaderName>()
+                    .unwrap(),
+                header_value,
+            );
         }
 
-        if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME") {
-            if let Ok(header_value) = site_name.parse::<reqwest::header::HeaderValue>() {
-                headers.insert(
-                    "X-Title".parse::<reqwest::header::HeaderName>().unwrap(),
-                    header_value,
-                );
-            }
+        if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME")
+            && let Ok(header_value) = site_name.parse::<reqwest::header::HeaderValue>()
+        {
+            headers.insert(
+                "X-Title".parse::<reqwest::header::HeaderName>().unwrap(),
+                header_value,
+            );
         }
 
         // Add extra headers from config
@@ -321,8 +322,9 @@ impl OpenAICompatibleClient {
 
     fn parse_sse_chunk(&self, chunk: &str) -> LLMResult<Option<crate::llm::StreamChunk>> {
         for line in chunk.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
+            if line.starts_with("data: ")
+                && let Some(data) = line.strip_prefix("data: ")
+            {
                 if data == "[DONE]" {
                     return Ok(None);
                 }
@@ -675,8 +677,9 @@ impl LLMProvider for OpenAICompatibleClient {
                 continue;
             }
 
-            if line.starts_with("data: ") {
-                let data = &line[6..];
+            if line.starts_with("data: ")
+                && let Some(data) = line.strip_prefix("data: ")
+            {
                 if data == "[DONE]" {
                     break;
                 }

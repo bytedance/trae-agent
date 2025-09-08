@@ -31,6 +31,8 @@ use crate::llm_basics::LLMUsage;
 use crate::llm_basics::TextContent;
 use crate::tools;
 
+type TaskCompleteChecker = Box<dyn FnOnce(&LLMResponse) -> bool + Send>;
+
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub enum AgentStepState {
     THINKING,
@@ -102,10 +104,7 @@ impl AgentExecution {
     pub fn new(task: String, steps: Option<Vec<AgentStep>>) -> Self {
         AgentExecution {
             task,
-            steps: match steps {
-                None => vec![],
-                Some(t) => t,
-            },
+            steps: steps.unwrap_or_default(),
             final_result: None,
             success: false,
             total_token: None,
@@ -149,7 +148,9 @@ impl AgentStep {
 
 pub trait Agent {
     // run is corresponding to execute_task in python.
-    async fn run(&mut self) -> Result<AgentExecution, &'static str>;
+    fn run(
+        &mut self,
+    ) -> impl std::future::Future<Output = Result<AgentExecution, &'static str>> + Send;
     fn new_task(
         &mut self,
         task: String,
@@ -162,7 +163,7 @@ impl BaseAgent {
     pub fn finalize_step(
         &self,
         step: &mut AgentStep,
-        messages: &mut Vec<LLMMessage>,
+        _messages: &mut [LLMMessage],
         execution: &mut AgentExecution,
     ) {
         step.state = AgentStepState::COMPLETED;
@@ -171,7 +172,7 @@ impl BaseAgent {
     }
 
     pub fn close_tools(&mut self) {
-        if self.tools.len() == 0 {
+        if self.tools.is_empty() {
             return;
         }
 
@@ -186,16 +187,16 @@ impl BaseAgent {
     pub async fn execute_step(
         &mut self,
         step: &mut AgentStep,
-        msgs: &Vec<LLMMessage>,
+        msgs: &[LLMMessage],
         exec: &mut AgentExecution,
 
-        is_task_complete: Option<Box<dyn FnOnce(&LLMResponse) -> bool>>,
+        is_task_complete: Option<TaskCompleteChecker>,
     ) -> Result<Vec<LLMMessage>, AgentError> {
         step.state = AgentStepState::THINKING;
         // a cli api should place here currently there's not cli api
         let response = self
             .llm_client
-            .chat(msgs.clone(), &self.model_config, Some(&self.tools), false)
+            .chat(msgs.to_vec(), &self.model_config, Some(&self.tools), false)
             .await;
 
         let llm_response = match response {
@@ -223,18 +224,18 @@ impl BaseAgent {
         // update console
         // update llm usage
         // indicate task complete here
-        if indicate_task_complete(&unwrap_response) {
+        if indicate_task_complete(unwrap_response) {
             let check_complete: Box<dyn FnOnce(&LLMResponse) -> bool> = match is_task_complete {
                 Some(f) => f,
                 None => Box::new(|_x| true), // always true if no function is given
             };
 
-            if check_complete(&unwrap_response) {
+            if check_complete(unwrap_response) {
                 exec.agent_state = AgentState::COMPLETED;
 
                 let result = unwrap_response
                     .content
-                    .get(0)
+                    .first()
                     .and_then(|c| c.as_text())
                     .unwrap_or("Error: no message found");
 
@@ -357,7 +358,7 @@ impl BaseAgent {
                         reflection.push_str(". Consider trying a different approach");
                     }
                 }
-                if reflection.len() > 0 {
+                if !reflection.is_empty() {
                     Some(reflection)
                 } else {
                     None
@@ -365,7 +366,7 @@ impl BaseAgent {
             }
         };
 
-        if !reflection.is_none() {
+        if reflection.is_some() {
             step.state = AgentStepState::REFLECTING;
             step.reflection = reflection.clone();
             //TODO update cli here
@@ -387,7 +388,7 @@ impl BaseAgent {
 fn indicate_task_complete(response: &LLMResponse) -> bool {
     let content = response
         .content
-        .get(0)
+        .first()
         .and_then(|c| c.as_text())
         .unwrap_or("Error: can not get the response");
 
@@ -399,8 +400,8 @@ fn indicate_task_complete(response: &LLMResponse) -> bool {
         "finished successfully",
     ];
 
-    for _i in 0..completion_indicators.len() {
-        if content.to_lowercase().contains(completion_indicators[_i]) {
+    for _i in completion_indicators.iter() {
+        if content.to_lowercase().contains(_i) {
             return true;
         }
     }
@@ -438,9 +439,9 @@ fn execresult_to_toolresult(execresult: Result<String, String>, toolresult: &mut
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::llm::{FinishReason, MessageRole};
+    use crate::llm::FinishReason;
     use crate::llm_basics::{LLMUsage, TextContent};
-    use crate::{ContentItem, LLMMessage, LLMResponse, ToolCall, ToolResult};
+    use crate::{ContentItem, LLMResponse, ToolCall, ToolResult};
     use serde_json::{Value, json};
     use std::collections::HashMap;
 
@@ -500,7 +501,7 @@ mod tests {
             // Since we can't directly compare enum variants without PartialEq,
             // we'll test through pattern matching
             match cloned_state {
-                AgentStepState::THINKING => assert!(true),
+                AgentStepState::THINKING => {}
                 _ => panic!("Clone failed for THINKING state"),
             }
         }
@@ -627,7 +628,6 @@ mod tests {
     // Tests for BaseAgent
     mod base_agent_tests {
         use super::*;
-        use crate::{LLMClient, config::ModelConfig};
 
         // Mock implementations would be needed for full testing
         // These tests assume basic functionality
@@ -974,7 +974,7 @@ mod tests {
 
         #[test]
         fn test_empty_tool_calls_handling() {
-            let response = create_test_llm_response_with_tools("test", vec![]);
+            let _response = create_test_llm_response_with_tools("test", vec![]);
             // This would test the tool_call_handler logic for empty tool calls
             // The actual implementation should handle empty vectors gracefully
         }
