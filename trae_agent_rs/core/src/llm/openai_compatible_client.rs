@@ -7,14 +7,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::llm::llm_provider::LLMProvider;
 use crate::config::ModelConfig;
 use crate::llm::error::{LLMError, LLMResult};
+use crate::llm::llm_basics::{ContentItem, LLMMessage, LLMResponse, LLMUsage};
+use crate::llm::llm_provider::LLMProvider;
 use crate::llm::retry_utils::retry_with_backoff;
-use crate::llm::llm_basics::{LLMMessage, LLMResponse, LLMUsage, ContentItem};
 use crate::tools::{Tool, ToolCall};
-
-
 
 /// OpenAI-compatible request structure
 #[derive(Debug, Serialize)]
@@ -78,6 +76,7 @@ struct OpenAIResponseMessage {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 struct OpenAIUsage {
     prompt_tokens: i32,
     completion_tokens: i32,
@@ -126,7 +125,10 @@ impl OpenAICompatibleClient {
     }
 
     async fn make_api_call(&self, request: OpenAIRequest) -> LLMResult<OpenAIResponse> {
-        let base_url = self.config.model_provider.base_url
+        let base_url = self
+            .config
+            .model_provider
+            .base_url
             .as_ref()
             .ok_or_else(|| LLMError::ConfigError("Base URL not configured".to_string()))?;
 
@@ -135,13 +137,16 @@ impl OpenAICompatibleClient {
         } else if base_url.ends_with("/") {
             format!("{}chat/completions", base_url)
         } else {
-            format!("{}", base_url)
+            base_url.to_string()
         };
 
         println!("url: {}", url);
 
         let mut headers = reqwest::header::HeaderMap::new();
-        let api_key = self.config.model_provider.api_key
+        let api_key = self
+            .config
+            .model_provider
+            .api_key
             .as_ref()
             .ok_or_else(|| LLMError::AuthError("API key not configured".to_string()))?;
         headers.insert(
@@ -149,42 +154,53 @@ impl OpenAICompatibleClient {
             format!("Bearer {}", api_key)
                 .parse()
                 .map_err(|e| LLMError::AuthError(format!("Invalid API key: {}", e)))?,
-         );
+        );
         headers.insert(
             reqwest::header::CONTENT_TYPE,
             "application/json".parse().unwrap(),
         );
 
         // Add provider-specific headers from environment variables
-        if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL") {
-            if let Ok(header_value) = site_url.parse::<reqwest::header::HeaderValue>() {
-                headers.insert("HTTP-Referer".parse::<reqwest::header::HeaderName>().unwrap(), header_value);
-            }
+        if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL")
+            && let Ok(header_value) = site_url.parse::<reqwest::header::HeaderValue>()
+        {
+            headers.insert(
+                "HTTP-Referer"
+                    .parse::<reqwest::header::HeaderName>()
+                    .unwrap(),
+                header_value,
+            );
         }
 
-        if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME") {
-            if let Ok(header_value) = site_name.parse::<reqwest::header::HeaderValue>() {
-                headers.insert("X-Title".parse::<reqwest::header::HeaderName>().unwrap(), header_value);
-            }
+        if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME")
+            && let Ok(header_value) = site_name.parse::<reqwest::header::HeaderValue>()
+        {
+            headers.insert(
+                "X-Title".parse::<reqwest::header::HeaderName>().unwrap(),
+                header_value,
+            );
         }
 
         // Add extra headers from config
         for (key, value) in &self.config.extra_headers {
             headers.insert(
-                key.parse::<reqwest::header::HeaderName>().map_err(|e| LLMError::ConfigError(format!("Invalid header key: {}", e)))?,
-                value.parse::<reqwest::header::HeaderValue>().map_err(|e| LLMError::ConfigError(format!("Invalid header value: {}", e)))?,
+                key.parse::<reqwest::header::HeaderName>()
+                    .map_err(|e| LLMError::ConfigError(format!("Invalid header key: {}", e)))?,
+                value
+                    .parse::<reqwest::header::HeaderValue>()
+                    .map_err(|e| LLMError::ConfigError(format!("Invalid header value: {}", e)))?,
             );
         }
 
         let response = retry_with_backoff(
-        || async {
-            self.client
-                .post(&url)
-                .headers(headers.clone())
-                .json(&request)
-                .send()
-                .await
-                .map_err(LLMError::HttpError)
+            || async {
+                self.client
+                    .post(&url)
+                    .headers(headers.clone())
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(LLMError::HttpError)
             },
             crate::llm::retry_utils::RetryConfig::default(),
             "openai_compatible",
@@ -202,15 +218,20 @@ impl OpenAICompatibleClient {
 
         let response_text = response.text().await?;
 
-        serde_json::from_str::<OpenAIResponse>(&response_text)
-            .map_err(|e| {
-                eprintln!("Failed to parse response: {}", response_text);
-                LLMError::JsonError(e)
-            })
+        serde_json::from_str::<OpenAIResponse>(&response_text).map_err(|e| {
+            eprintln!("Failed to parse response: {}", response_text);
+            LLMError::JsonError(e)
+        })
     }
 
-    async fn make_streaming_api_call(&self, request: OpenAIRequest) -> LLMResult<reqwest::Response> {
-        let base_url = self.config.model_provider.base_url
+    async fn make_streaming_api_call(
+        &self,
+        request: OpenAIRequest,
+    ) -> LLMResult<reqwest::Response> {
+        let base_url = self
+            .config
+            .model_provider
+            .base_url
             .as_ref()
             .ok_or_else(|| LLMError::ConfigError("Base URL not configured".to_string()))?;
 
@@ -219,11 +240,14 @@ impl OpenAICompatibleClient {
         } else if base_url.ends_with("/") {
             format!("{}chat/completions", base_url)
         } else {
-            format!("{}", base_url)
+            base_url.to_string()
         };
 
         let mut headers = reqwest::header::HeaderMap::new();
-        let api_key = self.config.model_provider.api_key
+        let api_key = self
+            .config
+            .model_provider
+            .api_key
             .as_ref()
             .ok_or_else(|| LLMError::AuthError("API key not configured".to_string()))?;
         headers.insert(
@@ -238,23 +262,34 @@ impl OpenAICompatibleClient {
         );
 
         // Add provider-specific headers from environment variables
-        if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL") {
-            if let Ok(header_value) = site_url.parse::<reqwest::header::HeaderValue>() {
-                headers.insert("HTTP-Referer".parse::<reqwest::header::HeaderName>().unwrap(), header_value);
-            }
+        if let Ok(site_url) = std::env::var("OPENAI_COMPATIBLE_SITE_URL")
+            && let Ok(header_value) = site_url.parse::<reqwest::header::HeaderValue>()
+        {
+            headers.insert(
+                "HTTP-Referer"
+                    .parse::<reqwest::header::HeaderName>()
+                    .unwrap(),
+                header_value,
+            );
         }
 
-        if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME") {
-            if let Ok(header_value) = site_name.parse::<reqwest::header::HeaderValue>() {
-                headers.insert("X-Title".parse::<reqwest::header::HeaderName>().unwrap(), header_value);
-            }
+        if let Ok(site_name) = std::env::var("OPENAI_COMPATIBLE_SITE_NAME")
+            && let Ok(header_value) = site_name.parse::<reqwest::header::HeaderValue>()
+        {
+            headers.insert(
+                "X-Title".parse::<reqwest::header::HeaderName>().unwrap(),
+                header_value,
+            );
         }
 
         // Add extra headers from config
         for (key, value) in &self.config.extra_headers {
             headers.insert(
-                key.parse::<reqwest::header::HeaderName>().map_err(|e| LLMError::ConfigError(format!("Invalid header key: {}", e)))?,
-                value.parse::<reqwest::header::HeaderValue>().map_err(|e| LLMError::ConfigError(format!("Invalid header value: {}", e)))?,
+                key.parse::<reqwest::header::HeaderName>()
+                    .map_err(|e| LLMError::ConfigError(format!("Invalid header key: {}", e)))?,
+                value
+                    .parse::<reqwest::header::HeaderValue>()
+                    .map_err(|e| LLMError::ConfigError(format!("Invalid header value: {}", e)))?,
             );
         }
 
@@ -287,8 +322,9 @@ impl OpenAICompatibleClient {
 
     fn parse_sse_chunk(&self, chunk: &str) -> LLMResult<Option<crate::llm::StreamChunk>> {
         for line in chunk.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
+            if line.starts_with("data: ")
+                && let Some(data) = line.strip_prefix("data: ")
+            {
                 if data == "[DONE]" {
                     return Ok(None);
                 }
@@ -297,26 +333,35 @@ impl OpenAICompatibleClient {
                     Ok(response) => {
                         if let Some(choice) = response.choices.first() {
                             return Ok(Some(crate::llm::StreamChunk {
-                                content: choice.delta.content.as_ref().map(|c| vec![ContentItem::text(c.clone())]),
-                                finish_reason: choice.finish_reason.as_ref().map(|fr| match fr.as_str() {
-                                    "stop" => crate::llm::FinishReason::Stop,
-                                    "tool_calls" => crate::llm::FinishReason::ToolCalls,
-                                    "content_filter" => crate::llm::FinishReason::ContentFilter,
-                                    _ => crate::llm::FinishReason::Stop,
+                                content: choice
+                                    .delta
+                                    .content
+                                    .as_ref()
+                                    .map(|c| vec![ContentItem::text(c.clone())]),
+                                finish_reason: choice.finish_reason.as_ref().map(|fr| {
+                                    match fr.as_str() {
+                                        "stop" => crate::llm::FinishReason::Stop,
+                                        "tool_calls" => crate::llm::FinishReason::ToolCalls,
+                                        "content_filter" => crate::llm::FinishReason::ContentFilter,
+                                        _ => crate::llm::FinishReason::Stop,
+                                    }
                                 }),
                                 model: response.model.clone(),
                                 tool_calls: choice.delta.tool_calls.as_ref().map(|calls| {
-                                    calls.iter().map(|call| {
-                                        let arguments: HashMap<String, serde_json::Value> =
-                                            serde_json::from_str(&call.function.arguments)
-                                                .unwrap_or_default();
-                                        ToolCall {
-                                            name: call.function.name.clone(),
-                                            call_id: call.id.clone(),
-                                            arguments,
-                                            id: Some(call.id.clone()),
-                                        }
-                                    }).collect()
+                                    calls
+                                        .iter()
+                                        .map(|call| {
+                                            let arguments: HashMap<String, serde_json::Value> =
+                                                serde_json::from_str(&call.function.arguments)
+                                                    .unwrap_or_default();
+                                            ToolCall {
+                                                name: call.function.name.clone(),
+                                                call_id: call.id.clone(),
+                                                arguments,
+                                                id: Some(call.id.clone()),
+                                            }
+                                        })
+                                        .collect()
                                 }),
                                 usage: response.usage.map(|u| crate::llm::llm_basics::LLMUsage {
                                     input_tokens: u.prompt_tokens,
@@ -327,7 +372,7 @@ impl OpenAICompatibleClient {
                                 }),
                             }));
                         }
-                    },
+                    }
                     Err(_) => continue,
                 }
             }
@@ -338,107 +383,127 @@ impl OpenAICompatibleClient {
     fn supports_tool_calling(&self, model_name: &str) -> bool {
         let model_lower = model_name.to_lowercase();
         let tool_capable_patterns = [
-            "gpt-4", "gpt-3.5-turbo", "claude-3", "claude-2",
-            "gemini", "mistral", "llama-3", "command-r",
+            "gpt-4",
+            "gpt-3.5-turbo",
+            "claude-3",
+            "claude-2",
+            "gemini",
+            "mistral",
+            "llama-3",
+            "command-r",
         ];
 
-        tool_capable_patterns.iter().any(|pattern| model_lower.contains(pattern))
+        tool_capable_patterns
+            .iter()
+            .any(|pattern| model_lower.contains(pattern))
     }
 
     fn convert_messages(&self, messages: &[LLMMessage]) -> Vec<OpenAIMessage> {
-        messages.iter().map(|msg| {
-            let content = msg.content.as_ref().map(|content_vec| {
-                if content_vec.len() == 1 {
-                    // Single content item - could be simple text string or complex object
-                    match &content_vec[0] {
-                        ContentItem::Text(text_content) => {
-                            serde_json::Value::String(text_content.text.clone())
+        messages
+            .iter()
+            .map(|msg| {
+                let content = msg.content.as_ref().map(|content_vec| {
+                    if content_vec.len() == 1 {
+                        // Single content item - could be simple text string or complex object
+                        match &content_vec[0] {
+                            ContentItem::Text(text_content) => {
+                                serde_json::Value::String(text_content.text.clone())
+                            }
+                            ContentItem::Image(_) => {
+                                // For images, create array format for OpenAI compatible
+                                self.convert_content_to_openai_array(content_vec)
+                            }
                         }
-                        ContentItem::Image(_) => {
-                            // For images, create array format for OpenAI compatible
-                            self.convert_content_to_openai_array(content_vec)
-                        }
+                    } else if content_vec.is_empty() {
+                        serde_json::Value::String(String::new())
+                    } else {
+                        // Multiple content items - always use array format
+                        self.convert_content_to_openai_array(content_vec)
                     }
-                } else if content_vec.is_empty() {
-                    serde_json::Value::String(String::new())
-                } else {
-                    // Multiple content items - always use array format
-                    self.convert_content_to_openai_array(content_vec)
+                });
+
+                let tool_calls = msg.tool_call.as_ref().map(|tc| {
+                    vec![OpenAIToolCall {
+                        id: tc.id.clone().unwrap_or_else(|| tc.call_id.clone()),
+                        call_type: "function".to_string(),
+                        function: OpenAIFunction {
+                            name: tc.name.clone(),
+                            arguments: serde_json::to_string(&tc.arguments).unwrap_or_default(),
+                        },
+                    }]
+                });
+
+                OpenAIMessage {
+                    role: msg.role.as_str().to_string(),
+                    content,
+                    tool_calls,
                 }
-            });
-
-            let tool_calls = msg.tool_call.as_ref().map(|tc| {
-                vec![OpenAIToolCall {
-                    id: tc.id.clone().unwrap_or_else(|| tc.call_id.clone()),
-                    call_type: "function".to_string(),
-                    function: OpenAIFunction {
-                        name: tc.name.clone(),
-                        arguments: serde_json::to_string(&tc.arguments).unwrap_or_default(),
-                    },
-                }]
-            });
-
-            OpenAIMessage {
-                role: msg.role.as_str().to_string(),
-                content,
-                tool_calls,
-            }
-        }).collect()
+            })
+            .collect()
     }
 
     fn convert_content_to_openai_array(&self, content_vec: &[ContentItem]) -> serde_json::Value {
-        let content_array: Vec<serde_json::Value> = content_vec.iter().map(|item| {
-            match item {
+        let content_array: Vec<serde_json::Value> = content_vec
+            .iter()
+            .map(|item| match item {
                 ContentItem::Text(text_content) => {
                     serde_json::json!({
                         "type": "text",
                         "text": text_content.text
                     })
                 }
-                ContentItem::Image(image_content) => {
-                    match &image_content.source {
-                        crate::llm::llm_basics::ImageSource::Base64 { media_type, data } => {
-                            serde_json::json!({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": format!("data:{};base64,{}", media_type, data)
-                                }
-                            })
-                        }
-                        crate::llm::llm_basics::ImageSource::Url { url } => {
-                            serde_json::json!({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": url
-                                }
-                            })
-                        }
+                ContentItem::Image(image_content) => match &image_content.source {
+                    crate::llm::llm_basics::ImageSource::Base64 { media_type, data } => {
+                        serde_json::json!({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": format!("data:{};base64,{}", media_type, data)
+                            }
+                        })
                     }
-                }
-            }
-        }).collect();
+                    crate::llm::llm_basics::ImageSource::Url { url } => {
+                        serde_json::json!({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": url
+                            }
+                        })
+                    }
+                },
+            })
+            .collect();
 
         serde_json::Value::Array(content_array)
     }
 
     fn parse_response(&self, response: OpenAIResponse) -> LLMResult<LLMResponse> {
-        let choice = response.choices.into_iter().next()
-            .ok_or_else(|| LLMError::ApiError { status_code: 500, message: "No choices in response".to_string() })?;
+        let choice = response
+            .choices
+            .into_iter()
+            .next()
+            .ok_or_else(|| LLMError::ApiError {
+                status_code: 500,
+                message: "No choices in response".to_string(),
+            })?;
 
         let content = choice.message.content.unwrap_or_default();
 
         let tool_calls = choice.message.tool_calls.map(|calls| {
-            calls.into_iter().map(|call| {
-                let arguments: HashMap<String, serde_json::Value> = serde_json::from_str(&call.function.arguments)
-                    .unwrap_or_else(|_| HashMap::new());
+            calls
+                .into_iter()
+                .map(|call| {
+                    let arguments: HashMap<String, serde_json::Value> =
+                        serde_json::from_str(&call.function.arguments)
+                            .unwrap_or_else(|_| HashMap::new());
 
-                ToolCall {
-                    id: Some(call.id.clone()),
-                    call_id: call.id,
-                    name: call.function.name,
-                    arguments,
-                }
-            }).collect()
+                    ToolCall {
+                        id: Some(call.id.clone()),
+                        call_id: call.id,
+                        name: call.function.name,
+                        arguments,
+                    }
+                })
+                .collect()
         });
 
         let usage = response.usage.map(|u| LLMUsage {
@@ -497,16 +562,19 @@ impl LLMProvider for OpenAICompatibleClient {
 
         let tool_schemas = if self.supports_tool_calling(&model_config.model) {
             tools.map(|tools| {
-                tools.iter().map(|tool| {
-                    serde_json::json!({
-                        "type": "function",
-                        "function": {
-                            "name": tool.get_name(),
-                            "description": tool.get_description(),
-                            "parameters": tool.get_input_schema()
-                        }
+                tools
+                    .iter()
+                    .map(|tool| {
+                        serde_json::json!({
+                            "type": "function",
+                            "function": {
+                                "name": tool.get_name(),
+                                "description": tool.get_description(),
+                                "parameters": tool.get_input_schema()
+                            }
+                        })
                     })
-                }).collect::<Vec<_>>()
+                    .collect::<Vec<_>>()
             })
         } else {
             None
@@ -529,7 +597,11 @@ impl LLMProvider for OpenAICompatibleClient {
         if let Some(choice) = response.choices.first() {
             let assistant_message = OpenAIMessage {
                 role: choice.message.role.clone(),
-                content: choice.message.content.as_ref().map(|c| serde_json::Value::String(c.clone())),
+                content: choice
+                    .message
+                    .content
+                    .as_ref()
+                    .map(|c| serde_json::Value::String(c.clone())),
                 tool_calls: choice.message.tool_calls.clone(),
             };
             self.chat_history.push(assistant_message);
@@ -562,16 +634,19 @@ impl LLMProvider for OpenAICompatibleClient {
 
         let tool_schemas = if self.supports_tool_calling(&model_config.model) {
             tools.map(|tools| {
-                tools.iter().map(|tool| {
-                    serde_json::json!({
-                        "type": "function",
-                        "function": {
-                            "name": tool.get_name(),
-                            "description": tool.get_description(),
-                            "parameters": tool.get_input_schema()
-                        }
+                tools
+                    .iter()
+                    .map(|tool| {
+                        serde_json::json!({
+                            "type": "function",
+                            "function": {
+                                "name": tool.get_name(),
+                                "description": tool.get_description(),
+                                "parameters": tool.get_input_schema()
+                            }
+                        })
                     })
-                }).collect::<Vec<_>>()
+                    .collect::<Vec<_>>()
             })
         } else {
             None
@@ -602,8 +677,9 @@ impl LLMProvider for OpenAICompatibleClient {
                 continue;
             }
 
-            if line.starts_with("data: ") {
-                let data = &line[6..];
+            if line.starts_with("data: ")
+                && let Some(data) = line.strip_prefix("data: ")
+            {
                 if data == "[DONE]" {
                     break;
                 }
@@ -624,8 +700,6 @@ impl LLMProvider for OpenAICompatibleClient {
     }
 }
 
-
-
 /// OpenAI compatible client
 pub type OpenAICompatibleGenericClient = OpenAICompatibleClient;
 
@@ -635,7 +709,7 @@ impl OpenAICompatibleGenericClient {
         if model_config.model_provider.base_url.is_none() {
             // No default URL - user must provide one
             return Err(crate::llm::error::LLMError::ConfigError(
-                "Base URL must be provided for OpenAI compatible client".to_string()
+                "Base URL must be provided for OpenAI compatible client".to_string(),
             ));
         }
         OpenAICompatibleClient::new(&model_config)
@@ -646,8 +720,6 @@ impl OpenAICompatibleGenericClient {
 mod tests {
     use super::*;
     use crate::config::ModelProvider;
-
-
 
     #[test]
     fn test_parse_sse_chunk() {

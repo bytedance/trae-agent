@@ -1,16 +1,15 @@
 // the implementation of trae agent
 
-use std::alloc::System;
 use std::collections::HashMap;
-use std::time::{SystemTime};
+use std::time::SystemTime;
 use std::vec;
 
 use crate::agent::base_agent::*;
 use crate::bash::Bash;
 use crate::edit::Edit;
 use crate::llm_basics::{LLMUsage, TextContent};
-use crate::trajectories::trajectories::{system_time_to_string, LLMRecord, Recorder, Trajectory, TrajectoryData};
-use crate::{agent, llm_provider, ContentItem, LLMMessage, Tool};
+use crate::utils::trajectory::{LLMRecord, Trajectory, system_time_to_string};
+use crate::{ContentItem, LLMMessage, Tool, agent};
 
 const TRAE_AGENT_TOOL_NAMES: [&str; 2] = ["str_replace_based_edit_tool", "bash"];
 
@@ -20,24 +19,21 @@ pub struct TraeAgent {
 
     pub trajectory_recorder: Trajectory,
 
-    pub base_commit: Option<String>, 
-    pub must_patch: Option<String>, 
+    pub base_commit: Option<String>,
+    pub must_patch: Option<String>,
     pub patch_path: Option<String>,
 }
 
 impl TraeAgent {
-    pub fn new(
-        base_agent: agent::base_agent::BaseAgent,
-        path: Option<String>,
-    ) -> Self {
+    pub fn new(base_agent: agent::base_agent::BaseAgent, path: Option<String>) -> Self {
         TraeAgent {
             baseagent: base_agent,
             initial_msgs: vec![],
 
-            trajectory_recorder: Trajectory { 
-                path: path.unwrap_or("./".to_string()), 
+            trajectory_recorder: Trajectory {
+                path: path.unwrap_or("./".to_string()),
                 start_time: system_time_to_string(&SystemTime::now()),
-                trajectory_data: None
+                trajectory_data: None,
             },
 
             base_commit: None,
@@ -56,8 +52,7 @@ impl Agent for TraeAgent {
     ) -> Result<(), AgentError> {
         self.baseagent.task = task;
 
-        if tool_names.is_some() || tool_names.unwrap_or(vec![]).len() == 0 {
-
+        if tool_names.is_some() || tool_names.unwrap_or_default().is_empty() {
             let provider = &self.baseagent.model_config.model_provider;
 
             let mut tools_map: HashMap<String, usize> = HashMap::new();
@@ -66,17 +61,12 @@ impl Agent for TraeAgent {
             for tool in TRAE_AGENT_TOOL_NAMES {
                 match tool {
                     "bash" => {
-
                         tools.push(Box::new(Bash::new(provider.name.clone())));
 
-                        tools_map.insert(
-                            tool.to_string().clone(),
-                            tools.len()-1,
-                        );
+                        tools_map.insert(tool.to_string().clone(), tools.len() - 1);
                     }
                     "str_replace_based_edit_tool" => {
-
-                        tools.push(Box::new(Edit::new()));                        
+                        tools.push(Box::new(Edit::default()));
 
                         tools_map.insert(tool.to_string().clone(), tools.len() - 1);
                     }
@@ -114,196 +104,191 @@ impl Agent for TraeAgent {
                 .and_then(|m| m.get("issue"))
                 .map(|v| v.to_string())
                 .unwrap_or_default();
-            
 
-        user_msg += &format!(
-            "[Problem statement]: We're currently solving the following issue within our repository. \
+            user_msg += &format!(
+                "[Problem statement]: We're currently solving the following issue within our repository. \
             Here's the issue text:\n{}\n Your work directory is {} \n",
-            issue,
-            args.as_ref()
-                .and_then(|m| m.get("project_path").map(|s| s.as_str()))
-                .unwrap_or("")
-        );
+                issue,
+                args.as_ref()
+                    .and_then(|m| m.get("project_path").map(|s| s.as_str()))
+                    .unwrap_or("")
+            );
         };
 
-
-        for attr in ["base_commit" , "must_patch", "patch_path"]{
-            if args.as_ref().and_then(|m| m.get(attr)).is_none(){
-
+        for attr in ["base_commit", "must_patch", "patch_path"] {
+            if args.as_ref().and_then(|m| m.get(attr)).is_none() {
                 let val: String = args
                     .as_ref()
                     .and_then(|m| m.get(attr))
                     .map(|v| v.to_string())
                     .unwrap_or_default();
 
-                match attr{
-                    "base_commit" => {self.base_commit = Some(val);},
-                    "must_patch"=> {self.must_patch = Some(val)},
-                    "patch_path" => {self.patch_path = Some(val)}
+                match attr {
+                    "base_commit" => {
+                        self.base_commit = Some(val);
+                    }
+                    "must_patch" => self.must_patch = Some(val),
+                    "patch_path" => self.patch_path = Some(val),
                     _ => {}
                 }
             }
         }
 
-        self.initial_msgs.push(
-            LLMMessage { 
-                role: crate::MessageRole::User, 
-                content: Some(vec![
-                    ContentItem::Text(
-                        TextContent { text: user_msg }
-                    )
-                ]), 
-                tool_call: None, 
-                tool_result: None 
-            }
-        );
+        self.initial_msgs.push(LLMMessage {
+            role: crate::MessageRole::User,
+            content: Some(vec![ContentItem::Text(TextContent { text: user_msg })]),
+            tool_call: None,
+            tool_result: None,
+        });
 
-        self.trajectory_recorder
-            .start_recording(
-                &self.baseagent.task, 
-                &self.baseagent.model_config.model_provider.name.to_string(), 
-                &self.baseagent.model_config.model.to_string(), 
-                self.baseagent.max_step.into(),
-            );        
+        self.trajectory_recorder.start_recording(
+            &self.baseagent.task,
+            &self.baseagent.model_config.model_provider.name.to_string(),
+            &self.baseagent.model_config.model.to_string(),
+            self.baseagent.max_step.into(),
+        );
 
         Ok(())
     }
-async fn run(&mut self) -> Result<AgentExecution, &'static str> {
-    let start_time = SystemTime::now();
+    async fn run(&mut self) -> Result<AgentExecution, &'static str> {
+        let start_time = SystemTime::now();
 
-    let mut exec_agent = AgentExecution {
-        task: self.baseagent.task.clone(),
-        steps: vec![],
-        final_result: None,
-        success: false,
-        total_token: None,
-        execution_time: 0.,
-        agent_state: AgentState::IDLE,
-    };
-
-    let mut step_number = 1u32;
-//    let mut messages = self.initial_msgs.clone(); // Work with a mutable copy of messages
-    // Set agent state to RUNNING when execution starts
-    exec_agent.agent_state = AgentState::RUNNING;
-
-    while step_number <= self.baseagent.max_step {
-        println!("Agent is running step: {}" , &step_number);
-
-        // start a new step record
-        let mut new_llm_record = LLMRecord{
-            content:"".to_string(),
-            token_usage: None, 
-            model: Some(self.baseagent.model_config.model.to_string().clone()),
-            provider: Some(self.baseagent.model_config.model_provider.name.to_string().clone()),
-            llmdetails: None,
-            steps: None,
+        let mut exec_agent = AgentExecution {
+            task: self.baseagent.task.clone(),
+            steps: vec![],
+            final_result: None,
+            success: false,
+            total_token: None,
+            execution_time: 0.,
+            agent_state: AgentState::IDLE,
         };
 
-        let mut step = AgentStep::new(step_number, AgentStepState::THINKING);
+        let mut step_number = 1u32;
+        //    let mut messages = self.initial_msgs.clone(); // Work with a mutable copy of messages
+        // Set agent state to RUNNING when execution starts
+        exec_agent.agent_state = AgentState::RUNNING;
 
-        let exec_msg = self
-            .baseagent
-            .execute_step(
-                &mut step, 
-                &self.initial_msgs, 
-                &mut exec_agent, 
-                None
-            )
-            .await;
+        while step_number <= self.baseagent.max_step {
+            println!("Agent is running step: {}", &step_number);
 
+            // start a new step record
+            let mut new_llm_record = LLMRecord {
+                content: "".to_string(),
+                token_usage: None,
+                model: Some(self.baseagent.model_config.model.to_string().clone()),
+                provider: Some(
+                    self.baseagent
+                        .model_config
+                        .model_provider
+                        .name
+                        .to_string()
+                        .clone(),
+                ),
+                llmdetails: None,
+                steps: None,
+            };
 
-        // update the record
-    
-        match exec_msg {
-            Err(e) => {
-                // Handle error case
-                exec_agent.agent_state = AgentState::ERROR;
-                step.state = AgentStepState::ERROR;
-                step.error = Some(e.to_string());
-                
-                self.baseagent
-                    .finalize_step(&mut step, &mut self.initial_msgs, &mut exec_agent);
-                break;
-            }
-            Ok(new_messages) => {
-                // Add new messages from the execution to our message history
-                self.initial_msgs.extend(new_messages);
-                
-                self.baseagent
-                    .finalize_step(&mut step, &mut self.initial_msgs, &mut exec_agent);
-                
-                // Check if task is completed
-                if exec_agent.agent_state == AgentState::COMPLETED {
+            let mut step = AgentStep::new(step_number, AgentStepState::THINKING);
+
+            let exec_msg = self
+                .baseagent
+                .execute_step(&mut step, &self.initial_msgs, &mut exec_agent, None)
+                .await;
+
+            // update the record
+
+            match exec_msg {
+                Err(e) => {
+                    // Handle error case
+                    exec_agent.agent_state = AgentState::ERROR;
+                    step.state = AgentStepState::ERROR;
+                    step.error = Some(e.to_string());
+
+                    self.baseagent.finalize_step(
+                        &mut step,
+                        &mut self.initial_msgs,
+                        &mut exec_agent,
+                    );
                     break;
                 }
+                Ok(new_messages) => {
+                    // Add new messages from the execution to our message history
+                    self.initial_msgs.extend(new_messages);
+
+                    self.baseagent.finalize_step(
+                        &mut step,
+                        &mut self.initial_msgs,
+                        &mut exec_agent,
+                    );
+
+                    // Check if task is completed
+                    if exec_agent.agent_state == AgentState::COMPLETED {
+                        break;
+                    }
+                }
             }
+
+            new_llm_record.steps = Some(step.clone());
+
+            // save the record
+            self.trajectory_recorder
+                .trajectory_data
+                .as_mut()
+                .unwrap()
+                .llm_interaction
+                .push(new_llm_record);
+
+            step_number += 1;
         }
 
-        new_llm_record.steps = Some(step.clone());
-        
-        // save the record
-        self.trajectory_recorder.trajectory_data
+        // Check if we exceeded max steps without completion
+        if step_number > self.baseagent.max_step && exec_agent.agent_state != AgentState::COMPLETED
+        {
+            exec_agent.final_result =
+                Some("Task execution exceeded maximum steps without completion".to_string());
+            exec_agent.agent_state = AgentState::ERROR;
+            exec_agent.success = false;
+        } else if exec_agent.agent_state == AgentState::COMPLETED {
+            exec_agent.success = true;
+        }
+
+        // Calculate execution time
+        let dur = SystemTime::now()
+            .duration_since(start_time)
+            .expect("system clock went backwards");
+        exec_agent.execution_time = dur.as_secs_f64();
+
+        // Collect total token usage from all steps
+        exec_agent.total_token = Some(LLMUsage {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_creation_input_tokens: 0,
+            reasoning_tokens: 0,
+            cache_read_input_tokens: 0,
+        }); //TODO full implementation of total token
+
+        // TODO: refactor & extract it to another function
+        self.trajectory_recorder
+            .trajectory_data
             .as_mut()
             .unwrap()
-            .llm_interaction
-            .push(new_llm_record);
-        
-        step_number += 1;
+            .execution_time = exec_agent.execution_time;
+
+        self.trajectory_recorder
+            .trajectory_data
+            .as_mut()
+            .unwrap()
+            .success = exec_agent.success;
+
+        // Close tools implementation
+        self.baseagent.close_tools();
+
+        // TODO: update CLI here if needed
+        // You might want to add CLI updates for final results
+        // Update the initial_msgs with the final message state for potential future use
+
+        Ok(exec_agent)
     }
-
-    // Check if we exceeded max steps without completion
-    if step_number > self.baseagent.max_step && exec_agent.agent_state != AgentState::COMPLETED {
-        exec_agent.final_result = Some(
-            "Task execution exceeded maximum steps without completion".to_string()
-        );
-        exec_agent.agent_state = AgentState::ERROR;
-        exec_agent.success = false;
-    } else if exec_agent.agent_state == AgentState::COMPLETED {
-        exec_agent.success = true;
-    }
-
-    // Calculate execution time
-    let dur = SystemTime::now()
-        .duration_since(start_time)
-        .expect("system clock went backwards");
-    exec_agent.execution_time = dur.as_secs_f64();
-
-    // Collect total token usage from all steps
-    exec_agent.total_token = Some(LLMUsage{
-        input_tokens: 0,
-        output_tokens:0 ,
-        cache_creation_input_tokens: 0,
-        reasoning_tokens:0,
-        cache_read_input_tokens:0,
-    }); //TODO full implementation of total token
-
-
-    // TODO: refactor & extract it to another function
-    self
-        .trajectory_recorder
-        .trajectory_data
-        .as_mut()
-        .unwrap()
-        .execution_time = exec_agent.execution_time.clone();
-
-    self
-        .trajectory_recorder
-        .trajectory_data
-        .as_mut()
-        .unwrap()
-        .success = exec_agent.success;
-
-    // Close tools implementation
-    self.baseagent.close_tools();
-
-    // TODO: update CLI here if needed
-    // You might want to add CLI updates for final results
-    // Update the initial_msgs with the final message state for potential future use
-
-    Ok(exec_agent)
-}
-
-
 }
 
 pub const TRAE_AGENT_SYSTEM_PROMPT: &str = r###"You are an expert AI software engineering agent.

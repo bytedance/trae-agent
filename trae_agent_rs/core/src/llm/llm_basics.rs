@@ -1,12 +1,11 @@
 // Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
-
+use crate::llm::error::LLMResult;
+use crate::tools::{ToolCall, ToolResult};
+use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::{fmt, pin::Pin};
-use futures::Stream;
-use crate::tools::{ToolCall, ToolResult};
-use crate::llm::error::LLMResult;
 
 /// Role of a message in the conversation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -23,7 +22,7 @@ pub enum MessageRole {
     /// Message from developer/system (for some providers)
     Developer,
     /// Message from system
-    System
+    System,
 }
 
 impl MessageRole {
@@ -38,9 +37,13 @@ impl MessageRole {
             MessageRole::System => "system",
         }
     }
+}
 
-    /// Parse from string
-    pub fn from_str(s: &str) -> Result<Self, String> {
+/// Parse MessageRole from string
+impl std::str::FromStr for MessageRole {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "user" => Ok(MessageRole::User),
             "assistant" => Ok(MessageRole::Assistant),
@@ -84,10 +87,7 @@ pub struct ImageContent {
 pub enum ImageSource {
     /// Base64 encoded image data
     #[serde(rename = "base64")]
-    Base64 {
-        media_type: String,
-        data: String,
-    },
+    Base64 { media_type: String, data: String },
     /// Image URL
     #[serde(rename = "image_url")]
     Url {
@@ -125,9 +125,7 @@ impl ContentItem {
     /// Create an image content item from URL
     pub fn image_url(url: impl Into<String>) -> Self {
         ContentItem::Image(ImageContent {
-            source: ImageSource::Url {
-                url: url.into(),
-            },
+            source: ImageSource::Url { url: url.into() },
         })
     }
 
@@ -205,15 +203,19 @@ impl LLMMessage {
 
     /// Get the text content from the message (first text item)
     pub fn get_text(&self) -> Option<&str> {
-        self.content.as_ref()?.iter()
+        self.content
+            .as_ref()?
+            .iter()
             .find_map(|item| item.as_text())
     }
 
     /// Get all text content items concatenated
     pub fn get_all_text(&self) -> String {
-        self.content.as_ref()
+        self.content
+            .as_ref()
             .map(|items| {
-                items.iter()
+                items
+                    .iter()
                     .filter_map(|item| item.as_text())
                     .collect::<Vec<_>>()
                     .join(" ")
@@ -223,7 +225,7 @@ impl LLMMessage {
 }
 
 /// LLM usage format
-#[derive(PartialEq,Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct LLMUsage {
     pub input_tokens: i32,
     pub output_tokens: i32,
@@ -241,28 +243,12 @@ impl LLMUsage {
         LLMUsage {
             input_tokens: self.input_tokens + other.input_tokens,
             output_tokens: self.output_tokens + other.output_tokens,
-            cache_creation_input_tokens: self.cache_creation_input_tokens + other.cache_creation_input_tokens,
+            cache_creation_input_tokens: self.cache_creation_input_tokens
+                + other.cache_creation_input_tokens,
             cache_read_input_tokens: self.cache_read_input_tokens + other.cache_read_input_tokens,
             reasoning_tokens: self.reasoning_tokens + other.reasoning_tokens,
         }
     }
-
-    pub fn new(
-        input_token:i32,
-        output_token:i32,
-        cache_creation_input_tokens:i32,
-        cache_read_input_tokens:i32,
-        reasoing_tokens:i32)
-    -> Self{
-        LLMUsage {
-            input_tokens: input_token,
-            output_tokens: output_token,
-            cache_creation_input_tokens: cache_creation_input_tokens,
-            cache_read_input_tokens: cache_read_input_tokens,
-            reasoning_tokens: reasoing_tokens,
-        }
-    }
-
 }
 
 impl std::ops::Add for LLMUsage {
@@ -272,7 +258,8 @@ impl std::ops::Add for LLMUsage {
         LLMUsage {
             input_tokens: self.input_tokens + other.input_tokens,
             output_tokens: self.output_tokens + other.output_tokens,
-            cache_creation_input_tokens: self.cache_creation_input_tokens + other.cache_creation_input_tokens,
+            cache_creation_input_tokens: self.cache_creation_input_tokens
+                + other.cache_creation_input_tokens,
             cache_read_input_tokens: self.cache_read_input_tokens + other.cache_read_input_tokens,
             reasoning_tokens: self.reasoning_tokens + other.reasoning_tokens,
         }
@@ -286,7 +273,8 @@ impl std::ops::Add for &LLMUsage {
         LLMUsage {
             input_tokens: self.input_tokens + other.input_tokens,
             output_tokens: self.output_tokens + other.output_tokens,
-            cache_creation_input_tokens: self.cache_creation_input_tokens + other.cache_creation_input_tokens,
+            cache_creation_input_tokens: self.cache_creation_input_tokens
+                + other.cache_creation_input_tokens,
             cache_read_input_tokens: self.cache_read_input_tokens + other.cache_read_input_tokens,
             reasoning_tokens: self.reasoning_tokens + other.reasoning_tokens,
         }
@@ -347,7 +335,7 @@ impl LLMResponse {
             usage,
             model,
             finish_reason,
-            tool_calls
+            tool_calls,
         }
     }
 
@@ -364,19 +352,19 @@ impl LLMResponse {
             usage,
             model,
             finish_reason,
-            tool_calls
+            tool_calls,
         }
     }
 
     /// Get the text content from the response (first text item)
     pub fn get_text(&self) -> Option<&str> {
-        self.content.iter()
-            .find_map(|item| item.as_text())
+        self.content.iter().find_map(|item| item.as_text())
     }
 
     /// Get all text content items concatenated
     pub fn get_all_text(&self) -> String {
-        self.content.iter()
+        self.content
+            .iter()
             .filter_map(|item| item.as_text())
             .collect::<Vec<_>>()
             .join(" ")
@@ -400,7 +388,7 @@ impl StreamChunk {
         finish_reason: Option<FinishReason>,
         model: Option<String>,
         tool_calls: Option<Vec<ToolCall>>,
-        usage: Option<LLMUsage>
+        usage: Option<LLMUsage>,
     ) -> Self {
         let content_vec = content.map(|c| vec![ContentItem::text(c)]);
 
@@ -419,7 +407,7 @@ impl StreamChunk {
         finish_reason: Option<FinishReason>,
         model: Option<String>,
         tool_calls: Option<Vec<ToolCall>>,
-        usage: Option<LLMUsage>
+        usage: Option<LLMUsage>,
     ) -> Self {
         StreamChunk {
             content,
@@ -432,11 +420,12 @@ impl StreamChunk {
 
     /// Get the text content from the chunk (first text item)
     pub fn get_text(&self) -> Option<&str> {
-        self.content.as_ref()?.iter()
+        self.content
+            .as_ref()?
+            .iter()
             .find_map(|item| item.as_text())
     }
 }
-
 
 /// Type alias for streaming response
 pub type LLMStream = Pin<Box<dyn Stream<Item = LLMResult<StreamChunk>> + Send>>;
@@ -444,6 +433,7 @@ pub type LLMStream = Pin<Box<dyn Stream<Item = LLMResult<StreamChunk>> + Send>>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_llm_usage_add() {
@@ -505,10 +495,13 @@ mod tests {
         assert!(image_b64.as_image().is_some());
 
         // Test message with mixed content
-        let message = LLMMessage::new_with_content(MessageRole::User, vec![
-            ContentItem::text("What is in this image?"),
-            ContentItem::image_url("https://example.com/image.jpg")
-        ]);
+        let message = LLMMessage::new_with_content(
+            MessageRole::User,
+            vec![
+                ContentItem::text("What is in this image?"),
+                ContentItem::image_url("https://example.com/image.jpg"),
+            ],
+        );
 
         assert_eq!(message.get_text(), Some("What is in this image?"));
         assert_eq!(message.content.as_ref().unwrap().len(), 2);
@@ -529,13 +522,7 @@ mod tests {
         assert_eq!(response.content.len(), 1);
 
         // Test empty response
-        let empty_response = LLMResponse::new_text(
-            "",
-            None,
-            None,
-            FinishReason::Stop,
-            None,
-        );
+        let empty_response = LLMResponse::new_text("", None, None, FinishReason::Stop, None);
 
         assert!(empty_response.content.is_empty());
         assert_eq!(empty_response.get_text(), None);
@@ -552,7 +539,10 @@ mod tests {
 
         // Test from_str parsing
         assert_eq!(MessageRole::from_str("user").unwrap(), MessageRole::User);
-        assert_eq!(MessageRole::from_str("ASSISTANT").unwrap(), MessageRole::Assistant);
+        assert_eq!(
+            MessageRole::from_str("ASSISTANT").unwrap(),
+            MessageRole::Assistant
+        );
         assert_eq!(MessageRole::from_str("Tool").unwrap(), MessageRole::Tool);
         assert!(MessageRole::from_str("invalid").is_err());
 
@@ -588,15 +578,17 @@ mod tests {
         // Test multi-content convenience methods
         let user_multimodal = LLMMessage::user_with_content(vec![
             ContentItem::text("What's in this image?"),
-            ContentItem::image_url("https://example.com/image.jpg")
+            ContentItem::image_url("https://example.com/image.jpg"),
         ]);
         assert_eq!(user_multimodal.role, MessageRole::User);
         assert_eq!(user_multimodal.content.as_ref().unwrap().len(), 2);
 
-        let assistant_multimodal = LLMMessage::assistant_with_content(vec![
-            ContentItem::text("I can see a landscape.")
-        ]);
+        let assistant_multimodal =
+            LLMMessage::assistant_with_content(vec![ContentItem::text("I can see a landscape.")]);
         assert_eq!(assistant_multimodal.role, MessageRole::Assistant);
-        assert_eq!(assistant_multimodal.get_text(), Some("I can see a landscape."));
+        assert_eq!(
+            assistant_multimodal.get_text(),
+            Some("I can see a landscape.")
+        );
     }
 }

@@ -32,3 +32,13 @@ repos:
       exclude: ^(evaluation/patch_selection)
       additional_dependencies:
         - types-PyYAML
+
+- repo: https://github.com/doublify/pre-commit-rust
+  rev: v1.0
+  hooks:
+    - id: fmt
+      args: ['--manifest-path', 'trae_agent_rs/Cargo.toml', '--']
+    - id: cargo-check
+      args: ['--manifest-path', 'trae_agent_rs/Cargo.toml']
+    - id: clippy
+      args: ['--manifest-path', 'trae_agent_rs/Cargo.toml', '--', '-D', 'warnings']

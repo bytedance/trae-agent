@@ -6,23 +6,16 @@ use crate::{Tool, ToolExecResult};
 use thiserror::Error;
 use tokio::process::Command;
 
-const EditCommand: [&str; 4] = ["view", "create", "str_replace", "insert"];
-
+const EDIT_COMMAND: [&str; 4] = ["view", "create", "str_replace", "insert"];
 const SNIPPET_LINES: usize = 4; //would u8 already enough ?
 const TAB_WIDTH: usize = 8; // Python str.expandtabs() default
 
+#[derive(Default)]
 pub struct Edit {}
-
-impl Edit{
-    pub fn new()->Self{
-        Edit{}
-    }
-}
-
 
 impl Tool for Edit {
     fn get_name(&self) -> &str {
-        return "str_replace_based_edit_tool";
+        "str_replace_based_edit_tool"
     }
 
     fn reset(&mut self) {}
@@ -48,7 +41,7 @@ impl Tool for Edit {
                 "command":{
                     "type":"string",
                     "description":"Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.",
-                    "enum": EditCommand,
+                    "enum": EDIT_COMMAND,
                 },
                 "file_text":{
                     "type":"string",
@@ -85,7 +78,8 @@ impl Tool for Edit {
     fn execute(
         &mut self,
         arguments: std::collections::HashMap<String, serde_json::Value>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send + '_>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send + '_>>
+    {
         Box::pin(async move {
             // Extract command and path from arguments
             let command = arguments
@@ -93,10 +87,7 @@ impl Tool for Edit {
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
 
-            let path = arguments
-                .get("path")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or("");
 
             if path.is_empty() {
                 return Err("Path parameter is required".to_string());
@@ -108,33 +99,39 @@ impl Tool for Edit {
                 "create" => {
                     // Check if file already exists
                     if Path::new(path).exists() {
-                        return Err(format!("File already exists at path: {}. Please remove it first before creating.", path));
+                        return Err(format!(
+                            "File already exists at path: {}. Please remove it first before creating.",
+                            path
+                        ));
                     }
                     create_handler(path, &arguments).await
-                },
+                }
                 "str_replace" => str_replace_handler(path, &arguments).await,
                 "insert" => insert_handler(path, &arguments).await,
                 _ => {
-                    return Err(format!("Unknown command: {}. Supported commands are: view, create, str_replace, insert", command));
+                    return Err(format!(
+                        "Unknown command: {}. Supported commands are: view, create, str_replace, insert",
+                        command
+                    ));
                 }
             };
 
             // Convert result to String format expected by Tool trait
             match result {
                 Ok(tool_result) => {
-                    if let Some(error) = tool_result.error {
-                        if !error.is_empty() {
-                            return Err(format!("Error: {}", error));
-                        }
+                    if let Some(error) = tool_result.error
+                        && !error.is_empty()
+                    {
+                        return Err(format!("Error: {}", error));
                     }
-                    
+
                     if let Some(output) = tool_result.output {
                         Ok(output)
                     } else {
                         Ok("Command executed successfully".to_string())
                     }
-                },
-                Err(e) => Err(format!("Tool execution failed: {}", e))
+                }
+                Err(e) => Err(format!("Tool execution failed: {}", e)),
             }
         })
     }
@@ -164,16 +161,15 @@ async fn create_handler(
     path: &str,
     args: &HashMap<String, serde_json::Value>,
 ) -> Result<ToolExecResult, EditToolError> {
-
     let file_text = args.get("file_text").and_then(|v| v.as_str()).unwrap_or("");
 
-    if file_text.len() == 0 {
+    if file_text.is_empty() {
         return Err(EditToolError::FileTextEmpty);
     }
 
     let res = fs::write(path, file_text);
 
-    if let Ok(_) = res {
+    if res.is_ok() {
         return Ok(ToolExecResult {
             output: Some(format!("File created successfully at: {}", path)),
             error: None,
@@ -185,7 +181,7 @@ async fn create_handler(
         return Err(EditToolError::Other(e.to_string()));
     }
 
-    return Err(EditToolError::Other("unexpected error".to_string()));
+    Err(EditToolError::Other("unexpected error".to_string()))
 }
 
 async fn str_replace_handler(
@@ -199,7 +195,7 @@ async fn str_replace_handler(
         .and_then(|v| v.as_str())
         .ok_or(EditToolError::NewStringError)?;
 
-    if old_str.len() == 0 {
+    if old_str.is_empty() {
         return Err(EditToolError::EmptyOldString);
     }
 
@@ -332,7 +328,6 @@ async fn insert_handler(
     // 1) Validate insert_line
     let insert_line_val = args.get("insert_line");
 
-
     let insert_line = match insert_line_val.and_then(|v| v.as_i64()) {
         Some(v) if v >= 0 => v as usize,
         _ => {
@@ -347,10 +342,8 @@ async fn insert_handler(
         }
     };
 
-
     // 2) Validate new_str
     let new_str_val = args.get("new_str");
-
 
     let new_str = match new_str_val.and_then(|v| v.as_str()) {
         Some(s) => s,
@@ -362,7 +355,6 @@ async fn insert_handler(
             });
         }
     };
-
 
     // 3) Read file
     let file_text_raw = fs::read_to_string(path).map_err(|_| EditToolError::Io)?;
@@ -478,14 +470,7 @@ async fn view(path: &str, view_range: Option<&[i32; 2]>) -> Result<ToolExecResul
                 }
                 None
             };
-            let stderr = {
-                let res_err = String::from_utf8(res.stderr);
-
-                if let Ok(error_msg) = res_err {
-                    Some(error_msg);
-                }
-                None // fail to parse
-            };
+            let stderr = String::from_utf8(res.stderr).ok();
             // Example: map ExitStatus to an error code if non-success
             let error_code = if res.status.success() {
                 None
@@ -526,13 +511,11 @@ async fn view(path: &str, view_range: Option<&[i32; 2]>) -> Result<ToolExecResul
 
         let file_lines: Vec<&str> = file_content.split("\n").collect();
 
-        let file_slice: String;
-
-        if range[1] == -1 {
-            file_slice = file_lines[range[0] as usize..].join("\n");
+        let file_slice: String = if range[1] == -1 {
+            file_lines[range[0] as usize..].join("\n")
         } else {
-            file_slice = file_lines[range[0] as usize..range[1] as usize].join("\n");
-        }
+            file_lines[range[0] as usize..range[1] as usize].join("\n")
+        };
 
         //TODO: haven't handle cases like file_content and file_content tab
 
@@ -1018,7 +1001,7 @@ mod tests {
         let content = "a\tb c\nd e f\n";
         let path = write_temp_file(&dir, "a.txt", content);
         // old_str is "\ta" will not match; use "a\tb" to match once
-        let res = run_async(str_replace_handler(
+        let _ = run_async(str_replace_handler(
             path.to_str().unwrap(),
             &args(Some("a\tb"), Some("A\tB")),
         ))
@@ -1182,7 +1165,7 @@ mod tests {
         // Insert expanded "\tINS" at index 1
         let expected_file_text = {
             let file_text = expand_tabs_fixed("\tcol1\n\t\tcol2\n", TAB_WIDTH);
-            let mut lines: Vec<&str> = file_text.split('\n').collect(); // keeps empty last
+            let lines: Vec<&str> = file_text.split('\n').collect(); // keeps empty last
             let ins = expand_tabs_fixed("\tINS", TAB_WIDTH);
             let ins_lines: Vec<&str> = ins.split('\n').collect();
             // manual merge mimic of function
@@ -1242,7 +1225,7 @@ mod tests {
             fs::set_permissions(dir.path(), perms).unwrap();
         }
         let args = args_insert(Some(0), Some("X"));
-        let res = run_async(insert_handler(path.to_str().unwrap(),&args));
+        let res = run_async(insert_handler(path.to_str().unwrap(), &args));
         match res {
             Err(EditToolError::Io) => { /* expected on write failure */ }
             Ok(ok) => {

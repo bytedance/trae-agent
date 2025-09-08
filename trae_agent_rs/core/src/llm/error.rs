@@ -22,10 +22,7 @@ pub enum LLMError {
     RateLimitError(String),
 
     #[error("API error: {status_code} - {message}")]
-    ApiError {
-        status_code: u16,
-        message: String,
-    },
+    ApiError { status_code: u16, message: String },
 
     #[error("Tool calling not supported for model: {0}")]
     ToolCallNotSupported(String),

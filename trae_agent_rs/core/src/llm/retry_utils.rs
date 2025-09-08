@@ -1,10 +1,10 @@
 // Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
+use crate::llm::error::{LLMError, LLMResult};
 use backoff::ExponentialBackoff;
 use log::{debug, warn};
 use std::time::Duration;
-use crate::llm::error::{LLMError, LLMResult};
 
 /// Retry configuration for LLM API calls
 #[derive(Debug, Clone)]
@@ -61,7 +61,9 @@ where
                     LLMError::HttpError(reqwest_err) => should_retry_http_error(reqwest_err),
                     LLMError::RateLimitError(_) => true,
                     LLMError::TimeoutError(_) => true,
-                    LLMError::ApiError { status_code, .. } => should_retry_status_code(*status_code),
+                    LLMError::ApiError { status_code, .. } => {
+                        should_retry_status_code(*status_code)
+                    }
                     _ => false,
                 };
 
@@ -69,7 +71,9 @@ where
                     return Err(err);
                 }
 
-                let delay = backoff.initial_interval.mul_f64(config.multiplier.powi((attempt - 1) as i32));
+                let delay = backoff
+                    .initial_interval
+                    .mul_f64(config.multiplier.powi((attempt - 1) as i32));
                 let delay = delay.min(backoff.max_interval);
 
                 warn!(

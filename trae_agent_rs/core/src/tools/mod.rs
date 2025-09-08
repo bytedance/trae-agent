@@ -1,19 +1,16 @@
-use std::{collections::HashMap, fmt};
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, fmt};
 
 pub mod base;
-pub mod edit;
 pub mod bash;
+pub mod edit;
 pub use base::Tool;
-
-use crate::{bash::Bash};
-
 
 /// Tool call arguments type alias
 pub type ToolCallArguments = HashMap<String, serde_json::Value>;
 
 /// Represents a tool call result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ToolResult {
     pub call_id: String,
     pub name: String, // Gemini specific field
@@ -24,25 +21,20 @@ pub struct ToolResult {
 }
 
 impl ToolResult {
-
-    pub fn new(
-        call_id: String,
-        name: String,
-    ) -> Self{
+    pub fn new(call_id: String, name: String) -> Self {
         ToolResult {
-            call_id: call_id,
-            name: name,
+            call_id,
+            name,
             success: false,
             result: None,
             error: None,
-            id: None
+            id: None,
         }
     }
-
 }
 
 /// Represents a parsed tool call
-#[derive(Default,Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ToolCall {
     pub name: String,
     pub call_id: String,
@@ -88,12 +80,9 @@ impl ToolSchema {
     }
 }
 
-
-
 #[derive(Debug, Default)]
-pub struct ToolExecResult{
+pub struct ToolExecResult {
     pub output: Option<String>,
     pub error: Option<String>,
     pub error_code: Option<i32>,
 }
-

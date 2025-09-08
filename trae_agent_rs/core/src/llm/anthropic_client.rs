@@ -2,20 +2,23 @@
 // SPDX-License-Identifier: MIT
 
 use async_trait::async_trait;
+use futures::stream;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use futures::stream;
 
 use crate::{
-    llm::{
-        llm_provider::LLMProvider,
-        error::{LLMError, LLMResult},
-        retry_utils::{retry_with_backoff, RetryConfig},
-        llm_basics::{LLMMessage, LLMResponse, LLMUsage, LLMStream, StreamChunk, FinishReason, ContentItem, MessageRole},
-    },
     config::ModelConfig,
+    llm::{
+        error::{LLMError, LLMResult},
+        llm_basics::{
+            ContentItem, FinishReason, LLMMessage, LLMResponse, LLMStream, LLMUsage, MessageRole,
+            StreamChunk,
+        },
+        llm_provider::LLMProvider,
+        retry_utils::{RetryConfig, retry_with_backoff},
+    },
     tools::{Tool, ToolCall, ToolResult},
 };
 
@@ -80,10 +83,7 @@ enum AnthropicContentBlock {
 #[serde(tag = "type")]
 enum AnthropicImageSource {
     #[serde(rename = "base64")]
-    Base64 {
-        media_type: String,
-        data: String,
-    },
+    Base64 { media_type: String, data: String },
 }
 
 /// Anthropic tool definition
@@ -96,6 +96,7 @@ struct AnthropicTool {
 
 /// Anthropic response structure
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct AnthropicResponse {
     id: String,
     #[serde(rename = "type")]
@@ -150,6 +151,7 @@ struct MessageStartEvent {
 
 /// Content block delta event
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct ContentBlockDeltaEvent {
     index: u32,
     delta: ContentDelta,
@@ -158,6 +160,7 @@ struct ContentBlockDeltaEvent {
 /// Content delta
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
+#[allow(dead_code)]
 enum ContentDelta {
     #[serde(rename = "text_delta")]
     TextDelta { text: String },
@@ -174,6 +177,7 @@ struct MessageDeltaEvent {
 
 /// Message delta
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct MessageDelta {
     stop_reason: Option<String>,
     stop_sequence: Option<String>,
@@ -265,21 +269,25 @@ impl AnthropicClient {
 
         // Read the entire response body for parsing
         let text = response.text().await.map_err(LLMError::HttpError)?;
-        let chunks: Vec<_> = text.lines().filter_map(|line| {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
-                if data == "[DONE]" {
-                    return None;
+        let chunks: Vec<_> = text
+            .lines()
+            .filter_map(|line| {
+                if line.starts_with("data: ")
+                    && let Some(data) = line.strip_prefix("data: ")
+                {
+                    if data == "[DONE]" {
+                        return None;
+                    }
+                    match self.parse_sse_chunk(line) {
+                        Ok(Some(chunk)) => Some(Ok(chunk)),
+                        Ok(None) => None,
+                        Err(e) => Some(Err(e)),
+                    }
+                } else {
+                    None
                 }
-                match self.parse_sse_chunk(line) {
-                    Ok(Some(chunk)) => Some(Ok(chunk)),
-                    Ok(None) => None,
-                    Err(e) => Some(Err(e))
-                }
-            } else {
-                None
-            }
-        }).collect();
+            })
+            .collect();
 
         let stream = stream::iter(chunks);
         Ok(Box::pin(stream))
@@ -287,57 +295,69 @@ impl AnthropicClient {
 
     fn parse_sse_chunk(&self, chunk: &str) -> LLMResult<Option<StreamChunk>> {
         for line in chunk.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
+            if line.starts_with("data: ")
+                && let Some(data) = line.strip_prefix("data: ")
+            {
                 if data == "[DONE]" {
                     return Ok(None);
                 }
 
-                let event: AnthropicStreamEvent = serde_json::from_str(data)
-                    .map_err(LLMError::JsonError)?;
+                let event: AnthropicStreamEvent =
+                    serde_json::from_str(data).map_err(LLMError::JsonError)?;
 
                 match event.event_type.as_str() {
                     "message_start" => {
-                        if let Some(data) = event.data {
-                            if let Ok(start_event) = serde_json::from_value::<MessageStartEvent>(data) {
-                                return Ok(Some(StreamChunk {
-                                    content: None,
-                                    finish_reason: None,
-                                    model: Some(start_event.message.model),
-                                    tool_calls: None,
-                                    usage: Some(LLMUsage {
-                                        input_tokens: start_event.message.usage.input_tokens,
-                                        output_tokens: start_event.message.usage.output_tokens,
-                                        cache_creation_input_tokens: start_event.message.usage.cache_creation_input_tokens,
-                                        cache_read_input_tokens: start_event.message.usage.cache_read_input_tokens,
-                                        reasoning_tokens: 0,
-                                    }),
-                                }));
-                            }
+                        if let Some(data) = event.data
+                            && let Ok(start_event) =
+                                serde_json::from_value::<MessageStartEvent>(data)
+                        {
+                            return Ok(Some(StreamChunk {
+                                content: None,
+                                finish_reason: None,
+                                model: Some(start_event.message.model),
+                                tool_calls: None,
+                                usage: Some(LLMUsage {
+                                    input_tokens: start_event.message.usage.input_tokens,
+                                    output_tokens: start_event.message.usage.output_tokens,
+                                    cache_creation_input_tokens: start_event
+                                        .message
+                                        .usage
+                                        .cache_creation_input_tokens,
+                                    cache_read_input_tokens: start_event
+                                        .message
+                                        .usage
+                                        .cache_read_input_tokens,
+                                    reasoning_tokens: 0,
+                                }),
+                            }));
                         }
                     }
                     "content_block_delta" => {
-                        if let Some(data) = event.data {
-                            if let Ok(delta_event) = serde_json::from_value::<ContentBlockDeltaEvent>(data) {
-                                match delta_event.delta {
-                                    ContentDelta::TextDelta { text } => {
-                                        return Ok(Some(StreamChunk {
-                                            content: Some(vec![ContentItem::text(text)]),
-                                            finish_reason: None,
-                                            model: None,
-                                            tool_calls: None,
-                                            usage: None,
-                                        }));
-                                    }
-                                    _ => continue,
+                        if let Some(data) = event.data
+                            && let Ok(delta_event) =
+                                serde_json::from_value::<ContentBlockDeltaEvent>(data)
+                        {
+                            match delta_event.delta {
+                                ContentDelta::TextDelta { text } => {
+                                    return Ok(Some(StreamChunk {
+                                        content: Some(vec![ContentItem::text(text)]),
+                                        finish_reason: None,
+                                        model: None,
+                                        tool_calls: None,
+                                        usage: None,
+                                    }));
                                 }
+                                _ => continue,
                             }
                         }
                     }
                     "message_delta" => {
-                        if let Some(data) = event.data {
-                            if let Ok(delta_event) = serde_json::from_value::<MessageDeltaEvent>(data) {
-                                let finish_reason = delta_event.delta.stop_reason.as_ref().map(|reason| {
+                        if let Some(data) = event.data
+                            && let Ok(delta_event) =
+                                serde_json::from_value::<MessageDeltaEvent>(data)
+                        {
+                            let finish_reason =
+                                delta_event.delta.stop_reason.as_ref().map(|reason| {
                                     match reason.as_str() {
                                         "end_turn" => FinishReason::Stop,
                                         "tool_use" => FinishReason::ToolCalls,
@@ -346,20 +366,19 @@ impl AnthropicClient {
                                     }
                                 });
 
-                                return Ok(Some(StreamChunk {
-                                    content: None,
-                                    finish_reason,
-                                    model: None,
-                                    tool_calls: None,
-                                    usage: delta_event.usage.map(|u| LLMUsage {
-                                        input_tokens: u.input_tokens,
-                                        output_tokens: u.output_tokens,
-                                        cache_creation_input_tokens: u.cache_creation_input_tokens,
-                                        cache_read_input_tokens: u.cache_read_input_tokens,
-                                        reasoning_tokens: 0,
-                                    }),
-                                }));
-                            }
+                            return Ok(Some(StreamChunk {
+                                content: None,
+                                finish_reason,
+                                model: None,
+                                tool_calls: None,
+                                usage: delta_event.usage.map(|u| LLMUsage {
+                                    input_tokens: u.input_tokens,
+                                    output_tokens: u.output_tokens,
+                                    cache_creation_input_tokens: u.cache_creation_input_tokens,
+                                    cache_read_input_tokens: u.cache_read_input_tokens,
+                                    reasoning_tokens: 0,
+                                }),
+                            }));
                         }
                     }
                     _ => continue,
@@ -400,7 +419,11 @@ impl AnthropicClient {
         result
     }
 
-    fn convert_content(&self, content: &Option<Vec<ContentItem>>, tool_call: &Option<ToolCall>) -> AnthropicContent {
+    fn convert_content(
+        &self,
+        content: &Option<Vec<ContentItem>>,
+        tool_call: &Option<ToolCall>,
+    ) -> AnthropicContent {
         let mut blocks = Vec::new();
 
         // Add content items
@@ -442,10 +465,10 @@ impl AnthropicClient {
         }
 
         // If only one text block, use string format
-        if blocks.len() == 1 {
-            if let AnthropicContentBlock::Text { text } = &blocks[0] {
-                return AnthropicContent::String(text.clone());
-            }
+        if blocks.len() == 1
+            && let AnthropicContentBlock::Text { text } = &blocks[0]
+        {
+            return AnthropicContent::String(text.clone());
         }
 
         AnthropicContent::Array(blocks)
@@ -470,11 +493,11 @@ impl AnthropicClient {
 
     fn extract_system_message(&mut self, messages: &[LLMMessage]) {
         for msg in messages {
-            if msg.role == MessageRole::System {
-                if let Some(text) = msg.get_text() {
-                    self.system_message = Some(text.to_string());
-                    break;
-                }
+            if msg.role == MessageRole::System
+                && let Some(text) = msg.get_text()
+            {
+                self.system_message = Some(text.to_string());
+                break;
             }
         }
     }
@@ -574,7 +597,8 @@ impl LLMProvider for AnthropicClient {
 
         // Add the assistant's response to chat history
         let first_tool_call = tool_calls.first();
-        let assistant_content = self.convert_content(&Some(content_items.clone()), &first_tool_call.cloned());
+        let assistant_content =
+            self.convert_content(&Some(content_items.clone()), &first_tool_call.cloned());
         let assistant_message = AnthropicMessage {
             role: "assistant".to_string(),
             content: assistant_content,
@@ -586,7 +610,11 @@ impl LLMProvider for AnthropicClient {
             usage: Some(usage),
             model: Some(response.model),
             finish_reason,
-            tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
+            tool_calls: if tool_calls.is_empty() {
+                None
+            } else {
+                Some(tool_calls)
+            },
         })
     }
 
@@ -676,8 +704,8 @@ mod tests {
 
     #[test]
     fn test_content_conversion() {
-        let model_provider = ModelProvider::new("anthropic".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("anthropic".to_string()).with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let client = AnthropicClient::new(&config).unwrap();
 
@@ -691,10 +719,7 @@ mod tests {
         }
 
         // Test multiple content items
-        let content = vec![
-            ContentItem::text("Hello"),
-            ContentItem::text("world"),
-        ];
+        let content = vec![ContentItem::text("Hello"), ContentItem::text("world")];
         let result = client.convert_content(&Some(content), &None);
 
         match result {
@@ -711,8 +736,8 @@ mod tests {
 
     #[test]
     fn test_message_conversion() {
-        let model_provider = ModelProvider::new("anthropic".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("anthropic".to_string()).with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let client = AnthropicClient::new(&config).unwrap();
 
@@ -739,8 +764,8 @@ mod tests {
 
     #[test]
     fn test_system_message_extraction() {
-        let model_provider = ModelProvider::new("anthropic".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("anthropic".to_string()).with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let mut client = AnthropicClient::new(&config).unwrap();
 
@@ -750,7 +775,10 @@ mod tests {
         ];
 
         client.extract_system_message(&messages);
-        assert_eq!(client.system_message, Some("You are a helpful assistant".to_string()));
+        assert_eq!(
+            client.system_message,
+            Some("You are a helpful assistant".to_string())
+        );
 
         let converted = client.convert_messages(&messages);
         // System message should be filtered out from regular messages
@@ -760,8 +788,8 @@ mod tests {
 
     #[test]
     fn test_tool_result_conversion() {
-        let model_provider = ModelProvider::new("anthropic".to_string())
-            .with_api_key("test_key".to_string());
+        let model_provider =
+            ModelProvider::new("anthropic".to_string()).with_api_key("test_key".to_string());
         let config = ModelConfig::new("claude-3-sonnet-20240229".to_string(), model_provider);
         let client = AnthropicClient::new(&config).unwrap();
 
@@ -776,7 +804,11 @@ mod tests {
             AnthropicContent::Array(blocks) => {
                 assert_eq!(blocks.len(), 1);
                 match &blocks[0] {
-                    AnthropicContentBlock::ToolResult { tool_use_id, content, is_error } => {
+                    AnthropicContentBlock::ToolResult {
+                        tool_use_id,
+                        content,
+                        is_error,
+                    } => {
                         assert_eq!(tool_use_id, "call_123");
                         assert_eq!(content, "Success result");
                         assert_eq!(*is_error, Some(false));
