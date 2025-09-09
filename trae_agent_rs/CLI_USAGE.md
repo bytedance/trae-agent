@@ -32,14 +32,25 @@ trae-agent --interactive
 
 **Keyboard Controls:**
 - `Enter`: Execute the task typed in the input box
-- `Ctrl+C`, `Ctrl+Q`, `Esc`: Quit the application
-- `↑/↓`: Scroll through output history
+- `Ctrl+C`, `Ctrl+Q`, `Esc`: Quit the application (with confirmation if task is running)
+- `↑/↓`: Scroll through output history (or navigate autocomplete suggestions)
 - `←/→`: Move cursor in the input field
 - `Backspace`: Delete characters in input
+- `Tab`: Accept autocomplete suggestion
 
 **Special Commands:**
 - `/help`: Show help information
 - `/quit` or `/exit`: Exit the application
+
+**Auto-completion:**
+- Type `/` to see available commands
+- Use `↑/↓` or `Tab` to navigate and select suggestions
+- Press `Enter` or `Tab` to apply the selected suggestion
+- Press `Esc` to hide autocomplete
+
+**Quit Confirmation:**
+- When a task is running, quit attempts show a confirmation popup
+- Press `Y` to confirm quit, `N` or `Esc` to cancel
 
 ### 2. Single Run Mode
 
