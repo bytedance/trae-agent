@@ -2,11 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use owo_colors::OwoColorize;
-use std::path::PathBuf;
-use trae_cli::get_trae_agent_logo;
-use trae_core::{ModelConfig, ModelProvider};
+use std::{collections::HashMap, path::PathBuf};
+use trae_cli::{get_trae_agent_logo, tui::App};
+use trae_core::{
+    agent::base_agent::{Agent, AgentExecution, BaseAgent},
+    config::{ModelConfig, ModelProvider},
+    llm::LLMClient,
+    trae::TraeAgent,
+};
 
 fn show_welcome_message() {
     // Title to display
@@ -25,14 +30,19 @@ fn show_welcome_message() {
 
 #[derive(Parser)]
 #[command(
-    name = "trae",
+    name = "trae-agent",
     about = "Trae Agent - Intelligent coding assistant",
     version = env!("CARGO_PKG_VERSION"),
     author = "ByteDance"
 )]
 struct Cli {
-    #[command(subcommand)]
-    command: Commands,
+    /// Start interactive mode (default behavior)
+    #[arg(short, long)]
+    interactive: bool,
+
+    /// Run a single task without interactive mode
+    #[arg(short, long)]
+    run: Option<String>,
 
     /// Enable verbose logging
     #[arg(short, long, global = true)]
@@ -41,65 +51,18 @@ struct Cli {
     /// Configuration file path
     #[arg(short, long, global = true)]
     config: Option<PathBuf>,
-}
 
-#[derive(Subcommand)]
-enum Commands {
-    /// Start an interactive coding session
-    Chat {
-        /// Initial message or task description
-        #[arg(short, long)]
-        message: Option<String>,
+    /// Working directory for the agent
+    #[arg(short, long, global = true, default_value = ".")]
+    workspace: PathBuf,
 
-        /// Working directory for the agent
-        #[arg(short, long, default_value = ".")]
-        workspace: PathBuf,
+    /// Model provider to use (openai, anthropic, etc.)
+    #[arg(short, long, global = true, default_value = "openai")]
+    provider: String,
 
-        /// Model provider to use (openai, anthropic, etc.)
-        #[arg(short, long, default_value = "openai")]
-        provider: String,
-
-        /// Model name to use
-        #[arg(long, default_value = "gpt-4")]
-        model: String,
-    },
-
-    /// Execute a single task without interactive mode
-    Run {
-        /// Task description
-        task: String,
-
-        /// Working directory for the agent
-        #[arg(short, long, default_value = ".")]
-        workspace: PathBuf,
-
-        /// Model provider to use (openai, anthropic, etc.)
-        #[arg(short, long, default_value = "openai")]
-        provider: String,
-
-        /// Model name to use
-        #[arg(long, default_value = "gpt-4")]
-        model: String,
-    },
-
-    /// Show configuration information
-    Config {
-        #[command(subcommand)]
-        action: ConfigCommands,
-    },
-}
-
-#[derive(Subcommand)]
-enum ConfigCommands {
-    /// Show current configuration
-    Show,
-    /// Set configuration values
-    Set {
-        /// Configuration key
-        key: String,
-        /// Configuration value
-        value: String,
-    },
+    /// Model name to use
+    #[arg(long, global = true, default_value = "gpt-4")]
+    model: String,
 }
 
 #[tokio::main]
@@ -115,39 +78,23 @@ async fn main() -> Result<()> {
         })
         .init();
 
-    match cli.command {
-        Commands::Chat {
-            message,
-            workspace,
-            provider,
-            model,
-        } => {
-            handle_chat(message, workspace, provider, model).await?;
-        }
-        Commands::Run {
-            task,
-            workspace,
-            provider,
-            model,
-        } => {
-            handle_run(task, workspace, provider, model).await?;
-        }
-        Commands::Config { action } => {
-            handle_config(action).await?;
-        }
+    // Check if we have a run command
+    if let Some(task) = cli.run {
+        // Single run mode
+        handle_run(task, cli.workspace, cli.provider, cli.model).await?;
+    } else {
+        // Interactive mode (default)
+        handle_interactive(cli.workspace, cli.provider, cli.model).await?;
     }
 
     Ok(())
 }
 
-async fn handle_chat(
-    message: Option<String>,
+async fn handle_interactive(
     workspace: PathBuf,
     provider: String,
     model: String,
 ) -> Result<()> {
-    show_welcome_message();
-
     println!("🚀 Starting interactive session...");
     println!(
         "📁 Workspace: {}",
@@ -159,21 +106,9 @@ async fn handle_chat(
         model.bright_yellow()
     );
 
-    if let Some(msg) = message {
-        println!("💬 Initial message: {}", msg.bright_white());
-        // TODO: Initialize agent and process the initial message
-    }
-
-    println!();
-    println!(
-        "{}",
-        "💡 Interactive mode not yet implemented.".bright_yellow()
-    );
-    println!("This will start an interactive coding session where you can:");
-    println!("  {} Chat with the AI assistant", "•".bright_cyan());
-    println!("  {} Get help with coding tasks", "•".bright_cyan());
-    println!("  {} Have the agent make code changes", "•".bright_cyan());
-    println!("  {} Use various tools and utilities", "•".bright_cyan());
+    // Create and run the TUI application
+    let mut app = App::new(provider, model, workspace)?;
+    app.run().await?;
 
     Ok(())
 }
@@ -213,6 +148,17 @@ async fn handle_run(
         }
     };
 
+    if api_key.is_empty() {
+        eprintln!("❌ API key not found. Please set the appropriate environment variable:");
+        match provider.as_str() {
+            "openai" => eprintln!("   export OPENAI_API_KEY=your_key_here"),
+            "anthropic" => eprintln!("   export ANTHROPIC_API_KEY=your_key_here"),
+            "azure" => eprintln!("   export AZURE_API_KEY=your_key_here"),
+            _ => {}
+        }
+        std::process::exit(1);
+    }
+
     let base_url = match provider.as_str() {
         "openai" => Some("https://api.openai.com/v1".to_string()),
         "anthropic" => Some("https://api.anthropic.com".to_string()),
@@ -234,99 +180,64 @@ async fn handle_run(
 
     println!("⚙️ Model config: {:?}", model_config);
 
-    println!();
-    println!(
-        "{}",
-        "💡 Task execution not yet implemented.".bright_yellow()
-    );
-    println!("This will:");
-    println!("  {} Initialize the appropriate agent", "•".bright_cyan());
-    println!(
-        "  {} Process the task using the configured model",
-        "•".bright_cyan()
-    );
-    println!("  {} Execute any necessary actions", "•".bright_cyan());
-    println!("  {} Provide results and feedback", "•".bright_cyan());
+    // Create and initialize the agent
+    match create_and_run_agent(model_config, workspace, task).await {
+        Ok(_) => {
+            println!("✅ Task completed successfully!");
+        }
+        Err(e) => {
+            eprintln!("❌ Task failed: {}", e);
+            std::process::exit(1);
+        }
+    }
 
     Ok(())
 }
 
-async fn handle_config(action: ConfigCommands) -> Result<()> {
-    match action {
-        ConfigCommands::Show => {
-            println!(
-                "{} {}",
-                "📋".bright_cyan(),
-                "Current Configuration:".bright_white()
-            );
+async fn create_and_run_agent(
+    model_config: ModelConfig,
+    workspace: PathBuf,
+    task: String,
+) -> Result<()> {
+    println!("🔧 Creating agent...");
 
-            if std::env::var("API_KEY").is_ok() {
-                println!("  {}: {}", "API_KEY".bright_cyan(), "***".bright_green());
-            } else {
-                println!("  {}: {}", "API_KEY".bright_cyan(), "not set".bright_red());
-            }
+    // Create LLM client
+    let llm_client = LLMClient::new(model_config.clone())?;
 
-            if std::env::var("ANTHROPIC_API_KEY").is_ok() {
-                println!(
-                    "  {}: {}",
-                    "ANTHROPIC_API_KEY".bright_cyan(),
-                    "***".bright_green()
-                );
-            } else {
-                println!(
-                    "  {}: {}",
-                    "ANTHROPIC_API_KEY".bright_cyan(),
-                    "not set".bright_red()
-                );
-            }
+    // Create base agent
+    let base_agent = BaseAgent::new(
+        "".to_string(), // Empty task initially
+        AgentExecution::new("".to_string(), None),
+        llm_client,
+        10, // max_step
+        model_config,
+        None, // tools will be set in new_task
+        vec![],
+    );
 
-            if std::env::var("AZURE_API_KEY").is_ok() {
-                println!(
-                    "  {}: {}",
-                    "AZURE_API_KEY".bright_cyan(),
-                    "***".bright_green()
-                );
-            } else {
-                println!(
-                    "  {}: {}",
-                    "AZURE_API_KEY".bright_cyan(),
-                    "not set".bright_red()
-                );
-            }
+    // Create TraeAgent
+    let mut agent = TraeAgent::new(base_agent, Some(workspace.to_string_lossy().to_string()));
 
-            println!();
-            println!(
-                "{} Environment variables you can set:",
-                "💡".bright_yellow()
-            );
-            println!(
-                "  {} - for OpenAI models",
-                "API_KEY or OPENAI_API_KEY".bright_blue()
-            );
-            println!(
-                "  {} - for Anthropic/Claude models",
-                "ANTHROPIC_API_KEY".bright_blue()
-            );
-            println!(
-                "  {} - for Azure OpenAI models",
-                "AZURE_API_KEY".bright_blue()
-            );
-        }
-        ConfigCommands::Set { key, value: _ } => {
-            println!(
-                "{} Configuration setting not yet implemented.",
-                "💡".bright_yellow()
-            );
-            println!(
-                "To set {}, use environment variables for now.",
-                key.bright_cyan()
-            );
-            println!(
-                "Example: {}",
-                format!("export {}=your_key_here", key).bright_green()
-            );
-        }
-    }
+    println!("🎯 Initializing task...");
+
+    // Setup task arguments
+    let mut args = HashMap::new();
+    args.insert("project_path".to_string(), workspace.to_string_lossy().to_string());
+    args.insert("issue".to_string(), task.clone());
+
+    // Initialize the task
+    agent.new_task(task, Some(args), None).map_err(|e| {
+        anyhow::anyhow!("Failed to initialize task: {:?}", e)
+    })?;
+
+    println!("🚀 Running agent...");
+
+    // Run the agent
+    let result = agent.run().await.map_err(|e| {
+        anyhow::anyhow!("Agent execution failed: {}", e)
+    })?;
+
+    println!("📋 Execution result: {:?}", result);
 
     Ok(())
 }
