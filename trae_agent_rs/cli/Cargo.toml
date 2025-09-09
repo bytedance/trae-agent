@@ -10,7 +10,7 @@ keywords = { workspace = true }
 categories = { workspace = true }
 
 [[bin]]
-name = "trae"
+name = "trae-agent"
 path = "src/main.rs"
 
 [dependencies]
@@ -25,3 +25,7 @@ env_logger = "0.10"
 figlet-rs = "0.1"
 owo-colors = "4.0"
 once_cell = "1.21.3"
+ratatui = "0.29.0"
+crossterm = "0.28.1"
+futures = "0.3"
+tokio-stream = "0.1"
