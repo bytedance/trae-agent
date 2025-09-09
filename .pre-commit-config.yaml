@@ -37,7 +37,7 @@ repos:
   rev: v1.0
   hooks:
     - id: fmt
-      args: ['--manifest-path', 'trae_agent_rs/Cargo.toml', '--']
+      args: ['--manifest-path', 'trae_agent_rs/Cargo.toml', '--all', '--']
     - id: cargo-check
       args: ['--manifest-path', 'trae_agent_rs/Cargo.toml']
     - id: clippy
