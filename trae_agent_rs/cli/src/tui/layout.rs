@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Rect},
     prelude::*,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
 
 use super::state::AppState;
@@ -21,15 +21,14 @@ impl Layout {
     /// - Shortcuts (minimal height needed)
     pub fn render(frame: &mut Frame, state: &AppState) {
         let size = frame.area();
-        
         // Create main layout chunks with dynamic sizing
         let chunks = ratatui::layout::Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0),      // Output area - takes remaining space
-                Constraint::Length(1),   // Status area - single line
-                Constraint::Length(3),   // Input area - 3 lines (content + borders)
-                Constraint::Length(4),   // Shortcuts area - 4 lines for shortcuts
+                Constraint::Min(0),    // Output area - takes remaining space
+                Constraint::Length(1), // Status area - single line
+                Constraint::Length(3), // Input area - 3 lines (content + borders)
+                Constraint::Length(4), // Shortcuts area - 4 lines for shortcuts
             ])
             .split(size);
 
@@ -51,9 +50,15 @@ impl Layout {
 
     fn render_output_area(frame: &mut Frame, area: Rect, state: &AppState) {
         let output_lines = if state.output_lines.is_empty() {
-            vec![Line::from(Span::styled("No output yet...", Style::default().fg(Color::DarkGray).add_modifier(ratatui::style::Modifier::ITALIC)))]
+            vec![Line::from(Span::styled(
+                "No output yet...",
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(ratatui::style::Modifier::ITALIC),
+            ))]
         } else {
-            state.output_lines
+            state
+                .output_lines
                 .iter()
                 .skip(state.output_scroll.saturating_sub(area.height as usize))
                 .take(area.height as usize)
@@ -61,8 +66,7 @@ impl Layout {
                 .collect::<Vec<_>>()
         };
 
-        let paragraph = Paragraph::new(output_lines)
-            .wrap(Wrap { trim: false });
+        let paragraph = Paragraph::new(output_lines).wrap(Wrap { trim: false });
 
         frame.render_widget(paragraph, area);
     }
@@ -76,11 +80,12 @@ impl Layout {
             state.token_usage.output_tokens,
             state.token_usage.total_tokens
         );
-        
-        let status_paragraph = Paragraph::new(status_text)
-            .style(Style::default()
+
+        let status_paragraph = Paragraph::new(status_text).style(
+            Style::default()
                 .fg(Color::Gray)
-                .add_modifier(ratatui::style::Modifier::DIM));
+                .add_modifier(ratatui::style::Modifier::DIM),
+        );
 
         frame.render_widget(status_paragraph, area);
     }
@@ -105,25 +110,29 @@ impl Layout {
             Line::from(vec![prompt_span, placeholder_span])
         } else {
             // Show actual input text
-            let input_span = Span::styled(
-                &state.input_text,
-                Style::default().fg(Color::White),
-            );
+
+            let input_span = Span::styled(&state.input_text, Style::default().fg(Color::White));
             Line::from(vec![prompt_span, input_span])
         };
 
-        let input_paragraph = Paragraph::new(vec![input_line])
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan))
-                    .title("Input")
-            );
+        let input_paragraph = Paragraph::new(vec![input_line]).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan))
+                .title("Input"),
+        );
 
         frame.render_widget(input_paragraph, area);
 
         // Position cursor after the prompt (accounting for border)
-        let cursor_x = 1 + 2 + if state.input_text.is_empty() { 0 } else { state.input_cursor }; // border + "❯ " + cursor position
+        let cursor_x = 1
+            + 2
+            + if state.input_text.is_empty() {
+                0
+            } else {
+                state.input_cursor
+            }; // border + "❯ " + cursor position
+
         frame.set_cursor_position(Position {
             x: area.x + cursor_x as u16,
             y: area.y + 1, // Account for top border
@@ -134,13 +143,33 @@ impl Layout {
         let shortcuts_lines = vec![
             // Main shortcuts with highlighting
             Line::from(vec![
-                Span::styled("Enter", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled(
+                    "Enter",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(ratatui::style::Modifier::BOLD),
+                ),
                 Span::styled(": Run │ ", Style::default().fg(Color::Gray)),
-                Span::styled("Ctrl+C/Q/Esc", Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled(
+                    "Ctrl+C/Q/Esc",
+                    Style::default()
+                        .fg(Color::Red)
+                        .add_modifier(ratatui::style::Modifier::BOLD),
+                ),
                 Span::styled(": Quit │ ", Style::default().fg(Color::Gray)),
-                Span::styled("↑/↓", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled(
+                    "↑/↓",
+                    Style::default()
+                        .fg(Color::Blue)
+                        .add_modifier(ratatui::style::Modifier::BOLD),
+                ),
                 Span::styled(": Scroll │ ", Style::default().fg(Color::Gray)),
-                Span::styled("/help", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled(
+                    "/help",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(ratatui::style::Modifier::BOLD),
+                ),
                 Span::styled(": Help", Style::default().fg(Color::Gray)),
             ]),
             Line::from(""),
@@ -197,7 +226,7 @@ impl Layout {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::Cyan))
-                    .title("Commands")
+                    .title("Commands"),
             )
             .style(Style::default().bg(Color::Black));
 

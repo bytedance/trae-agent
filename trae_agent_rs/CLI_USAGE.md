@@ -32,24 +32,16 @@ trae-agent --interactive
 
 **Keyboard Controls:**
 - `Enter`: Execute the task typed in the input box
-<<<<<<< HEAD
 - `Ctrl+C`, `Ctrl+Q`, `Esc`: Quit the application (with confirmation if task is running)
 - `↑/↓`: Scroll through output history (or navigate autocomplete suggestions)
 - `←/→`: Move cursor in the input field
 - `Backspace`: Delete characters in input
 - `Tab`: Accept autocomplete suggestion
-=======
-- `Ctrl+C`, `Ctrl+Q`, `Esc`: Quit the application
-- `↑/↓`: Scroll through output history
-- `←/→`: Move cursor in the input field
-- `Backspace`: Delete characters in input
->>>>>>> d3584ca2050f30ed9ab559b3bdd774d2c07bcc5f
 
 **Special Commands:**
 - `/help`: Show help information
 - `/quit` or `/exit`: Exit the application
 
-<<<<<<< HEAD
 **Auto-completion:**
 - Type `/` to see available commands
 - Use `↑/↓` or `Tab` to navigate and select suggestions
@@ -60,8 +52,6 @@ trae-agent --interactive
 - When a task is running, quit attempts show a confirmation popup
 - Press `Y` to confirm quit, `N` or `Esc` to cancel
 
-=======
->>>>>>> d3584ca2050f30ed9ab559b3bdd774d2c07bcc5f
 ### 2. Single Run Mode
 
 Execute a task directly without interactive mode:
@@ -176,7 +166,7 @@ The agent status section shows real-time information about what the agent is doi
 
 The token usage section provides real-time statistics:
 - **Input**: Tokens sent to the AI model
-- **Output**: Tokens received from the AI model  
+- **Output**: Tokens received from the AI model
 - **Total**: Combined input and output tokens
 
 This helps you monitor API usage costs in real-time.

@@ -9,4 +9,4 @@ pub mod state;
 pub use app::App;
 pub use event::{Event, EventHandler};
 pub use layout::Layout;
-pub use state::{AppState, AgentStatus, TokenUsage};
+pub use state::{AgentStatus, AppState, TokenUsage};
