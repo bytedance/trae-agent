@@ -345,7 +345,6 @@ impl AppState {
         self.show_quit_popup = false;
     }
 
-
     pub fn confirm_quit(&mut self) {
         self.should_quit = true;
         self.show_quit_popup = false;

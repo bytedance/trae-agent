@@ -5,13 +5,13 @@ use anyhow::Result;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Terminal,
     backend::{Backend, CrosstermBackend},
     prelude::*,
     text::{Line, Span},
-    Terminal,
 };
 use std::{collections::HashMap, io, path::PathBuf};
 use trae_core::{
