@@ -5,13 +5,13 @@ use anyhow::Result;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Terminal,
     backend::{Backend, CrosstermBackend},
     prelude::*,
     text::{Line, Span},
-    Terminal,
 };
 use std::{collections::HashMap, io, path::PathBuf};
 use trae_core::{
@@ -278,9 +278,14 @@ impl App {
             self.state.add_output_line_styled(Line::from(vec![
                 Span::styled("❌ ", Style::default().fg(Color::Red)),
                 Span::styled("Unknown command: ", Style::default().fg(Color::Red)),
-                Span::styled(command, Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled(
+                    command,
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(ratatui::style::Modifier::BOLD),
+                ),
             ]));
-            
+
             self.state.add_output_line_styled(Line::from(vec![
                 Span::styled("💡 ", Style::default().fg(Color::Yellow)),
                 Span::styled("Available commands: ", Style::default().fg(Color::Gray)),
@@ -290,7 +295,7 @@ impl App {
                 Span::styled(", ", Style::default().fg(Color::Gray)),
                 Span::styled("/exit", Style::default().fg(Color::Red)),
             ]));
-            
+
             return Ok(());
         }
 
@@ -298,7 +303,12 @@ impl App {
         self.state.add_output_line_styled(Line::from(vec![
             Span::styled("🚀 ", Style::default().fg(Color::Yellow)),
             Span::styled("Running task: ", Style::default().fg(Color::Cyan)),
-            Span::styled(task.clone(), Style::default().fg(Color::White).add_modifier(ratatui::style::Modifier::BOLD)),
+            Span::styled(
+                task.clone(),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
         ]));
         self.state.agent_status = AgentStatus::Running;
 
@@ -309,7 +319,8 @@ impl App {
                     self.agent = Some(agent);
                 }
                 Err(e) => {
-                    self.state.add_output_line(format!("❌ Failed to create agent: {}", e));
+                    self.state
+                        .add_output_line(format!("❌ Failed to create agent: {}", e));
                     self.state.agent_status = AgentStatus::Error(e.to_string());
                     return Ok(());
                 }
@@ -337,7 +348,10 @@ impl App {
             vec![],
         );
 
-        Ok(TraeAgent::new(base_agent, Some(self.workspace.to_string_lossy().to_string())))
+        Ok(TraeAgent::new(
+            base_agent,
+            Some(self.workspace.to_string_lossy().to_string()),
+        ))
     }
 
     async fn run_agent_task(&mut self, task: String) -> Result<()> {
@@ -345,7 +359,10 @@ impl App {
 
         // Setup task arguments
         let mut args = HashMap::new();
-        args.insert("project_path".to_string(), self.workspace.to_string_lossy().to_string());
+        args.insert(
+            "project_path".to_string(),
+            self.workspace.to_string_lossy().to_string(),
+        );
         args.insert("issue".to_string(), task.clone());
 
         // Initialize the task
@@ -354,13 +371,19 @@ impl App {
             Ok(_) => {
                 self.state.add_output_line_styled(Line::from(vec![
                     Span::styled("✅ ", Style::default().fg(Color::Green)),
-                    Span::styled("Task initialized successfully", Style::default().fg(Color::Green)),
+                    Span::styled(
+                        "Task initialized successfully",
+                        Style::default().fg(Color::Green),
+                    ),
                 ]));
             }
             Err(e) => {
                 self.state.add_output_line_styled(Line::from(vec![
                     Span::styled("❌ ", Style::default().fg(Color::Red)),
-                    Span::styled("Failed to initialize task: ", Style::default().fg(Color::Red)),
+                    Span::styled(
+                        "Failed to initialize task: ",
+                        Style::default().fg(Color::Red),
+                    ),
                     Span::styled(format!("{:?}", e), Style::default().fg(Color::White)),
                 ]));
                 self.state.agent_status = AgentStatus::Error(format!("{:?}", e));
@@ -370,20 +393,27 @@ impl App {
 
         // Run the agent in the background
         let event_sender = self.event_handler.sender();
-        
+
         tokio::spawn(async move {
             // Note: The actual agent execution would need to be implemented here
             // This is a placeholder for the agent execution logic
-            
+
             let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::CallingTool));
-            let _ = event_sender.send(Event::AgentOutput("🔧 Agent is processing your request...".to_string()));
-            
+            let _ = event_sender.send(Event::AgentOutput(
+                "🔧 Agent is processing your request...".to_string(),
+            ));
+
             // Simulate some processing time
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            
-            let _ = event_sender.send(Event::AgentOutput("💡 Task execution completed (placeholder)".to_string()));
+
+            let _ = event_sender.send(Event::AgentOutput(
+                "💡 Task execution completed (placeholder)".to_string(),
+            ));
             let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::Completed));
-            let _ = event_sender.send(Event::TokenUsageUpdate { input: 100, output: 50 });
+            let _ = event_sender.send(Event::TokenUsageUpdate {
+                input: 100,
+                output: 50,
+            });
         });
 
         Ok(())
@@ -392,24 +422,35 @@ impl App {
     fn show_help(&mut self) {
         // Add styled help content
         self.state.add_output_line_styled(Line::from(""));
-        
+
         self.state.add_output_line_styled(Line::from(vec![
             Span::styled("🆘 ", Style::default().fg(Color::Yellow)),
-            Span::styled("Trae Agent Help", Style::default().fg(Color::Cyan).add_modifier(ratatui::style::Modifier::BOLD)),
+            Span::styled(
+                "Trae Agent Help",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
         ]));
-        
+
         self.state.add_output_line_styled(Line::from(""));
-        
-        self.state.add_output_line_styled(Line::from(
-            Span::styled("Commands:", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::BOLD))
-        ));
-        
+
+        self.state.add_output_line_styled(Line::from(Span::styled(
+            "Commands:",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        )));
+
         self.state.add_output_line_styled(Line::from(vec![
             Span::styled("  ", Style::default()),
             Span::styled("/help", Style::default().fg(Color::Yellow)),
-            Span::styled(" - Show this help message", Style::default().fg(Color::Gray)),
+            Span::styled(
+                " - Show this help message",
+                Style::default().fg(Color::Gray),
+            ),
         ]));
-        
+
         self.state.add_output_line_styled(Line::from(vec![
             Span::styled("  ", Style::default()),
             Span::styled("/quit", Style::default().fg(Color::Red)),
@@ -417,13 +458,16 @@ impl App {
             Span::styled("/exit", Style::default().fg(Color::Red)),
             Span::styled(" - Exit the application", Style::default().fg(Color::Gray)),
         ]));
-        
+
         self.state.add_output_line_styled(Line::from(""));
-        
-        self.state.add_output_line_styled(Line::from(
-            Span::styled("Keyboard shortcuts:", Style::default().fg(Color::Blue).add_modifier(ratatui::style::Modifier::BOLD))
-        ));
-        
+
+        self.state.add_output_line_styled(Line::from(Span::styled(
+            "Keyboard shortcuts:",
+            Style::default()
+                .fg(Color::Blue)
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        )));
+
         let shortcuts = [
             ("Enter", "Execute the current task"),
             ("Ctrl+C, Ctrl+Q, Esc", "Quit the application"),
@@ -431,7 +475,7 @@ impl App {
             ("←/→", "Move cursor in input field"),
             ("Backspace", "Delete character"),
         ];
-        
+
         for (key, desc) in shortcuts {
             self.state.add_output_line_styled(Line::from(vec![
                 Span::styled("  ", Style::default()),
@@ -440,23 +484,30 @@ impl App {
                 Span::styled(desc, Style::default().fg(Color::Gray)),
             ]));
         }
-        
+
         self.state.add_output_line_styled(Line::from(""));
-        
-        self.state.add_output_line_styled(Line::from(
-            Span::styled("Usage:", Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD))
-        ));
-        
+
+        self.state.add_output_line_styled(Line::from(Span::styled(
+            "Usage:",
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        )));
+
         self.state.add_output_line_styled(Line::from(vec![
-            Span::styled("  Type your coding task in the input field and press ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                "  Type your coding task in the input field and press ",
+                Style::default().fg(Color::Gray),
+            ),
             Span::styled("Enter", Style::default().fg(Color::Yellow)),
             Span::styled(".", Style::default().fg(Color::Gray)),
         ]));
-        
-        self.state.add_output_line_styled(Line::from(
-            Span::styled("  The agent will analyze your request and execute appropriate actions.", Style::default().fg(Color::Gray))
-        ));
-        
+
+        self.state.add_output_line_styled(Line::from(Span::styled(
+            "  The agent will analyze your request and execute appropriate actions.",
+            Style::default().fg(Color::Gray),
+        )));
+
         self.state.add_output_line_styled(Line::from(""));
     }
 }

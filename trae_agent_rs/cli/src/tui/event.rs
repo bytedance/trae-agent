@@ -36,11 +36,11 @@ impl EventHandler {
 
     pub async fn start_event_loop(&self) {
         let tx = self.event_tx.clone();
-        
+
         tokio::spawn(async move {
             // Terminal event polling
             let mut interval = tokio::time::interval(Duration::from_millis(100));
-            
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -50,7 +50,7 @@ impl EventHandler {
                             && tx.send(Event::Key(key_event)).is_err() {
                             break;
                         }
-                        
+
                         // Send tick event
                         if tx.send(Event::Tick).is_err() {
                             break;

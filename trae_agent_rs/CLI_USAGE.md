@@ -176,7 +176,7 @@ The agent status section shows real-time information about what the agent is doi
 
 The token usage section provides real-time statistics:
 - **Input**: Tokens sent to the AI model
-- **Output**: Tokens received from the AI model  
+- **Output**: Tokens received from the AI model
 - **Total**: Combined input and output tokens
 
 This helps you monitor API usage costs in real-time.

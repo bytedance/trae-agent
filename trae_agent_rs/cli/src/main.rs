@@ -90,11 +90,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn handle_interactive(
-    workspace: PathBuf,
-    provider: String,
-    model: String,
-) -> Result<()> {
+async fn handle_interactive(workspace: PathBuf, provider: String, model: String) -> Result<()> {
     println!("🚀 Starting interactive session...");
     println!(
         "📁 Workspace: {}",
@@ -222,20 +218,24 @@ async fn create_and_run_agent(
 
     // Setup task arguments
     let mut args = HashMap::new();
-    args.insert("project_path".to_string(), workspace.to_string_lossy().to_string());
+    args.insert(
+        "project_path".to_string(),
+        workspace.to_string_lossy().to_string(),
+    );
     args.insert("issue".to_string(), task.clone());
 
     // Initialize the task
-    agent.new_task(task, Some(args), None).map_err(|e| {
-        anyhow::anyhow!("Failed to initialize task: {:?}", e)
-    })?;
+    agent
+        .new_task(task, Some(args), None)
+        .map_err(|e| anyhow::anyhow!("Failed to initialize task: {:?}", e))?;
 
     println!("🚀 Running agent...");
 
     // Run the agent
-    let result = agent.run().await.map_err(|e| {
-        anyhow::anyhow!("Agent execution failed: {}", e)
-    })?;
+    let result = agent
+        .run()
+        .await
+        .map_err(|e| anyhow::anyhow!("Agent execution failed: {}", e))?;
 
     println!("📋 Execution result: {:?}", result);
 
