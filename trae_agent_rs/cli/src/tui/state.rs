@@ -345,6 +345,7 @@ impl AppState {
         self.show_quit_popup = false;
     }
 
+
     pub fn confirm_quit(&mut self) {
         self.should_quit = true;
         self.show_quit_popup = false;
@@ -364,7 +365,6 @@ impl AppState {
                 .into_iter()
                 .filter(|cmd| cmd.starts_with(&input_lower))
                 .collect();
-
             self.show_autocomplete = !self.autocomplete_suggestions.is_empty();
             self.autocomplete_selected = 0;
         } else {

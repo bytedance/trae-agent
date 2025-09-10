@@ -50,7 +50,6 @@ impl EventHandler {
                             && tx.send(Event::Key(key_event)).is_err() {
                             break;
                         }
-
                         // Send tick event
                         if tx.send(Event::Tick).is_err() {
                             break;

@@ -90,7 +90,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn handle_interactive(workspace: PathBuf, provider: String, model: String) -> Result<()> {
+async fn handle_interactive(
+    workspace: PathBuf,
+    provider: String,
+    model: String,
+) -> Result<()> {
     println!("🚀 Starting interactive session...");
     println!(
         "📁 Workspace: {}",

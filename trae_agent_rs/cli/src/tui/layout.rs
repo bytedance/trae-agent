@@ -21,7 +21,6 @@ impl Layout {
     /// - Shortcuts (minimal height needed)
     pub fn render(frame: &mut Frame, state: &AppState) {
         let size = frame.area();
-
         // Create main layout chunks with dynamic sizing
         let chunks = ratatui::layout::Layout::default()
             .direction(Direction::Vertical)
@@ -67,7 +66,8 @@ impl Layout {
                 .collect::<Vec<_>>()
         };
 
-        let paragraph = Paragraph::new(output_lines).wrap(Wrap { trim: false });
+        let paragraph = Paragraph::new(output_lines)
+            .wrap(Wrap { trim: false });
 
         frame.render_widget(paragraph, area);
     }
@@ -81,12 +81,11 @@ impl Layout {
             state.token_usage.output_tokens,
             state.token_usage.total_tokens
         );
-
-        let status_paragraph = Paragraph::new(status_text).style(
-            Style::default()
+        
+        let status_paragraph = Paragraph::new(status_text)
+            .style(Style::default()
                 .fg(Color::Gray)
-                .add_modifier(ratatui::style::Modifier::DIM),
-        );
+                .add_modifier(ratatui::style::Modifier::DIM));
 
         frame.render_widget(status_paragraph, area);
     }
@@ -111,16 +110,21 @@ impl Layout {
             Line::from(vec![prompt_span, placeholder_span])
         } else {
             // Show actual input text
-            let input_span = Span::styled(&state.input_text, Style::default().fg(Color::White));
+
+            let input_span = Span::styled(
+                &state.input_text,
+                Style::default().fg(Color::White),
+            );
             Line::from(vec![prompt_span, input_span])
         };
 
-        let input_paragraph = Paragraph::new(vec![input_line]).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan))
-                .title("Input"),
-        );
+        let input_paragraph = Paragraph::new(vec![input_line])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan))
+                    .title("Input")
+            );
 
         frame.render_widget(input_paragraph, area);
 
@@ -132,6 +136,7 @@ impl Layout {
             } else {
                 state.input_cursor
             }; // border + "❯ " + cursor position
+
         frame.set_cursor_position(Position {
             x: area.x + cursor_x as u16,
             y: area.y + 1, // Account for top border

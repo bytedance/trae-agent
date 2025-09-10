@@ -5,13 +5,13 @@ use anyhow::Result;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, KeyCode, KeyModifiers},
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
-    Terminal,
     backend::{Backend, CrosstermBackend},
     prelude::*,
     text::{Line, Span},
+    Terminal,
 };
 use std::{collections::HashMap, io, path::PathBuf};
 use trae_core::{
@@ -295,7 +295,6 @@ impl App {
                 Span::styled(", ", Style::default().fg(Color::Gray)),
                 Span::styled("/exit", Style::default().fg(Color::Red)),
             ]));
-
             return Ok(());
         }
 
@@ -347,7 +346,6 @@ impl App {
             None, // tools will be set in new_task
             vec![],
         );
-
         Ok(TraeAgent::new(
             base_agent,
             Some(self.workspace.to_string_lossy().to_string()),
@@ -458,7 +456,6 @@ impl App {
             Span::styled("/exit", Style::default().fg(Color::Red)),
             Span::styled(" - Exit the application", Style::default().fg(Color::Gray)),
         ]));
-
         self.state.add_output_line_styled(Line::from(""));
 
         self.state.add_output_line_styled(Line::from(Span::styled(
@@ -467,7 +464,6 @@ impl App {
                 .fg(Color::Blue)
                 .add_modifier(ratatui::style::Modifier::BOLD),
         )));
-
         let shortcuts = [
             ("Enter", "Execute the current task"),
             ("Ctrl+C, Ctrl+Q, Esc", "Quit the application"),
@@ -475,7 +471,6 @@ impl App {
             ("←/→", "Move cursor in input field"),
             ("Backspace", "Delete character"),
         ];
-
         for (key, desc) in shortcuts {
             self.state.add_output_line_styled(Line::from(vec![
                 Span::styled("  ", Style::default()),
