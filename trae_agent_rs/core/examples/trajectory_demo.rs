@@ -11,9 +11,9 @@
 use std::collections::HashMap;
 use trae_core::trae::TraeAgent;
 use trae_core::{
-    agent::base_agent::{Agent, AgentError, AgentExecution, BaseAgent},
+    agent::base_agent::{Agent, AgentExecution, BaseAgent},
     config::{ModelConfig, ModelProvider},
-    llm::{LLMClient, MessageRole},
+    llm::{LLMClient},
 };
 
 /// Create a test TraeAgent for demonstration
