@@ -27,6 +27,7 @@ use super::{
     state::{AgentStatus, AppState},
 };
 
+
 pub struct App {
     state: AppState,
     event_handler: EventHandler,
@@ -353,6 +354,10 @@ impl App {
     }
 
     async fn run_agent_task(&mut self, task: String) -> Result<()> {
+
+        // This is not a good practice, we should refactor task to borrow references
+        let task_clone = task.clone(); 
+
         self.state.agent_status = AgentStatus::Thinking;
 
         // Setup task arguments
@@ -402,6 +407,11 @@ impl App {
             ));
 
             // Simulate some processing time
+            // todo: run here
+            let _ = event_sender.send(Event::AgentOutput(format!("task: {}" , task_clone)));
+            
+       //     run_agent_task(self.agent.as_mut(), task_clone);
+
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
             let _ = event_sender.send(Event::AgentOutput(
@@ -416,6 +426,7 @@ impl App {
 
         Ok(())
     }
+
 
     fn show_help(&mut self) {
         // Add styled help content
@@ -505,4 +516,22 @@ impl App {
 
         self.state.add_output_line_styled(Line::from(""));
     }
+}
+
+
+fn run_agent_task(traeagent: Option<&mut TraeAgent>, task: String){
+
+    if traeagent.is_none(){
+        panic!("internal error trae agent has not been yet set up");
+    }
+
+    // here it must unwrap successfully
+    let agent = traeagent.unwrap();
+
+    agent.new_task(task, None, Some(vec![
+        "bash".to_string(),
+        "str_replace_based_edit_tool".to_string(),
+    ]));
+
+    agent.run();
 }
