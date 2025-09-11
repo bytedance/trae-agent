@@ -13,71 +13,71 @@ use ratatui::{
     prelude::*,
     text::{Line, Span},
 };
+use tokio::sync::Mutex;
 use std::{collections::HashMap, io, path::PathBuf};
 use trae_core::{
-    agent::base_agent::{Agent, AgentExecution, BaseAgent},
-    config::{ModelConfig, ModelProvider},
-    llm::LLMClient,
-    trae::TraeAgent,
+    agent::base_agent::{Agent, AgentExecution, BaseAgent}, config::{ModelConfig, ModelProvider}, llm::LLMClient, trae::{TraeAgent, AgentUpdate}
 };
-
+use std::sync::Arc;
 use super::{
     event::{Event, EventHandler},
     layout::Layout,
+    settings::{UserSettings, SettingsEditor},
     state::{AgentStatus, AppState},
 };
+
+const MAX_TOKEN: u32 = 4096; 
+const TEMPERATURE: f32 = 0.1;
 
 pub struct App {
     state: AppState,
     event_handler: EventHandler,
-    agent: Option<TraeAgent>,
+    agent: Option<Arc<tokio::sync::Mutex<TraeAgent>>>,
     model_config: ModelConfig,
     workspace: PathBuf,
+    settings: UserSettings,
+    settings_editor: Option<SettingsEditor>,
 }
 
 impl App {
     pub fn new(provider: String, model: String, workspace: PathBuf) -> Result<Self> {
-        // Create model configuration
-        let api_key = match provider.as_str() {
-            "openai" => std::env::var("OPENAI_API_KEY")
-                .or_else(|_| std::env::var("API_KEY"))
-                .unwrap_or_default(),
-            "anthropic" => std::env::var("ANTHROPIC_API_KEY").unwrap_or_default(),
-            "azure" => std::env::var("AZURE_API_KEY").unwrap_or_default(),
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "Unknown provider: {}. Supported providers: openai, anthropic, azure",
-                    provider
-                ));
-            }
-        };
+        // Load existing settings or create new ones
+        let settings = UserSettings::load().unwrap_or_else(|_| {
+            UserSettings::new(provider.clone(), model.clone(), workspace.clone())
+        });
 
-        let base_url = match provider.as_str() {
-            "openai" => Some("https://api.openai.com/v1".to_string()),
-            "anthropic" => Some("https://api.anthropic.com".to_string()),
-            "azure" => std::env::var("AZURE_BASE_URL").ok(),
-            _ => None,
-        };
+        // Note: We now prioritize loaded settings over command line defaults
+        // Command line arguments would need to be handled differently if we want to override
 
-        let model_provider = ModelProvider::new(provider.clone()).with_api_key(api_key);
+        // Create model configuration from settings
+        let api_key = settings.get_api_key().unwrap_or_default();
+        let base_url = settings.get_base_url();
 
-        let model_provider = if let Some(url) = base_url {
-            model_provider.with_base_url(url)
-        } else {
-            model_provider
-        };
+        let mut model_provider = ModelProvider::new(settings.provider.clone())
+            .with_api_key(api_key);
 
-        let model_config = ModelConfig::new(model, model_provider)
-            .with_max_tokens(4096)
-            .with_temperature(0.1);
+        if let Some(url) = base_url {
+            model_provider = model_provider.with_base_url(url);
+        }
+
+        let model_config = ModelConfig::new(settings.model.clone(), model_provider)
+            .with_max_tokens(MAX_TOKEN)
+            .with_temperature(TEMPERATURE);
 
         Ok(Self {
             state: AppState::new(),
             event_handler: EventHandler::new(),
             agent: None,
             model_config,
-            workspace,
+            workspace: settings.workspace.clone(),
+            settings,
+            settings_editor: None,
         })
+    }
+
+    /// Get the current settings
+    pub fn get_settings(&self) -> &UserSettings {
+        &self.settings
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -88,13 +88,16 @@ impl App {
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
-        // Start event loop
+        // Clear the screen
+        terminal.clear()?;
+
+        // Start the event loop
         self.event_handler.start_event_loop().await;
 
-        // Main application loop
+        // Run the app
         let result = self.run_app(&mut terminal).await;
 
-        // Cleanup terminal
+        // Restore terminal
         disable_raw_mode()?;
         execute!(
             terminal.backend_mut(),
@@ -110,7 +113,7 @@ impl App {
         loop {
             // Draw the UI
             terminal.draw(|frame| {
-                Layout::render(frame, &self.state);
+                Layout::render(frame, &self.state, &self.settings_editor);
             })?;
 
             // Handle events
@@ -129,8 +132,19 @@ impl App {
                     Event::AgentStatusUpdate(status) => {
                         self.state.agent_status = status;
                     }
-                    Event::TokenUsageUpdate { input, output } => {
-                        self.state.update_token_usage(input, output);
+                    Event::TokenUsageUpdate(token_usage) => {
+                        self.state.token_usage = token_usage;
+                    }
+                    Event::AgentStepUpdate { step, description } => {
+                        self.state.add_output_line(format!("Step {}: {}", step, description));
+                    }
+                    Event::AgentError(error) => {
+                        self.state.add_output_line(format!("Error: {}", error));
+                        self.state.agent_status = AgentStatus::Error(error);
+                    }
+                    Event::TaskCompleted(summary) => {
+                        self.state.add_output_line(format!("Task completed: {}", summary));
+                        self.state.agent_status = AgentStatus::Idle;
                     }
                     Event::Tick => {
                         // Regular update tick - can be used for periodic updates
@@ -150,6 +164,10 @@ impl App {
         // Handle popup interactions first
         if self.state.show_quit_popup {
             return self.handle_quit_popup_key(key_event).await;
+        }
+
+        if self.state.show_settings {
+            return self.handle_settings_popup_key(key_event).await;
         }
 
         // Handle autocomplete interactions
@@ -180,7 +198,8 @@ impl App {
         // Normal key handling
         match key_event.code {
             KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.handle_quit_request();
+                // Always allow Ctrl+C to quit immediately for better UX
+                self.state.should_quit = true;
             }
             KeyCode::Char('q') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.handle_quit_request();
@@ -260,6 +279,86 @@ impl App {
         Ok(())
     }
 
+    async fn handle_settings_popup_key(&mut self, key_event: crossterm::event::KeyEvent) -> Result<()> {
+        if let Some(ref mut editor) = self.settings_editor {
+            match key_event.code {
+                KeyCode::Esc => {
+                    if editor.editing_field.is_some() {
+                        // Cancel editing if in edit mode
+                        editor.cancel_editing();
+                    } else {
+                        // Close popup if not editing
+                        self.state.hide_settings_popup();
+                        self.settings_editor = None;
+                    }
+                }
+                KeyCode::Enter => {
+                    if editor.editing_field.is_some() {
+                        // Confirm editing
+                        if let Err(e) = editor.confirm_editing() {
+                            eprintln!("Failed to update field: {}", e);
+                        }
+                    } else {
+                        // Start editing the selected field
+                        editor.start_editing(editor.selected_field);
+                    }
+                }
+                KeyCode::Char('s') if editor.editing_field.is_none() => {
+                    // Save settings and update app configuration
+                    let new_settings = editor.get_settings();
+                    if let Err(e) = new_settings.save() {
+                        eprintln!("Failed to save settings: {}", e);
+                    } else {
+                        // Update app configuration
+                        self.settings = new_settings.clone();
+                        self.workspace = new_settings.workspace.clone();
+                        
+                        // Recreate model config with new settings
+                        let api_key = new_settings.get_api_key().unwrap_or_default();
+                        let base_url = new_settings.get_base_url();
+                        
+                        let mut model_provider = ModelProvider::new(new_settings.provider.clone())
+                            .with_api_key(api_key);
+                        
+                        if let Some(url) = base_url {
+                            model_provider = model_provider.with_base_url(url);
+                        }
+                        
+                        self.model_config = ModelConfig::new(new_settings.model.clone(), model_provider)
+                            .with_max_tokens(MAX_TOKEN)
+                            .with_temperature(TEMPERATURE);
+                        
+                        // Reset agent to use new configuration
+                        self.agent = None;
+                    }
+                    
+                    self.state.hide_settings_popup();
+                    self.settings_editor = None;
+                }
+                KeyCode::Tab if editor.editing_field.is_none() => {
+                    editor.next_field();
+                }
+                KeyCode::BackTab if editor.editing_field.is_none() => {
+                    editor.prev_field();
+                }
+                KeyCode::Up if editor.editing_field.is_none() => {
+                    editor.prev_field();
+                }
+                KeyCode::Down if editor.editing_field.is_none() => {
+                    editor.next_field();
+                }
+                KeyCode::Backspace if editor.editing_field.is_some() => {
+                    editor.delete_char();
+                }
+                KeyCode::Char(c) if editor.editing_field.is_some() => {
+                    editor.insert_char(c);
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     async fn handle_task(&mut self, task: String) -> Result<()> {
         // Check for special commands first (before showing "Running task")
         if task.trim() == "/help" {
@@ -269,6 +368,12 @@ impl App {
 
         if task.trim() == "/quit" || task.trim() == "/exit" {
             self.state.should_quit = true;
+            return Ok(());
+        }
+
+        if task.trim() == "/settings" {
+            self.state.show_settings_popup();
+            self.settings_editor = Some(SettingsEditor::new(self.settings.clone()));
             return Ok(());
         }
 
@@ -290,6 +395,8 @@ impl App {
                 Span::styled("💡 ", Style::default().fg(Color::Yellow)),
                 Span::styled("Available commands: ", Style::default().fg(Color::Gray)),
                 Span::styled("/help", Style::default().fg(Color::Green)),
+                Span::styled(", ", Style::default().fg(Color::Gray)),
+                Span::styled("/settings", Style::default().fg(Color::Green)),
                 Span::styled(", ", Style::default().fg(Color::Gray)),
                 Span::styled("/quit", Style::default().fg(Color::Red)),
                 Span::styled(", ", Style::default().fg(Color::Gray)),
@@ -315,7 +422,7 @@ impl App {
         if self.agent.is_none() {
             match self.create_agent().await {
                 Ok(agent) => {
-                    self.agent = Some(agent);
+                    self.agent = Some(Arc::new(Mutex::new(agent)));
                 }
                 Err(e) => {
                     self.state
@@ -353,6 +460,7 @@ impl App {
     }
 
     async fn run_agent_task(&mut self, task: String) -> Result<()> {
+        // Update status to show we're starting
         self.state.agent_status = AgentStatus::Thinking;
 
         // Setup task arguments
@@ -363,9 +471,16 @@ impl App {
         );
         args.insert("issue".to_string(), task.clone());
 
-        // Initialize the task
-        let agent = self.agent.as_mut().unwrap();
-        match agent.new_task(task, Some(args), None) {
+        // Get agent reference
+        let agent_arc = self.agent.as_ref().expect("agent missing").clone();
+        
+        // Initialize the task (do this in a separate scope to release the lock quickly)
+        let init_result = {
+            let mut agent = agent_arc.lock().await;
+            agent.new_task(task.clone(), Some(args), None)
+        };
+
+        match init_result {
             Ok(_) => {
                 self.state.add_output_line_styled(Line::from(vec![
                     Span::styled("✅ ", Style::default().fg(Color::Green)),
@@ -389,33 +504,75 @@ impl App {
             }
         }
 
-        // Run the agent in the background
-        let event_sender = self.event_handler.sender();
+        // Create a channel for agent updates
+        let (agent_update_sender, mut agent_update_receiver) = tokio::sync::mpsc::unbounded_channel::<AgentUpdate>();
+        
+        // Set up the agent with the update sender (in a separate scope)
+        {
+            let mut agent_guard = agent_arc.lock().await;
+            agent_guard.set_update_sender(agent_update_sender);
+        }
 
+        // Update status to running
+        self.state.agent_status = AgentStatus::Running;
+
+        // Get event sender
+        let event_sender = self.event_handler.sender().clone();
+
+        // Spawn task to handle agent updates
+        let event_sender_clone = event_sender.clone();
         tokio::spawn(async move {
-            // Note: The actual agent execution would need to be implemented here
-            // This is a placeholder for the agent execution logic
+            while let Some(update) = agent_update_receiver.recv().await {
+                let event = match update {
+                    AgentUpdate::StatusUpdate(_status) => {
+                        Event::AgentStatusUpdate(AgentStatus::CallingTool) // Map status appropriately
+                    }
+                    AgentUpdate::Output(output) => Event::AgentOutput(output),
+                    AgentUpdate::TokenUsage { input, output } => {
+                        Event::TokenUsageUpdate(crate::tui::state::TokenUsage { input, output })
+                    }
+                    AgentUpdate::StepUpdate { step, description } => {
+                        Event::AgentStepUpdate { step, description }
+                    }
+                    AgentUpdate::Error(error) => Event::AgentError(error),
+                    AgentUpdate::TaskCompleted(summary) => Event::TaskCompleted(summary),
+                };
+                let _ = event_sender_clone.send(event);
+            }
+        });
 
-            let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::CallingTool));
-            let _ = event_sender.send(Event::AgentOutput(
-                "🔧 Agent is processing your request...".to_string(),
-            ));
+        // Run the agent in the background
+        tokio::spawn({
+            let agent_arc = agent_arc.clone();
+            let event_sender = event_sender.clone();
+            async move {
+                // Send initial status update
+                let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::Running));
+                
+                // Run the agent
+                let result = {
+                    let mut agent_guard = agent_arc.lock().await;
+                    agent_guard.run().await
+                };
 
-            // Simulate some processing time
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                // Handle completion or error
+                match result {
+                    Ok(_) => {
+                        let _ = event_sender.send(Event::TaskCompleted("Task completed successfully".to_string()));
+                    }
+                    Err(e) => {
+                        let _ = event_sender.send(Event::AgentError(format!("Agent execution failed: {}", e)));
+                    }
+                }
 
-            let _ = event_sender.send(Event::AgentOutput(
-                "💡 Task execution completed (placeholder)".to_string(),
-            ));
-            let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::Completed));
-            let _ = event_sender.send(Event::TokenUsageUpdate {
-                input: 100,
-                output: 50,
-            });
+                // Send final token usage (TODO: implement proper LLM usage tracking)
+                let _ = event_sender.send(Event::TokenUsageUpdate(crate::tui::state::TokenUsage { input: 100, output: 50 }));
+            }
         });
 
         Ok(())
     }
+
 
     fn show_help(&mut self) {
         // Add styled help content
@@ -445,6 +602,15 @@ impl App {
             Span::styled("/help", Style::default().fg(Color::Yellow)),
             Span::styled(
                 " - Show this help message",
+                Style::default().fg(Color::Gray),
+            ),
+        ]));
+
+        self.state.add_output_line_styled(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("/settings", Style::default().fg(Color::Green)),
+            Span::styled(
+                " - Configure API key, base URL, and workspace",
                 Style::default().fg(Color::Gray),
             ),
         ]));
@@ -506,3 +672,5 @@ impl App {
         self.state.add_output_line_styled(Line::from(""));
     }
 }
+
+

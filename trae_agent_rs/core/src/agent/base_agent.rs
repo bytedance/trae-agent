@@ -18,6 +18,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::vec;
 use thiserror::Error;
+use tokio::sync::mpsc;
 
 use crate::ContentItem;
 use crate::LLMClient;
@@ -151,6 +152,9 @@ pub trait Agent {
     fn run(
         &mut self,
     ) -> impl std::future::Future<Output = Result<AgentExecution, &'static str>> + Send;
+
+    fn run_cli(sender: mpsc::UnboundedSender<String>);
+
     fn new_task(
         &mut self,
         task: String,
@@ -193,7 +197,7 @@ impl BaseAgent {
         is_task_complete: Option<TaskCompleteChecker>,
     ) -> Result<Vec<LLMMessage>, AgentError> {
         step.state = AgentStepState::THINKING;
-        // a cli api should place here currently there's not cli api
+
         let response = self
             .llm_client
             .chat(msgs.to_vec(), &self.model_config, Some(&self.tools), false)

@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
-use super::state::AppState;
+use super::{state::AppState, settings::SettingsEditor};
 
 pub struct Layout;
 
@@ -19,7 +19,7 @@ impl Layout {
     /// - Agent state and token usage (minimal height needed)
     /// - Input box (minimal height needed)
     /// - Shortcuts (minimal height needed)
-    pub fn render(frame: &mut Frame, state: &AppState) {
+    pub fn render(frame: &mut Frame, state: &AppState, settings_editor: &Option<SettingsEditor>) {
         let size = frame.area();
         // Create main layout chunks with dynamic sizing
         let chunks = ratatui::layout::Layout::default()
@@ -45,6 +45,10 @@ impl Layout {
 
         if state.show_quit_popup {
             Self::render_quit_popup(frame, size);
+        }
+
+        if state.show_settings {
+            Self::render_settings_popup(frame, size, state, settings_editor);
         }
     }
 
@@ -76,9 +80,9 @@ impl Layout {
         let status_text = format!(
             "Status: {} │ Tokens: In:{} Out:{} Total:{}",
             state.agent_status.display(),
-            state.token_usage.input_tokens,
-            state.token_usage.output_tokens,
-            state.token_usage.total_tokens
+            state.token_usage.input,
+            state.token_usage.output,
+            state.token_usage.total()
         );
 
         let status_paragraph = Paragraph::new(status_text).style(
@@ -271,5 +275,105 @@ impl Layout {
             .style(Style::default().fg(Color::Yellow));
 
         frame.render_widget(popup_paragraph, popup_area);
+    }
+
+    fn render_settings_popup(frame: &mut Frame, area: Rect, state: &AppState, settings_editor: &Option<SettingsEditor>) {
+        // Calculate popup size (larger than quit popup for form fields)
+        let popup_width = 60;
+        let popup_height = 16;
+        let x = (area.width.saturating_sub(popup_width)) / 2;
+        let y = (area.height.saturating_sub(popup_height)) / 2;
+        let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+        // Clear the area behind the popup
+        frame.render_widget(Clear, popup_area);
+
+        // Create the popup content with form fields
+        let popup_block = Block::default()
+            .title("Settings")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Green))
+            .style(Style::default().bg(Color::Black));
+
+        // Split popup into sections for each field
+        let inner_area = popup_block.inner(popup_area);
+        let field_chunks = ratatui::layout::Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2), // Provider
+                Constraint::Length(2), // Model
+                Constraint::Length(2), // API Key
+                Constraint::Length(2), // Base URL
+                Constraint::Length(2), // Workspace
+                Constraint::Length(1), // Instructions
+                Constraint::Min(0),    // Remaining space
+            ])
+            .split(inner_area);
+
+        // Render the popup border
+        frame.render_widget(popup_block, popup_area);
+
+        // Get actual settings values from editor
+        if let Some(editor) = settings_editor {
+            let settings = editor.get_settings();
+            let current_field = editor.get_current_field();
+            
+            let fields = [
+                ("Provider", settings.provider.as_str()),
+                ("Model", settings.model.as_str()),
+                ("API Key", settings.api_key.as_deref().unwrap_or("")),
+                ("Base URL", settings.base_url.as_deref().unwrap_or("")),
+                ("Workspace", &settings.workspace.to_string_lossy().to_string()),
+            ];
+
+            // Render each field
+            for (i, (label, value)) in fields.iter().enumerate() {
+                if i < field_chunks.len() - 2 {
+                    let is_selected = i == current_field;
+                    let is_editing = editor.editing_field == Some(i);
+                    
+                    let display_value = if is_editing {
+                        // Show current input when editing
+                        &editor.temp_input
+                    } else if label == &"API Key" && !value.is_empty() {
+                        "***hidden***"
+                    } else {
+                        value
+                    };
+                    
+                    let field_text = if is_editing {
+                        format!("{}: {}|", label, display_value) // Add cursor indicator
+                    } else {
+                        format!("{}: {}", label, display_value)
+                    };
+                    
+                    let style = if is_editing {
+                        Style::default().fg(Color::Green).bg(Color::DarkGray)
+                    } else if is_selected {
+                        Style::default().fg(Color::Yellow).bg(Color::DarkGray)
+                    } else {
+                        Style::default().fg(Color::White)
+                    };
+                    
+                    let field_paragraph = Paragraph::new(field_text).style(style);
+                    frame.render_widget(field_paragraph, field_chunks[i]);
+                }
+            }
+        }
+
+        // Render instructions
+        let instructions = if let Some(editor) = settings_editor {
+            if editor.editing_field.is_some() {
+                "Enter: Confirm • Esc: Cancel"
+            } else {
+                "Tab/↑↓: Navigate • Enter: Edit • s: Save • Esc: Close"
+            }
+        } else {
+            "Tab/↑↓: Navigate • Enter: Edit • s: Save • Esc: Close"
+        };
+        let instructions_paragraph = Paragraph::new(instructions)
+            .style(Style::default().fg(Color::Gray))
+            .alignment(Alignment::Center);
+        frame.render_widget(instructions_paragraph, field_chunks[5]);
     }
 }

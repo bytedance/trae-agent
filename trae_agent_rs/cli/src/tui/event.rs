@@ -1,9 +1,11 @@
 // Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
-use crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, KeyEvent, KeyCode, KeyModifiers};
 use std::time::Duration;
 use tokio::sync::mpsc;
+
+use crate::tui::state::{AgentStatus, TokenUsage};
 
 #[derive(Debug, Clone)]
 pub enum Event {
@@ -11,8 +13,11 @@ pub enum Event {
     Tick,
     Quit,
     AgentOutput(String),
-    AgentStatusUpdate(crate::tui::state::AgentStatus),
-    TokenUsageUpdate { input: u64, output: u64 },
+    AgentStatusUpdate(AgentStatus),
+    TokenUsageUpdate(TokenUsage),
+    AgentStepUpdate { step: u32, description: String },
+    AgentError(String),
+    TaskCompleted(String),
 }
 
 pub struct EventHandler {
