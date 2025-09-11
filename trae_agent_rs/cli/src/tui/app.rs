@@ -13,6 +13,7 @@ use ratatui::{
     prelude::*,
     text::{Line, Span},
 };
+use tokio::sync::Mutex;
 use std::{collections::HashMap, io, path::PathBuf};
 use trae_core::{
     agent::base_agent::{Agent, AgentExecution, BaseAgent},
@@ -20,7 +21,7 @@ use trae_core::{
     llm::LLMClient,
     trae::TraeAgent,
 };
-
+use std::sync::Arc;
 use super::{
     event::{Event, EventHandler},
     layout::Layout,
@@ -31,7 +32,7 @@ use super::{
 pub struct App {
     state: AppState,
     event_handler: EventHandler,
-    agent: Option<TraeAgent>,
+    agent: Option<Arc<tokio::sync::Mutex<TraeAgent>>>,
     model_config: ModelConfig,
     workspace: PathBuf,
 }
@@ -316,7 +317,7 @@ impl App {
         if self.agent.is_none() {
             match self.create_agent().await {
                 Ok(agent) => {
-                    self.agent = Some(agent);
+                    self.agent = Some(Arc::new(Mutex::new(agent)));
                 }
                 Err(e) => {
                     self.state
@@ -355,9 +356,6 @@ impl App {
 
     async fn run_agent_task(&mut self, task: String) -> Result<()> {
 
-        // This is not a good practice, we should refactor task to borrow references
-        let task_clone = task.clone(); 
-
         self.state.agent_status = AgentStatus::Thinking;
 
         // Setup task arguments
@@ -369,8 +367,9 @@ impl App {
         args.insert("issue".to_string(), task.clone());
 
         // Initialize the task
-        let agent = self.agent.as_mut().unwrap();
-        match agent.new_task(task, Some(args), None) {
+        let agent_arc = self.agent.as_ref().expect("agent missing").clone();
+        let mut agent = agent_arc.lock().await;
+        match agent.new_task(task.clone(), Some(args), None) {
             Ok(_) => {
                 self.state.add_output_line_styled(Line::from(vec![
                     Span::styled("✅ ", Style::default().fg(Color::Green)),
@@ -395,36 +394,32 @@ impl App {
         }
 
         // Run the agent in the background
-        let event_sender = self.event_handler.sender();
+        let event_sender = self.event_handler.sender().clone(); // ensure it's an owned, clonable sender
+        let agent_arc = self.agent.as_ref().unwrap().clone();   // Arc<Mutex<TraeAgent>>
 
-        tokio::spawn(async move {
-            // Note: The actual agent execution would need to be implemented here
-            // This is a placeholder for the agent execution logic
+        tokio::spawn({
+            let event_sender = event_sender.clone();
+            let agent_arc = agent_arc.clone();
+            async move {
+                let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::CallingTool));
+                let _ = event_sender.send(Event::AgentOutput(
+                    "🔧 Agent is processing your request...".to_string(),
+                ));
 
-            let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::CallingTool));
-            let _ = event_sender.send(Event::AgentOutput(
-                "🔧 Agent is processing your request...".to_string(),
-            ));
+                // Lock the mutex inside the task
+                let mut agent_guard = agent_arc.lock().await; // MutexGuard<TraeAgent>
+                let _ = agent_guard.run().await;
 
-            // Simulate some processing time
-            // todo: run here
-            let _ = event_sender.send(Event::AgentOutput(format!("task: {}" , task_clone)));
-            
-       //     run_agent_task(self.agent.as_mut(), task_clone);
-
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-            let _ = event_sender.send(Event::AgentOutput(
-                "💡 Task execution completed (placeholder)".to_string(),
-            ));
-            let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::Completed));
-            let _ = event_sender.send(Event::TokenUsageUpdate {
-                input: 100,
-                output: 50,
-            });
+                let _ = event_sender.send(Event::AgentOutput(
+                    "💡 Task execution completed (placeholder)".to_string(),
+                ));
+                let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::Completed));
+                let _ = event_sender.send(Event::TokenUsageUpdate { input: 100, output: 50 });
+            }
         });
 
         Ok(())
+
     }
 
 
@@ -519,19 +514,3 @@ impl App {
 }
 
 
-fn run_agent_task(traeagent: Option<&mut TraeAgent>, task: String){
-
-    if traeagent.is_none(){
-        panic!("internal error trae agent has not been yet set up");
-    }
-
-    // here it must unwrap successfully
-    let agent = traeagent.unwrap();
-
-    agent.new_task(task, None, Some(vec![
-        "bash".to_string(),
-        "str_replace_based_edit_tool".to_string(),
-    ]));
-
-    agent.run();
-}
