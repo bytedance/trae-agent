@@ -29,12 +29,20 @@ pub struct TraeAgent {
 
 impl TraeAgent {
     pub fn new(base_agent: agent::base_agent::BaseAgent, path: Option<String>) -> Self {
+        let default_path = {
+            let timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            format!("./trajectories/trajectory_{}.json", timestamp)
+        };
+        
         TraeAgent {
             baseagent: base_agent,
             initial_msgs: vec![],
 
             trajectory_recorder: Trajectory {
-                path: path.unwrap_or("./".to_string()),
+                path: path.unwrap_or(default_path),
                 start_time: system_time_to_string(&SystemTime::now()),
                 trajectory_data: None,
             },
@@ -175,27 +183,41 @@ impl Agent for TraeAgent {
         while step_number <= self.baseagent.max_step {
             // start a new step record
             let mut new_llm_record = LLMRecord {
-                content: "".to_string(),
+                step_number: step_number,
+                timestamp: SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs_f64()
+                    .to_string(),
+                request_content: format!("Step {}: Executing agent step", step_number),
+                response_content: String::new(),
+                tool_calls: vec![],
+                error_message: None,
                 token_usage: None,
-                model: Some(self.baseagent.model_config.model.to_string().clone()),
-                provider: Some(
-                    self.baseagent
-                        .model_config
-                        .model_provider
-                        .name
-                        .to_string()
-                        .clone(),
-                ),
+                model: Some(self.baseagent.model_config.model.to_string()),
+                provider: Some(self.baseagent.model_config.model_provider.name.to_string()),
                 llmdetails: None,
                 steps: None,
             };
 
             let mut step = AgentStep::new(step_number, AgentStepState::THINKING);
 
+            let step_start_time = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs_f64();
+
             let exec_msg = self
                 .baseagent
                 .execute_step(&mut step, &self.initial_msgs, &mut exec_agent, None)
                 .await;
+
+            let step_end_time = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs_f64();
+
+            let _step_execution_time = step_end_time - step_start_time;
 
             // update the record
             match exec_msg {
@@ -204,6 +226,13 @@ impl Agent for TraeAgent {
                     exec_agent.agent_state = AgentState::ERROR;
                     step.state = AgentStepState::ERROR;
                     step.error = Some(e.to_string());
+
+                    new_llm_record.response_content = format!("Error: {}", e);
+                    new_llm_record.error_message = Some(e.to_string());
+                    new_llm_record.steps = Some(step.clone());
+                    
+                    self.trajectory_recorder.add_llm_record(new_llm_record);
+                    self.trajectory_recorder.increment_error_count();
 
                     self.baseagent.finalize_step(
                         &mut step,
@@ -214,7 +243,12 @@ impl Agent for TraeAgent {
                 }
                 Ok(new_messages) => {
                     // Add new messages from the execution to our message history
-                    self.initial_msgs.extend(new_messages);
+                    self.initial_msgs.extend(new_messages.clone());
+
+                    new_llm_record.response_content = format!("Step completed with {} new messages", new_messages.len());
+                    new_llm_record.steps = Some(step.clone());
+                    
+                    self.trajectory_recorder.add_llm_record(new_llm_record);
 
                     self.baseagent.finalize_step(
                         &mut step,
@@ -228,16 +262,6 @@ impl Agent for TraeAgent {
                     }
                 }
             }
-
-            new_llm_record.steps = Some(step.clone());
-
-            // save the record
-            self.trajectory_recorder
-                .trajectory_data
-                .as_mut()
-                .unwrap()
-                .llm_interaction
-                .push(new_llm_record);
 
             step_number += 1;
         }
@@ -268,18 +292,13 @@ impl Agent for TraeAgent {
             cache_read_input_tokens: 0,
         }); //TODO full implementation of total token
 
-        // TODO: refactor & extract it to another function
-        self.trajectory_recorder
-            .trajectory_data
-            .as_mut()
-            .unwrap()
-            .execution_time = exec_agent.execution_time;
-
-        self.trajectory_recorder
-            .trajectory_data
-            .as_mut()
-            .unwrap()
-            .success = exec_agent.success;
+        // Finalize trajectory recording with execution results
+        self.trajectory_recorder.finalize_recording(
+            exec_agent.success,
+            exec_agent.final_result.clone(),
+            exec_agent.execution_time,
+        );
+        
         // Close tools implementation
         self.baseagent.close_tools();
 
@@ -290,7 +309,7 @@ impl Agent for TraeAgent {
         Ok(exec_agent)
     }
 
-    fn run_cli(sender: mpsc::UnboundedSender<String>){
+    fn run_cli(_sender: mpsc::UnboundedSender<String>){
 
     }
 
