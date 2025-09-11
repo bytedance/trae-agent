@@ -16,10 +16,7 @@ use ratatui::{
 use tokio::sync::Mutex;
 use std::{collections::HashMap, io, path::PathBuf};
 use trae_core::{
-    agent::base_agent::{Agent, AgentExecution, BaseAgent},
-    config::{ModelConfig, ModelProvider},
-    llm::LLMClient,
-    trae::TraeAgent,
+    agent::base_agent::{Agent, AgentExecution, BaseAgent}, base, config::{ModelConfig, ModelProvider}, llm::LLMClient, trae::TraeAgent
 };
 use std::sync::Arc;
 use super::{
@@ -28,6 +25,8 @@ use super::{
     state::{AgentStatus, AppState},
 };
 
+const MAX_TOKEN: u32 = 4096; 
+const TEMPERATURE: f32 = 0.1;
 
 pub struct App {
     state: AppState,
@@ -61,17 +60,14 @@ impl App {
             _ => None,
         };
 
-        let model_provider = ModelProvider::new(provider.clone()).with_api_key(api_key);
+        let mut model_provider = ModelProvider::new(provider.clone())
+                .with_api_key(api_key);
 
-        let model_provider = if let Some(url) = base_url {
-            model_provider.with_base_url(url)
-        } else {
-            model_provider
-        };
+        model_provider.base_url = base_url.clone();
 
         let model_config = ModelConfig::new(model, model_provider)
-            .with_max_tokens(4096)
-            .with_temperature(0.1);
+            .with_max_tokens(MAX_TOKEN)
+            .with_temperature(TEMPERATURE);
 
         Ok(Self {
             state: AppState::new(),
@@ -398,6 +394,7 @@ impl App {
         let agent_arc = self.agent.as_ref().unwrap().clone();   // Arc<Mutex<TraeAgent>>
 
         tokio::spawn({
+
             let event_sender = event_sender.clone();
             let agent_arc = agent_arc.clone();
             async move {
@@ -414,6 +411,8 @@ impl App {
                     "💡 Task execution completed (placeholder)".to_string(),
                 ));
                 let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::Completed));
+
+                //TODO implemente LLM usage
                 let _ = event_sender.send(Event::TokenUsageUpdate { input: 100, output: 50 });
             }
         });

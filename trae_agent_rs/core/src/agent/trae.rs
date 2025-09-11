@@ -4,10 +4,13 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 use std::vec;
 
+use tokio::sync::mpsc;
+
 use crate::agent::base_agent::*;
 use crate::bash::Bash;
 use crate::edit::Edit;
 use crate::llm_basics::{LLMUsage, TextContent};
+use crate::trajectory::Recorder;
 use crate::utils::trajectory::{LLMRecord, Trajectory, system_time_to_string};
 use crate::{ContentItem, LLMMessage, Tool, agent};
 
@@ -153,6 +156,7 @@ impl Agent for TraeAgent {
     async fn run(&mut self) -> Result<AgentExecution, &'static str> {
         let start_time = SystemTime::now();
 
+        dbg!(&start_time);
         let mut exec_agent = AgentExecution {
             task: self.baseagent.task.clone(),
             steps: vec![],
@@ -169,8 +173,6 @@ impl Agent for TraeAgent {
         exec_agent.agent_state = AgentState::RUNNING;
 
         while step_number <= self.baseagent.max_step {
-            println!("Agent is running step: {}", &step_number);
-
             // start a new step record
             let mut new_llm_record = LLMRecord {
                 content: "".to_string(),
@@ -196,7 +198,6 @@ impl Agent for TraeAgent {
                 .await;
 
             // update the record
-
             match exec_msg {
                 Err(e) => {
                     // Handle error case
@@ -279,17 +280,23 @@ impl Agent for TraeAgent {
             .as_mut()
             .unwrap()
             .success = exec_agent.success;
-
         // Close tools implementation
         self.baseagent.close_tools();
 
         // TODO: update CLI here if needed
-        // You might want to add CLI updates for final results
-        // Update the initial_msgs with the final message state for potential future use
+        let _ = self.trajectory_recorder.save_record();
+
 
         Ok(exec_agent)
     }
+
+    fn run_cli(sender: mpsc::UnboundedSender<String>){
+
+    }
+
 }
+
+
 
 pub const TRAE_AGENT_SYSTEM_PROMPT: &str = r###"You are an expert AI software engineering agent.
 
