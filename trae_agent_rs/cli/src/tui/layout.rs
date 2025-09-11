@@ -76,9 +76,9 @@ impl Layout {
         let status_text = format!(
             "Status: {} │ Tokens: In:{} Out:{} Total:{}",
             state.agent_status.display(),
-            state.token_usage.input_tokens,
-            state.token_usage.output_tokens,
-            state.token_usage.total_tokens
+            state.token_usage.input,
+            state.token_usage.output,
+            state.token_usage.total()
         );
 
         let status_paragraph = Paragraph::new(status_text).style(

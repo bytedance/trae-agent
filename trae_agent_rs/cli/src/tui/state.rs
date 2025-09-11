@@ -9,9 +9,14 @@ use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Default)]
 pub struct TokenUsage {
-    pub input_tokens: u64,
-    pub output_tokens: u64,
-    pub total_tokens: u64,
+    pub input: u64,
+    pub output: u64,
+}
+
+impl TokenUsage {
+    pub fn total(&self) -> u64 {
+        self.input + self.output
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -321,10 +326,8 @@ impl AppState {
     }
 
     pub fn update_token_usage(&mut self, input_tokens: u64, output_tokens: u64) {
-        self.token_usage.input_tokens += input_tokens;
-        self.token_usage.output_tokens += output_tokens;
-        self.token_usage.total_tokens =
-            self.token_usage.input_tokens + self.token_usage.output_tokens;
+        self.token_usage.input += input_tokens;
+        self.token_usage.output += output_tokens;
     }
 
     pub fn is_task_running(&self) -> bool {

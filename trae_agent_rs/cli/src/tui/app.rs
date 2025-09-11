@@ -16,7 +16,7 @@ use ratatui::{
 use tokio::sync::Mutex;
 use std::{collections::HashMap, io, path::PathBuf};
 use trae_core::{
-    agent::base_agent::{Agent, AgentExecution, BaseAgent}, base, config::{ModelConfig, ModelProvider}, llm::LLMClient, trae::TraeAgent
+    agent::base_agent::{Agent, AgentExecution, BaseAgent}, config::{ModelConfig, ModelProvider}, llm::LLMClient, trae::{TraeAgent, AgentUpdate}
 };
 use std::sync::Arc;
 use super::{
@@ -86,13 +86,16 @@ impl App {
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
-        // Start event loop
+        // Clear the screen
+        terminal.clear()?;
+
+        // Start the event loop
         self.event_handler.start_event_loop().await;
 
-        // Main application loop
+        // Run the app
         let result = self.run_app(&mut terminal).await;
 
-        // Cleanup terminal
+        // Restore terminal
         disable_raw_mode()?;
         execute!(
             terminal.backend_mut(),
@@ -127,8 +130,19 @@ impl App {
                     Event::AgentStatusUpdate(status) => {
                         self.state.agent_status = status;
                     }
-                    Event::TokenUsageUpdate { input, output } => {
-                        self.state.update_token_usage(input, output);
+                    Event::TokenUsageUpdate(token_usage) => {
+                        self.state.token_usage = token_usage;
+                    }
+                    Event::AgentStepUpdate { step, description } => {
+                        self.state.add_output_line(format!("Step {}: {}", step, description));
+                    }
+                    Event::AgentError(error) => {
+                        self.state.add_output_line(format!("Error: {}", error));
+                        self.state.agent_status = AgentStatus::Error(error);
+                    }
+                    Event::TaskCompleted(summary) => {
+                        self.state.add_output_line(format!("Task completed: {}", summary));
+                        self.state.agent_status = AgentStatus::Idle;
                     }
                     Event::Tick => {
                         // Regular update tick - can be used for periodic updates
@@ -178,7 +192,8 @@ impl App {
         // Normal key handling
         match key_event.code {
             KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.handle_quit_request();
+                // Always allow Ctrl+C to quit immediately for better UX
+                self.state.should_quit = true;
             }
             KeyCode::Char('q') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.handle_quit_request();
@@ -351,7 +366,7 @@ impl App {
     }
 
     async fn run_agent_task(&mut self, task: String) -> Result<()> {
-
+        // Update status to show we're starting
         self.state.agent_status = AgentStatus::Thinking;
 
         // Setup task arguments
@@ -362,10 +377,16 @@ impl App {
         );
         args.insert("issue".to_string(), task.clone());
 
-        // Initialize the task
+        // Get agent reference
         let agent_arc = self.agent.as_ref().expect("agent missing").clone();
-        let mut agent = agent_arc.lock().await;
-        match agent.new_task(task.clone(), Some(args), None) {
+        
+        // Initialize the task (do this in a separate scope to release the lock quickly)
+        let init_result = {
+            let mut agent = agent_arc.lock().await;
+            agent.new_task(task.clone(), Some(args), None)
+        };
+
+        match init_result {
             Ok(_) => {
                 self.state.add_output_line_styled(Line::from(vec![
                     Span::styled("✅ ", Style::default().fg(Color::Green)),
@@ -389,36 +410,73 @@ impl App {
             }
         }
 
+        // Create a channel for agent updates
+        let (agent_update_sender, mut agent_update_receiver) = tokio::sync::mpsc::unbounded_channel::<AgentUpdate>();
+        
+        // Set up the agent with the update sender (in a separate scope)
+        {
+            let mut agent_guard = agent_arc.lock().await;
+            agent_guard.set_update_sender(agent_update_sender);
+        }
+
+        // Update status to running
+        self.state.agent_status = AgentStatus::Running;
+
+        // Get event sender
+        let event_sender = self.event_handler.sender().clone();
+
+        // Spawn task to handle agent updates
+        let event_sender_clone = event_sender.clone();
+        tokio::spawn(async move {
+            while let Some(update) = agent_update_receiver.recv().await {
+                let event = match update {
+                    AgentUpdate::StatusUpdate(_status) => {
+                        Event::AgentStatusUpdate(AgentStatus::CallingTool) // Map status appropriately
+                    }
+                    AgentUpdate::Output(output) => Event::AgentOutput(output),
+                    AgentUpdate::TokenUsage { input, output } => {
+                        Event::TokenUsageUpdate(crate::tui::state::TokenUsage { input, output })
+                    }
+                    AgentUpdate::StepUpdate { step, description } => {
+                        Event::AgentStepUpdate { step, description }
+                    }
+                    AgentUpdate::Error(error) => Event::AgentError(error),
+                    AgentUpdate::TaskCompleted(summary) => Event::TaskCompleted(summary),
+                };
+                let _ = event_sender_clone.send(event);
+            }
+        });
+
         // Run the agent in the background
-        let event_sender = self.event_handler.sender().clone(); // ensure it's an owned, clonable sender
-        let agent_arc = self.agent.as_ref().unwrap().clone();   // Arc<Mutex<TraeAgent>>
-
         tokio::spawn({
-
-            let event_sender = event_sender.clone();
             let agent_arc = agent_arc.clone();
+            let event_sender = event_sender.clone();
             async move {
-                let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::CallingTool));
-                let _ = event_sender.send(Event::AgentOutput(
-                    "🔧 Agent is processing your request...".to_string(),
-                ));
+                // Send initial status update
+                let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::Running));
+                
+                // Run the agent
+                let result = {
+                    let mut agent_guard = agent_arc.lock().await;
+                    agent_guard.run().await
+                };
 
-                // Lock the mutex inside the task
-                let mut agent_guard = agent_arc.lock().await; // MutexGuard<TraeAgent>
-                let _ = agent_guard.run().await;
+                // Handle completion or error
+                match result {
+                    Ok(_) => {
+                        let _ = event_sender.send(Event::TaskCompleted("Task completed successfully".to_string()));
+                    }
+                    Err(e) => {
+                        let _ = event_sender.send(Event::AgentError(format!("Agent execution failed: {}", e)));
+                    }
+                }
 
-                let _ = event_sender.send(Event::AgentOutput(
-                    "💡 Task execution completed (placeholder)".to_string(),
-                ));
-                let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::Completed));
-
-                //TODO implemente LLM usage
-                let _ = event_sender.send(Event::TokenUsageUpdate { input: 100, output: 50 });
+                // Send final token usage (TODO: implement proper LLM usage tracking)
+                let _ = event_sender.send(Event::TokenUsageUpdate(crate::tui::state::TokenUsage { input: 100, output: 50 }));
             }
         });
 
         Ok(())
-
     }
 
 
