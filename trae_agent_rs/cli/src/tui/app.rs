@@ -402,6 +402,9 @@ impl App {
             ));
 
             // Simulate some processing time
+            // todo: run here
+            
+            event_sender.send(Event::AgentOutput(task.clone().to_string()));
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
             let _ = event_sender.send(Event::AgentOutput(
