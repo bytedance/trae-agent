@@ -58,6 +58,14 @@ impl UserSettings {
 
     /// Load settings from config file
     pub fn load() -> Result<Self> {
+        // First try to load from trae_config.json in current directory
+        let local_config = PathBuf::from("trae_config.json");
+        if local_config.exists() {
+            let content = fs::read_to_string(&local_config)?;
+            return Ok(serde_json::from_str(&content)?);
+        }
+        
+        // Fall back to user config directory
         let config_path = Self::config_file_path()?;
         
         if !config_path.exists() {
@@ -73,9 +81,18 @@ impl UserSettings {
 
     /// Save settings to config file
     pub fn save(&self) -> Result<()> {
-        let config_path = Self::config_file_path()?;
-        let content = serde_json::to_string_pretty(self)?;
-        fs::write(&config_path, content)?;
+        // Check if trae_config.json exists in current directory
+        let local_config = PathBuf::from("trae_config.json");
+        if local_config.exists() {
+            // Save to local config if it exists
+            let content = serde_json::to_string_pretty(self)?;
+            fs::write(&local_config, content)?;
+        } else {
+            // Save to user config directory
+            let config_path = Self::config_file_path()?;
+            let content = serde_json::to_string_pretty(self)?;
+            fs::write(&config_path, content)?;
+        }
         Ok(())
     }
 

@@ -42,16 +42,12 @@ pub struct App {
 impl App {
     pub fn new(provider: String, model: String, workspace: PathBuf) -> Result<Self> {
         // Load existing settings or create new ones
-        let mut settings = UserSettings::load().unwrap_or_else(|_| {
+        let settings = UserSettings::load().unwrap_or_else(|_| {
             UserSettings::new(provider.clone(), model.clone(), workspace.clone())
         });
 
-        // Override with command line arguments if provided
-        if provider != "openai" || model != "gpt-4" || workspace != PathBuf::from(".") {
-            settings.provider = provider;
-            settings.model = model;
-            settings.workspace = workspace;
-        }
+        // Note: We now prioritize loaded settings over command line defaults
+        // Command line arguments would need to be handled differently if we want to override
 
         // Create model configuration from settings
         let api_key = settings.get_api_key().unwrap_or_default();
@@ -77,6 +73,11 @@ impl App {
             settings,
             settings_editor: None,
         })
+    }
+
+    /// Get the current settings
+    pub fn get_settings(&self) -> &UserSettings {
+        &self.settings
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -282,10 +283,27 @@ impl App {
         if let Some(ref mut editor) = self.settings_editor {
             match key_event.code {
                 KeyCode::Esc => {
-                    self.state.hide_settings_popup();
-                    self.settings_editor = None;
+                    if editor.editing_field.is_some() {
+                        // Cancel editing if in edit mode
+                        editor.cancel_editing();
+                    } else {
+                        // Close popup if not editing
+                        self.state.hide_settings_popup();
+                        self.settings_editor = None;
+                    }
                 }
                 KeyCode::Enter => {
+                    if editor.editing_field.is_some() {
+                        // Confirm editing
+                        if let Err(e) = editor.confirm_editing() {
+                            eprintln!("Failed to update field: {}", e);
+                        }
+                    } else {
+                        // Start editing the selected field
+                        editor.start_editing(editor.selected_field);
+                    }
+                }
+                KeyCode::Char('s') if editor.editing_field.is_none() => {
                     // Save settings and update app configuration
                     let new_settings = editor.get_settings();
                     if let Err(e) = new_settings.save() {
@@ -317,22 +335,22 @@ impl App {
                     self.state.hide_settings_popup();
                     self.settings_editor = None;
                 }
-                KeyCode::Tab => {
+                KeyCode::Tab if editor.editing_field.is_none() => {
                     editor.next_field();
                 }
-                KeyCode::BackTab => {
+                KeyCode::BackTab if editor.editing_field.is_none() => {
                     editor.prev_field();
                 }
-                KeyCode::Up => {
+                KeyCode::Up if editor.editing_field.is_none() => {
                     editor.prev_field();
                 }
-                KeyCode::Down => {
+                KeyCode::Down if editor.editing_field.is_none() => {
                     editor.next_field();
                 }
-                KeyCode::Backspace => {
+                KeyCode::Backspace if editor.editing_field.is_some() => {
                     editor.delete_char();
                 }
-                KeyCode::Char(c) => {
+                KeyCode::Char(c) if editor.editing_field.is_some() => {
                     editor.insert_char(c);
                 }
                 _ => {}

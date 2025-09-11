@@ -330,14 +330,26 @@ impl Layout {
             for (i, (label, value)) in fields.iter().enumerate() {
                 if i < field_chunks.len() - 2 {
                     let is_selected = i == current_field;
-                    let display_value = if label == &"API Key" && !value.is_empty() {
+                    let is_editing = editor.editing_field == Some(i);
+                    
+                    let display_value = if is_editing {
+                        // Show current input when editing
+                        &editor.temp_input
+                    } else if label == &"API Key" && !value.is_empty() {
                         "***hidden***"
                     } else {
                         value
                     };
                     
-                    let field_text = format!("{}: {}", label, display_value);
-                    let style = if is_selected {
+                    let field_text = if is_editing {
+                        format!("{}: {}|", label, display_value) // Add cursor indicator
+                    } else {
+                        format!("{}: {}", label, display_value)
+                    };
+                    
+                    let style = if is_editing {
+                        Style::default().fg(Color::Green).bg(Color::DarkGray)
+                    } else if is_selected {
                         Style::default().fg(Color::Yellow).bg(Color::DarkGray)
                     } else {
                         Style::default().fg(Color::White)
@@ -350,7 +362,15 @@ impl Layout {
         }
 
         // Render instructions
-        let instructions = "Tab/↑↓: Navigate • Enter: Save • Esc: Cancel";
+        let instructions = if let Some(editor) = settings_editor {
+            if editor.editing_field.is_some() {
+                "Enter: Confirm • Esc: Cancel"
+            } else {
+                "Tab/↑↓: Navigate • Enter: Edit • s: Save • Esc: Close"
+            }
+        } else {
+            "Tab/↑↓: Navigate • Enter: Edit • s: Save • Esc: Close"
+        };
         let instructions_paragraph = Paragraph::new(instructions)
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center);

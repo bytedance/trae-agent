@@ -195,13 +195,13 @@ impl Agent for TraeAgent {
         Ok(())
     }
     async fn run(&mut self) -> Result<AgentExecution, &'static str> {
-       // let start_time = SystemTime::now();
+        let start_time = SystemTime::now();
         
         // Send initial status update
         self.send_update(AgentUpdate::StatusUpdate("Starting task execution".to_string()));
         self.send_update(AgentUpdate::Output("🚀 Agent execution started".to_string()));
 
-        dbg!(&start_time);
+        //dbg!(&start_time);
         let mut exec_agent = AgentExecution {
             task: self.baseagent.task.clone(),
             steps: vec![],
