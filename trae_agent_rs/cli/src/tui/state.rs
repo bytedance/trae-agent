@@ -100,6 +100,9 @@ pub struct AppState {
 
     /// Whether autocomplete is visible
     pub show_autocomplete: bool,
+
+    /// Whether to show settings popup
+    pub show_settings: bool,
 }
 
 impl Default for AppState {
@@ -117,6 +120,7 @@ impl Default for AppState {
             autocomplete_suggestions: Vec::new(),
             autocomplete_selected: 0,
             show_autocomplete: false,
+            show_settings: false,
         }
     }
 }
@@ -406,5 +410,15 @@ impl AppState {
             self.input_cursor = self.input_text.len();
             self.hide_autocomplete();
         }
+    }
+
+    /// Show settings popup
+    pub fn show_settings_popup(&mut self) {
+        self.show_settings = true;
+    }
+
+    /// Hide settings popup
+    pub fn hide_settings_popup(&mut self) {
+        self.show_settings = false;
     }
 }

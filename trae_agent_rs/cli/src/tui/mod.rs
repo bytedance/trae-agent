@@ -4,9 +4,11 @@
 pub mod app;
 pub mod event;
 pub mod layout;
+pub mod settings;
 pub mod state;
 
 pub use app::App;
 pub use event::{Event, EventHandler};
 pub use layout::Layout;
+pub use settings::{UserSettings, SettingsEditor};
 pub use state::{AgentStatus, AppState, TokenUsage};

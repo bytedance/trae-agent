@@ -22,6 +22,7 @@ use std::sync::Arc;
 use super::{
     event::{Event, EventHandler},
     layout::Layout,
+    settings::{UserSettings, SettingsEditor},
     state::{AgentStatus, AppState},
 };
 
@@ -34,38 +35,36 @@ pub struct App {
     agent: Option<Arc<tokio::sync::Mutex<TraeAgent>>>,
     model_config: ModelConfig,
     workspace: PathBuf,
+    settings: UserSettings,
+    settings_editor: Option<SettingsEditor>,
 }
 
 impl App {
     pub fn new(provider: String, model: String, workspace: PathBuf) -> Result<Self> {
-        // Create model configuration
-        let api_key = match provider.as_str() {
-            "openai" => std::env::var("OPENAI_API_KEY")
-                .or_else(|_| std::env::var("API_KEY"))
-                .unwrap_or_default(),
-            "anthropic" => std::env::var("ANTHROPIC_API_KEY").unwrap_or_default(),
-            "azure" => std::env::var("AZURE_API_KEY").unwrap_or_default(),
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "Unknown provider: {}. Supported providers: openai, anthropic, azure",
-                    provider
-                ));
-            }
-        };
+        // Load existing settings or create new ones
+        let mut settings = UserSettings::load().unwrap_or_else(|_| {
+            UserSettings::new(provider.clone(), model.clone(), workspace.clone())
+        });
 
-        let base_url = match provider.as_str() {
-            "openai" => Some("https://api.openai.com/v1".to_string()),
-            "anthropic" => Some("https://api.anthropic.com".to_string()),
-            "azure" => std::env::var("AZURE_BASE_URL").ok(),
-            _ => None,
-        };
+        // Override with command line arguments if provided
+        if provider != "openai" || model != "gpt-4" || workspace != PathBuf::from(".") {
+            settings.provider = provider;
+            settings.model = model;
+            settings.workspace = workspace;
+        }
 
-        let mut model_provider = ModelProvider::new(provider.clone())
-                .with_api_key(api_key);
+        // Create model configuration from settings
+        let api_key = settings.get_api_key().unwrap_or_default();
+        let base_url = settings.get_base_url();
 
-        model_provider.base_url = base_url.clone();
+        let mut model_provider = ModelProvider::new(settings.provider.clone())
+            .with_api_key(api_key);
 
-        let model_config = ModelConfig::new(model, model_provider)
+        if let Some(url) = base_url {
+            model_provider = model_provider.with_base_url(url);
+        }
+
+        let model_config = ModelConfig::new(settings.model.clone(), model_provider)
             .with_max_tokens(MAX_TOKEN)
             .with_temperature(TEMPERATURE);
 
@@ -74,7 +73,9 @@ impl App {
             event_handler: EventHandler::new(),
             agent: None,
             model_config,
-            workspace,
+            workspace: settings.workspace.clone(),
+            settings,
+            settings_editor: None,
         })
     }
 
@@ -111,7 +112,7 @@ impl App {
         loop {
             // Draw the UI
             terminal.draw(|frame| {
-                Layout::render(frame, &self.state);
+                Layout::render(frame, &self.state, &self.settings_editor);
             })?;
 
             // Handle events
@@ -162,6 +163,10 @@ impl App {
         // Handle popup interactions first
         if self.state.show_quit_popup {
             return self.handle_quit_popup_key(key_event).await;
+        }
+
+        if self.state.show_settings {
+            return self.handle_settings_popup_key(key_event).await;
         }
 
         // Handle autocomplete interactions
@@ -273,6 +278,69 @@ impl App {
         Ok(())
     }
 
+    async fn handle_settings_popup_key(&mut self, key_event: crossterm::event::KeyEvent) -> Result<()> {
+        if let Some(ref mut editor) = self.settings_editor {
+            match key_event.code {
+                KeyCode::Esc => {
+                    self.state.hide_settings_popup();
+                    self.settings_editor = None;
+                }
+                KeyCode::Enter => {
+                    // Save settings and update app configuration
+                    let new_settings = editor.get_settings();
+                    if let Err(e) = new_settings.save() {
+                        eprintln!("Failed to save settings: {}", e);
+                    } else {
+                        // Update app configuration
+                        self.settings = new_settings.clone();
+                        self.workspace = new_settings.workspace.clone();
+                        
+                        // Recreate model config with new settings
+                        let api_key = new_settings.get_api_key().unwrap_or_default();
+                        let base_url = new_settings.get_base_url();
+                        
+                        let mut model_provider = ModelProvider::new(new_settings.provider.clone())
+                            .with_api_key(api_key);
+                        
+                        if let Some(url) = base_url {
+                            model_provider = model_provider.with_base_url(url);
+                        }
+                        
+                        self.model_config = ModelConfig::new(new_settings.model.clone(), model_provider)
+                            .with_max_tokens(MAX_TOKEN)
+                            .with_temperature(TEMPERATURE);
+                        
+                        // Reset agent to use new configuration
+                        self.agent = None;
+                    }
+                    
+                    self.state.hide_settings_popup();
+                    self.settings_editor = None;
+                }
+                KeyCode::Tab => {
+                    editor.next_field();
+                }
+                KeyCode::BackTab => {
+                    editor.prev_field();
+                }
+                KeyCode::Up => {
+                    editor.prev_field();
+                }
+                KeyCode::Down => {
+                    editor.next_field();
+                }
+                KeyCode::Backspace => {
+                    editor.delete_char();
+                }
+                KeyCode::Char(c) => {
+                    editor.insert_char(c);
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     async fn handle_task(&mut self, task: String) -> Result<()> {
         // Check for special commands first (before showing "Running task")
         if task.trim() == "/help" {
@@ -282,6 +350,12 @@ impl App {
 
         if task.trim() == "/quit" || task.trim() == "/exit" {
             self.state.should_quit = true;
+            return Ok(());
+        }
+
+        if task.trim() == "/settings" {
+            self.state.show_settings_popup();
+            self.settings_editor = Some(SettingsEditor::new(self.settings.clone()));
             return Ok(());
         }
 
@@ -303,6 +377,8 @@ impl App {
                 Span::styled("💡 ", Style::default().fg(Color::Yellow)),
                 Span::styled("Available commands: ", Style::default().fg(Color::Gray)),
                 Span::styled("/help", Style::default().fg(Color::Green)),
+                Span::styled(", ", Style::default().fg(Color::Gray)),
+                Span::styled("/settings", Style::default().fg(Color::Green)),
                 Span::styled(", ", Style::default().fg(Color::Gray)),
                 Span::styled("/quit", Style::default().fg(Color::Red)),
                 Span::styled(", ", Style::default().fg(Color::Gray)),
@@ -508,6 +584,15 @@ impl App {
             Span::styled("/help", Style::default().fg(Color::Yellow)),
             Span::styled(
                 " - Show this help message",
+                Style::default().fg(Color::Gray),
+            ),
+        ]));
+
+        self.state.add_output_line_styled(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("/settings", Style::default().fg(Color::Green)),
+            Span::styled(
+                " - Configure API key, base URL, and workspace",
                 Style::default().fg(Color::Gray),
             ),
         ]));
