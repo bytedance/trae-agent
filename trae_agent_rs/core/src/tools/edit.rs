@@ -1,3 +1,6 @@
+// Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+// SPDX-License-Identifier: MIT
+
 // the edcit tools is set to be here
 
 use std::{collections::HashMap, fs, path::Path, process::Stdio};

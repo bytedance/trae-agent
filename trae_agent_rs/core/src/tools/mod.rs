@@ -1,9 +1,15 @@
+// Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+// SPDX-License-Identifier: MIT
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt};
 
 pub mod base;
 pub mod bash;
 pub mod edit;
+pub mod done;
+
 pub use base::Tool;
 
 /// Tool call arguments type alias
