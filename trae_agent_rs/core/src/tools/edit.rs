@@ -75,6 +75,19 @@ impl Tool for Edit {
         })
     }
 
+    fn get_descriptive_message(
+        &self,
+        arguments: std::collections::HashMap<String, serde_json::Value>
+    ) -> String {
+        let path = arguments.get("path").and_then(|x| x.as_str()).unwrap_or("");
+        match arguments.get("command").and_then(|x| x.as_str()) {
+            Some("view") => format!("Reading file: {}", path),
+            Some("create") => format!("Creating file: {}", path),
+            Some("str_replace") | Some("insert") => format!("Editing file: {}", path),
+            _ => format!("Editing file: {}", path),
+        }
+    }
+
     fn execute(
         &mut self,
         arguments: std::collections::HashMap<String, serde_json::Value>,
