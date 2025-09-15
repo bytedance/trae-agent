@@ -9,9 +9,14 @@ use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Default)]
 pub struct TokenUsage {
-    pub input_tokens: u64,
-    pub output_tokens: u64,
-    pub total_tokens: u64,
+    pub input: u64,
+    pub output: u64,
+}
+
+impl TokenUsage {
+    pub fn total(&self) -> u64 {
+        self.input + self.output
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -95,6 +100,9 @@ pub struct AppState {
 
     /// Whether autocomplete is visible
     pub show_autocomplete: bool,
+
+    /// Whether to show settings popup
+    pub show_settings: bool,
 }
 
 impl Default for AppState {
@@ -112,6 +120,7 @@ impl Default for AppState {
             autocomplete_suggestions: Vec::new(),
             autocomplete_selected: 0,
             show_autocomplete: false,
+            show_settings: false,
         }
     }
 }
@@ -321,10 +330,8 @@ impl AppState {
     }
 
     pub fn update_token_usage(&mut self, input_tokens: u64, output_tokens: u64) {
-        self.token_usage.input_tokens += input_tokens;
-        self.token_usage.output_tokens += output_tokens;
-        self.token_usage.total_tokens =
-            self.token_usage.input_tokens + self.token_usage.output_tokens;
+        self.token_usage.input += input_tokens;
+        self.token_usage.output += output_tokens;
     }
 
     pub fn is_task_running(&self) -> bool {
@@ -403,5 +410,15 @@ impl AppState {
             self.input_cursor = self.input_text.len();
             self.hide_autocomplete();
         }
+    }
+
+    /// Show settings popup
+    pub fn show_settings_popup(&mut self) {
+        self.show_settings = true;
+    }
+
+    /// Hide settings popup
+    pub fn hide_settings_popup(&mut self) {
+        self.show_settings = false;
     }
 }
