@@ -34,6 +34,8 @@ pub struct TrajectoryData {
     pub success: bool,
     pub final_result: Option<String>,
     pub execution_time: f64,
+    pub total_steps: u32,
+    pub error_count: u32,
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -48,16 +50,33 @@ pub struct TrajectoryDataUpdate {
     pub success: Option<bool>,
     pub final_result: Option<Option<String>>, // Some(Some(v)) to set; Some(None) to clear; None to leave unchanged
     pub execution_time: Option<f64>,
+    pub total_steps: Option<u32>,
+    pub error_count: Option<u32>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct LLMRecord {
-    pub content: String, // we only save text content ?
+    pub step_number: u32,
+    pub timestamp: String,
+    pub request_content: String, // The actual request sent to LLM
+    pub response_content: String, // The actual response from LLM
     pub token_usage: Option<u128>,
     pub model: Option<String>,
     pub provider: Option<String>,
     pub llmdetails: Option<TrajectoryDetails>,
     pub steps: Option<AgentStep>,
+    pub tool_calls: Vec<ToolCallRecord>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ToolCallRecord {
+    pub tool_name: String,
+    pub tool_input: String,
+    pub tool_output: String,
+    pub execution_time: f64,
+    pub success: bool,
+    pub error_message: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -83,6 +102,8 @@ impl Trajectory {
             trajectory.max_step = max_step;
             trajectory.provider = provider.to_string();
             trajectory.model = model.to_string();
+            trajectory.total_steps = 0;
+            trajectory.error_count = 0;
         } else {
             self.trajectory_data = Some(TrajectoryData {
                 task: task.to_string(),
@@ -95,7 +116,31 @@ impl Trajectory {
                 success: false,
                 final_result: None,
                 execution_time: 0.0,
+                total_steps: 0,
+                error_count: 0,
             })
+        }
+    }
+
+    pub fn add_llm_record(&mut self, record: LLMRecord) {
+        if let Some(trajectory) = &mut self.trajectory_data {
+            trajectory.llm_interaction.push(record);
+            trajectory.total_steps += 1;
+        }
+    }
+
+    pub fn increment_error_count(&mut self) {
+        if let Some(trajectory) = &mut self.trajectory_data {
+            trajectory.error_count += 1;
+        }
+    }
+
+    pub fn finalize_recording(&mut self, success: bool, final_result: Option<String>, execution_time: f64) {
+        if let Some(trajectory) = &mut self.trajectory_data {
+            trajectory.end_time = Some(system_time_to_string(&SystemTime::now()));
+            trajectory.success = success;
+            trajectory.final_result = final_result;
+            trajectory.execution_time = execution_time;
         }
     }
 }
@@ -219,6 +264,12 @@ impl Recorder for Trajectory {
         if let Some(v) = update.execution_time {
             self.trajectory_data.as_mut().unwrap().execution_time = v;
         }
+        if let Some(v) = update.total_steps {
+            self.trajectory_data.as_mut().unwrap().total_steps = v;
+        }
+        if let Some(v) = update.error_count {
+            self.trajectory_data.as_mut().unwrap().error_count = v;
+        }
 
         Ok(())
     }
@@ -302,6 +353,8 @@ impl TrajectoryData {
             success: self.success,
             final_result: self.final_result.clone(),
             execution_time: self.execution_time,
+            total_steps: self.total_steps,
+            error_count: self.error_count,
         }
     }
 }
@@ -331,6 +384,8 @@ mod tests {
                 success: true,
                 final_result: Some("done".to_string()),
                 execution_time: 1.23,
+                total_steps: 3,
+                error_count: 0,
             }),
         }
     }
@@ -510,6 +565,8 @@ mod tests {
                 success: false,
                 final_result: Some("pending".into()),
                 execution_time: 3600.0,
+                total_steps: 2,
+                error_count: 1,
             }),
         }
     }
@@ -677,6 +734,8 @@ mod tests {
                 success: true,
                 final_result: Some("done".to_string()),
                 execution_time: 3.13,
+                total_steps: 1,
+                error_count: 0,
             }),
         };
 
