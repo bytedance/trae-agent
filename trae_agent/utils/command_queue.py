@@ -1,51 +1,42 @@
-"""命令队列管理器模块
+"""Command Queue Manager Module
 
-提供命令缓存、持久化存储和顺序执行功能，确保命令不会丢失且按正确顺序执行。
+Provides command caching, persistent storage, and sequential execution functionality,
+ensuring commands are not lost and executed in the correct order.
 """
 
 import asyncio
 import json
-import threading
 import time
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import os
-import platform
 
 from rich.console import Console
 
-# 根据操作系统选择文件锁实现
-if platform.system() == 'Windows':
-    import msvcrt
-else:
-    import fcntl
-
-
 class CommandStatus(Enum):
-    """命令状态枚举"""
+    """Command status enumeration"""
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
-
 @dataclass
 class QueuedCommand:
-    """队列中的命令对象
+    """Queued command object
     
     Args:
-        id: 命令唯一标识符
-        task: 任务描述
-        working_dir: 工作目录
-        options: 命令选项参数
-        status: 命令状态
-        created_at: 创建时间戳
-        started_at: 开始执行时间戳
-        completed_at: 完成时间戳
-        error_message: 错误信息
+        id: Command unique identifier
+        task: Task description
+        working_dir: Working directory
+        options: Command option parameters
+        status: Command status
+        created_at: Creation timestamp
+        started_at: Start execution timestamp
+        completed_at: Completion timestamp
+        error_message: Error message
     """
     id: str
     task: str
@@ -62,173 +53,139 @@ class QueuedCommand:
             self.created_at = time.time()
 
 
-def _lock_file(file_handle):
-    """跨平台文件锁定
-    
-    Args:
-        file_handle: 文件句柄
-    """
-    if platform.system() == 'Windows':
-        # Windows使用msvcrt
-        while True:
-            try:
-                msvcrt.locking(file_handle.fileno(), msvcrt.LK_NBLCK, 1)
-                break
-            except IOError:
-                time.sleep(0.01)
-    else:
-        # Unix/Linux使用fcntl
-        fcntl.flock(file_handle.fileno(), fcntl.LOCK_EX)
 
-
-def _unlock_file(file_handle):
-    """跨平台文件解锁
-    
-    Args:
-        file_handle: 文件句柄
-    """
-    if platform.system() == 'Windows':
-        # Windows使用msvcrt
-        try:
-            msvcrt.locking(file_handle.fileno(), msvcrt.LK_UNLCK, 1)
-        except IOError:
-            pass
-    else:
-        # Unix/Linux使用fcntl
-        fcntl.flock(file_handle.fileno(), fcntl.LOCK_UN)
 
 
 class CommandQueue:
-    """命令队列管理器
-    
-    提供线程安全的命令队列管理，支持持久化存储和异步执行。
+    """Command queue manager
+    Provides thread-safe command queue management with persistent storage and asynchronous execution.
     """
 
     def __init__(self, queue_file: Optional[str] = None):
-        """初始化命令队列管理器
-        
+        """Initialize command queue manager  
         Args:
-            queue_file: 队列持久化文件路径，默认为用户目录下的.trae_queue.json
+            queue_file: Queue persistence file path, defaults to .trae_queue.json in user directory
         """
         self._queue: List[QueuedCommand] = []
-        self._lock = threading.RLock()
         self._running = False
         self._current_command: Optional[QueuedCommand] = None
         self._console = Console()
         
-        # 设置队列文件路径
+        # Set queue file path
         if queue_file:
             self._queue_file = Path(queue_file)
         else:
-            self._queue_file = Path.home() / ".trae_queue.json"
+            # Use trae_queue.json file in project root directory
+            self._queue_file = Path.cwd() / "trae_queue.json"
         
-        # 加载已存在的队列
+        # Load existing queue
         self._load_queue()
 
     def add_command(self, task: str, working_dir: str, options: Dict[str, Any]) -> str:
-        """添加命令到队列
-        
+        """Add command to queue
         Args:
-            task: 任务描述
-            working_dir: 工作目录
-            options: 命令选项参数
-            
+            task: Task description
+            working_dir: Working directory
+            options: Command option parameters
         Returns:
-            命令ID
+            Command ID
         """
-        with self._lock:
-            command_id = f"cmd_{int(time.time() * 1000)}_{len(self._queue)}"
-            command = QueuedCommand(
-                id=command_id,
-                task=task,
-                working_dir=working_dir,
-                options=options
-            )
-            self._queue.append(command)
-            self._save_queue()
-            return command_id
+        command_id = f"cmd_{int(time.time() * 1000)}_{len(self._queue)}"
+        command = QueuedCommand(
+            id=command_id,
+            task=task,
+            working_dir=working_dir,
+            options=options
+        )
+        self._queue.append(command)
+        self._save_queue()
+        return command_id
 
     def get_queue_status(self) -> Dict[str, Any]:
-        """获取队列状态信息
-        
+        """Get queue status information
         Returns:
-            包含队列状态的字典
+            Dictionary containing queue status
         """
-        with self._lock:
-            pending_count = sum(1 for cmd in self._queue if cmd.status == CommandStatus.PENDING)
-            running_count = sum(1 for cmd in self._queue if cmd.status == CommandStatus.RUNNING)
-            completed_count = sum(1 for cmd in self._queue if cmd.status == CommandStatus.COMPLETED)
-            failed_count = sum(1 for cmd in self._queue if cmd.status == CommandStatus.FAILED)
-            
-            return {
-                "total": len(self._queue),
-                "pending": pending_count,
-                "running": running_count,
-                "completed": completed_count,
-                "failed": failed_count,
-                "is_processing": self._is_processor_running(),
-                "current_command": self._current_command.id if self._current_command else None
-            }
+        pending_count = sum(1 for cmd in self._queue if cmd.status == CommandStatus.PENDING)
+        running_count = sum(1 for cmd in self._queue if cmd.status == CommandStatus.RUNNING)
+        completed_count = sum(1 for cmd in self._queue if cmd.status == CommandStatus.COMPLETED)
+        failed_count = sum(1 for cmd in self._queue if cmd.status == CommandStatus.FAILED)
+        
+        return {
+            "total": len(self._queue),
+            "pending": pending_count,
+            "running": running_count,
+            "completed": completed_count,
+            "failed": failed_count,
+            "is_processing": self._is_processor_running(),
+            "current_command": self._current_command.id if self._current_command else None
+        }
 
     def get_commands(self, status: Optional[CommandStatus] = None) -> List[QueuedCommand]:
-        """获取命令列表
-        
+        """Get command list
         Args:
-            status: 过滤特定状态的命令，None表示获取所有命令
-            
+            status: Filter commands with specific status, None means get all commands
         Returns:
-            命令列表
+            Command list
         """
-        with self._lock:
-            if status is None:
-                return self._queue.copy()
-            return [cmd for cmd in self._queue if cmd.status == status]
+        if status is None:
+            return self._queue.copy()
+        return [cmd for cmd in self._queue if cmd.status == status]
 
     def cancel_command(self, command_id: str) -> bool:
-        """取消指定命令
-        
+        """Cancel specified command
         Args:
-            command_id: 命令ID
-            
+            command_id: Command ID
         Returns:
-            是否成功取消
+            Whether successfully cancelled
         """
-        with self._lock:
-            for command in self._queue:
-                if command.id == command_id and command.status == CommandStatus.PENDING:
-                    command.status = CommandStatus.CANCELLED
-                    self._save_queue()
-                    return True
-            return False
+        for command in self._queue:
+            if command.id == command_id and command.status == CommandStatus.PENDING:
+                command.status = CommandStatus.CANCELLED
+                self._save_queue()
+                return True
+        return False
+
+    def cancel_all(self) -> int:
+        """Cancel all pending commands
+        Returns:
+            Number of cancelled commands
+        """
+        cancelled_count = 0
+        for command in self._queue:
+            if command.status == CommandStatus.PENDING:
+                command.status = CommandStatus.CANCELLED
+                cancelled_count += 1
+        
+        if cancelled_count > 0:
+            self._save_queue()
+        return cancelled_count
 
     def clear_completed(self) -> int:
-        """清除已完成的命令（包括成功完成、失败和已取消的命令）
-        
+        """Clear completed commands (including successfully completed, failed, and cancelled commands)
         Returns:
-            清除的命令数量
+            Number of cleared commands
         """
-        with self._lock:
-            original_count = len(self._queue)
-            self._queue = [cmd for cmd in self._queue 
-                          if cmd.status not in [CommandStatus.COMPLETED, CommandStatus.CANCELLED, CommandStatus.FAILED]]
-            cleared_count = original_count - len(self._queue)
-            if cleared_count > 0:
-                self._save_queue()
-            return cleared_count
+        original_count = len(self._queue)
+        self._queue = [cmd for cmd in self._queue 
+                      if cmd.status not in [CommandStatus.COMPLETED, CommandStatus.CANCELLED, CommandStatus.FAILED]]
+        cleared_count = original_count - len(self._queue)
+        if cleared_count > 0:
+            self._save_queue(merge_file_data=False)
+        return cleared_count
 
     async def process_queue(self, executor_func):
-        """处理队列中的命令
-        
+        """Process commands in the queue
         Args:
-            executor_func: 异步执行函数，接收QueuedCommand参数
+            executor_func: Asynchronous execution function that accepts QueuedCommand parameter
         """
         if self._running:
-            self._console.print("[yellow]队列处理器已在运行中[/yellow]")
+            self._console.print("[yellow]Queue processor is already running[/yellow]")
             return
 
         self._running = True
         
-        # 创建进程锁文件
+        # Create process lock file
         lock_file = self._queue_file.parent / ".trae_queue.lock"
         try:
             lock_file.parent.mkdir(parents=True, exist_ok=True)
@@ -236,99 +193,92 @@ class CommandQueue:
                 import os
                 f.write(str(os.getpid()))
         except Exception as e:
-            self._console.print(f"[yellow]创建进程锁文件失败: {e}[/yellow]")
+            self._console.print(f"[yellow]Failed to create process lock file: {e}[/yellow]")
         
         try:
-            # 只处理当前队列中的待执行命令，不进入无限循环
+            # Only process pending commands in current queue, don't enter infinite loop
             while True:
-                # 重新加载队列以获取其他进程添加的新命令
+                # Reload queue to get new commands added by other processes
                 self._load_queue()
                 
-                # 获取下一个待执行的命令
+                # Get next pending command
                 next_command = None
-                with self._lock:
-                    for command in self._queue:
-                        if command.status == CommandStatus.PENDING:
-                            next_command = command
-                            command.status = CommandStatus.RUNNING
-                            command.started_at = time.time()
-                            self._current_command = command
-                            self._save_queue()
-                            break
+                for command in self._queue:
+                    if command.status == CommandStatus.PENDING:
+                        next_command = command
+                        command.status = CommandStatus.RUNNING
+                        command.started_at = time.time()
+                        self._current_command = command
+                        self._save_queue()
+                        break
 
                 if next_command is None:
-                    # 没有待执行的命令，退出循环
-                    self._console.print("[cyan]队列中没有待执行的命令，处理器退出[/cyan]")
+                    # No pending commands, exit loop
+                    self._console.print("[cyan]No pending commands in queue, processor exiting[/cyan]")
                     break
 
-                self._console.print(f"[blue]开始执行命令: {next_command.task}[/blue]")
+                self._console.print(f"[blue]Starting command execution: {next_command.task}[/blue]")
                 
                 try:
-                    # 执行命令（这里会应用max_steps限制）
+                    # Execute command (max_steps limit will be applied here)
                     await executor_func(next_command)
                     
-                    # 标记为完成
-                    with self._lock:
-                        next_command.status = CommandStatus.COMPLETED
-                        next_command.completed_at = time.time()
-                        self._current_command = None
-                        self._save_queue()
+                    # Mark as completed
+                    next_command.status = CommandStatus.COMPLETED
+                    next_command.completed_at = time.time()
+                    self._current_command = None
+                    self._save_queue()
                     
-                    self._console.print(f"[green]命令执行完成: {next_command.task}[/green]")
+                    self._console.print(f"[green]Command execution completed: {next_command.task}[/green]")
                     
                 except Exception as e:
-                    # 标记为失败
-                    with self._lock:
-                        next_command.status = CommandStatus.FAILED
-                        next_command.error_message = str(e)
-                        next_command.completed_at = time.time()
-                        self._current_command = None
-                        self._save_queue()
+                    # Mark as failed
+                    next_command.status = CommandStatus.FAILED
+                    next_command.error_message = str(e)
+                    next_command.completed_at = time.time()
+                    self._current_command = None
+                    self._save_queue()
                     
-                    self._console.print(f"[red]命令执行失败: {next_command.task} - {e}[/red]")
+                    self._console.print(f"[red]Command execution failed: {next_command.task} - {e}[/red]")
                 
-                # 处理完一个命令后，检查是否还有待执行的命令
-                # 如果没有，则退出循环，避免无限重复执行
+                # After processing one command, check if there are more pending commands
+                # If not, exit loop to avoid infinite repetition
 
         finally:
-            with self._lock:
-                self._running = False
-                self._current_command = None
-                # 在退出前最后一次保存队列状态
-                self._save_queue()
+            self._running = False
+            self._current_command = None
+            # Save queue state one last time before exiting
+            self._save_queue()
             
-            # 清理进程锁文件
+            # Clean up process lock file
             try:
                 if lock_file.exists():
                     lock_file.unlink()
             except Exception as e:
-                self._console.print(f"[yellow]清理进程锁文件失败: {e}[/yellow]")
+                self._console.print(f"[yellow]Failed to clean up process lock file: {e}[/yellow]")
 
     def _load_queue(self):
-        """从文件加载队列
-        
-        使用文件锁确保多进程安全访问
+        """Load queue from file
         """
         if not self._queue_file.exists():
             return
         
         try:
             with open(self._queue_file, 'r', encoding='utf-8') as f:
-                _lock_file(f)
-                try:
-                    data = json.load(f)
-                finally:
-                    _unlock_file(f)
+                data = json.load(f)
             
-            # 创建文件中命令的字典，用于合并
+            # Create dictionary of commands from file for merging
             file_commands = {}
             for item in data:
-                # 转换状态枚举
+                # Convert status enum
                 status = CommandStatus(item['status'])
                 
-                # 如果检测到运行中的命令但没有其他进程在处理队列，将其重置为待执行
-                if status == CommandStatus.RUNNING and not self._is_processor_running():
+                # Only reset running commands when current process is not the processor
+                # Avoid incorrectly resetting commands being executed in the same processor process
+                started_at = item.get('started_at')
+                if status == CommandStatus.RUNNING and not self._running and not self._is_processor_running():
                     status = CommandStatus.PENDING
+                    started_at = None
                 
                 command = QueuedCommand(
                     id=item['id'],
@@ -337,80 +287,75 @@ class CommandQueue:
                     options=item.get('options', {}),
                     status=status,
                     created_at=item['created_at'],
-                    started_at=item.get('started_at'),
+                    started_at=started_at,
                     completed_at=item.get('completed_at'),
                     error_message=item.get('error_message')
                 )
                 file_commands[command.id] = command
             
-            # 合并队列：更新现有命令，添加新命令
+            # Merge queue: update existing commands, add new commands
             existing_ids = {cmd.id for cmd in self._queue}
             
-            # 更新现有命令的状态
+            # Update status of existing commands
             for i, cmd in enumerate(self._queue):
                 if cmd.id in file_commands:
                     file_cmd = file_commands[cmd.id]
-                    # 只更新状态相关字段，保持其他字段不变
+                    # Only update status-related fields, keep other fields unchanged
                     if cmd.status != file_cmd.status:
                         self._queue[i] = file_cmd
             
-            # 添加新命令
+            # Add new commands
             for cmd_id, cmd in file_commands.items():
                 if cmd_id not in existing_ids:
                     self._queue.append(cmd)
                 
         except Exception as e:
-            self._console.print(f"[red]加载队列失败: {e}[/red]")
+            self._console.print(f"[red]Failed to load queue: {e}[/red]")
     
     def _is_processor_running(self) -> bool:
-        """检查是否有其他进程正在处理队列
+        """Check if another process is processing the queue
         
         Returns:
-            bool: 如果有进程正在处理队列返回True，否则返回False
+            bool: Returns True if a process is processing the queue, otherwise False
         """
         try:
-            # 检查进程锁文件
+            # Check process lock file
             lock_file = self._queue_file.parent / ".trae_queue.lock"
             if lock_file.exists():
-                # 读取锁文件中的进程ID
+                # Read process ID from lock file
                 with open(lock_file, 'r') as f:
                     pid = int(f.read().strip())
                 
-                # 检查进程是否还在运行
+                # Check if process is still running
                 try:
                     import psutil
                     return psutil.pid_exists(pid)
                 except ImportError:
-                    # 如果没有psutil，使用简单的时间检查
-                    # 如果锁文件存在且修改时间在5分钟内，认为进程还在运行
                     import time
                     lock_time = lock_file.stat().st_mtime
-                    return time.time() - lock_time < 300  # 5分钟
+                    return time.time() - lock_time < 300  # 5 minutes
             
             return False
         except Exception:
             return False
 
-    def _save_queue(self):
-        """保存队列到文件
+    def _save_queue(self, merge_file_data=True):
+        """Save queue to file
         
-        使用文件锁确保多进程安全访问，保存前先合并其他进程的更新
+        Args:
+            merge_file_data: Whether to merge data from file before saving, defaults to True
         """
         try:
-            # 确保目录存在
+            # Ensure directory exists
             self._queue_file.parent.mkdir(parents=True, exist_ok=True)
             
-            # 在保存前先加载文件中的最新数据进行合并
-            if self._queue_file.exists():
+            # Load latest data from file for merging before saving (if needed)
+            if merge_file_data and self._queue_file.exists():
                 try:
                     with open(self._queue_file, 'r', encoding='utf-8') as f:
-                        _lock_file(f)
-                        try:
-                            file_data = json.load(f)
-                        finally:
-                            _unlock_file(f)
+                        file_data = json.load(f)
                     
-                    # 创建文件中命令的字典
+                    # Create dictionary of commands from file
                     file_commands = {}
                     for item in file_data:
                         status = CommandStatus(item['status'])
@@ -427,57 +372,52 @@ class CommandQueue:
                         )
                         file_commands[command.id] = command
                     
-                    # 合并队列：保留文件中的命令，更新内存中的命令状态
+                    # Merge queue: keep commands from file, update status of commands in memory
                     memory_commands = {cmd.id: cmd for cmd in self._queue}
                     
-                    # 创建合并后的队列 - 保持原有顺序，只添加新命令
+                    # Create merged queue - maintain original order, only add new commands
                     existing_ids = {cmd.id for cmd in self._queue}
                     
-                    # 更新现有命令的状态
+                    # Update status of existing commands
                     for i, cmd in enumerate(self._queue):
                         if cmd.id in file_commands:
                             file_cmd = file_commands[cmd.id]
-                            # 只有当文件中的命令状态更新时才替换
-                            if (file_cmd.completed_at and not cmd.completed_at) or \
-                               (file_cmd.status != cmd.status and cmd.status == CommandStatus.RUNNING):
-                                self._queue[i] = file_cmd
+                            # Use latest status from memory, as memory status is most up-to-date
+                            # Don't overwrite updated status in memory with status from file
+                            pass  # Keep status in memory
                     
-                    # 添加文件中存在但内存中不存在的新命令
+                    # Add new commands that exist in file but not in memory
                     for cmd_id, cmd in file_commands.items():
                         if cmd_id not in existing_ids:
                             self._queue.append(cmd)
                     
                 except (json.JSONDecodeError, KeyError, ValueError):
-                    # 如果文件损坏，使用内存中的数据
+                    # If file is corrupted, use data from memory
                     pass
             
-            # 转换为可序列化的格式
+            # Convert to serializable format
             data = []
             for command in self._queue:
                 item = asdict(command)
                 item['status'] = command.status.value
                 data.append(item)
             
-            # 使用文件锁写入文件
+            # Write to file
             with open(self._queue_file, 'w', encoding='utf-8') as f:
-                _lock_file(f)
-                try:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
-                finally:
-                    _unlock_file(f)
+                json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            self._console.print(f"[red]保存队列失败: {e}[/red]")
+            self._console.print(f"[red]Failed to save queue: {e}[/red]")
 
 
-# 全局队列实例
+# Global queue instance
 _global_queue: Optional[CommandQueue] = None
 
 
 def get_command_queue() -> CommandQueue:
-    """获取全局命令队列实例
+    """Get global command queue instance
     
     Returns:
-        CommandQueue实例
+        CommandQueue instance
     """
     global _global_queue
     if _global_queue is None:
