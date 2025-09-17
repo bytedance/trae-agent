@@ -1,7 +1,6 @@
 use std::{collections::HashMap, fs};
 
-use crate::{Tool, ToolExecResult};
-use thiserror::Error;
+use crate::Tool;
 
 #[derive(Default)]
 pub struct WriteFile {}

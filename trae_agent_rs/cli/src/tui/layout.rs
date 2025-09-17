@@ -281,7 +281,7 @@ impl Layout {
     fn render_settings_popup(
         frame: &mut Frame,
         area: Rect,
-        state: &AppState,
+        _state: &AppState,
         settings_editor: &Option<SettingsEditor>,
     ) {
         // Calculate popup size (larger than quit popup for form fields)
@@ -331,7 +331,7 @@ impl Layout {
                 ("Base URL", settings.base_url.as_deref().unwrap_or("")),
                 (
                     "Workspace",
-                    &settings.workspace.to_string_lossy().to_string(),
+                    &settings.workspace.to_string_lossy(),
                 ),
             ];
 

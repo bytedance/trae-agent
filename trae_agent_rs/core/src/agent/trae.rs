@@ -269,7 +269,7 @@ impl Agent for TraeAgent {
 
             // start a new step record
             let mut new_llm_record = LLMRecord {
-                step_number: step_number,
+                step_number,
                 timestamp: SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .unwrap()

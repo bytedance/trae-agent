@@ -99,10 +99,8 @@ impl UserSettings {
     /// Get the effective API key (from settings or environment)
     pub fn get_api_key(&self) -> Option<String> {
         // First try the stored API key
-        if let Some(ref key) = self.api_key {
-            if !key.is_empty() {
-                return Some(key.clone());
-            }
+        if let Some(ref key) = self.api_key && !key.is_empty() {
+            return Some(key.clone());
         }
 
         // Fall back to environment variables
@@ -119,10 +117,8 @@ impl UserSettings {
     /// Get the effective base URL (from settings or default)
     pub fn get_base_url(&self) -> Option<String> {
         // First try the stored base URL
-        if let Some(ref url) = self.base_url {
-            if !url.is_empty() {
-                return Some(url.clone());
-            }
+        if let Some(ref url) = self.base_url && !url.is_empty() {
+            return Some(url.clone());
         }
 
         // Fall back to provider defaults

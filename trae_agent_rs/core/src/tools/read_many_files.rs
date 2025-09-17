@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, fs};
 
 use crate::{Tool, ToolExecResult};
 use glob::glob;
