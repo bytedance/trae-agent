@@ -105,7 +105,7 @@ mod tests {
         args.insert("path".to_string(), json!(path.to_string_lossy().to_string()));
         args.insert("content".to_string(), json!("New Content."));
         let result = write_file.execute(args).await;
-        assert!(!result.is_err());
+        assert!(result.is_ok());
         assert_eq!(fs::read_to_string(path).unwrap(), "New Content.");
     }
 }
