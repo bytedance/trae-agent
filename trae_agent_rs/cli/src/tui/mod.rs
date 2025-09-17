@@ -10,5 +10,5 @@ pub mod state;
 pub use app::App;
 pub use event::{Event, EventHandler};
 pub use layout::Layout;
-pub use settings::{UserSettings, SettingsEditor};
+pub use settings::{SettingsEditor, UserSettings};
 pub use state::{AgentStatus, AppState, TokenUsage};

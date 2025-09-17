@@ -362,6 +362,7 @@ impl AppState {
             // Only show supported commands
             let commands = vec![
                 "/help".to_string(),
+                "/settings".to_string(),
                 "/quit".to_string(),
                 "/exit".to_string(),
             ];

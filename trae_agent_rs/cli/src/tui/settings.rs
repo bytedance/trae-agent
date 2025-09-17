@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::fs;
 use dirs::config_dir;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 
 /// User settings for the CLI application
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,16 +43,16 @@ impl UserSettings {
 
     /// Get the config file path
     pub fn config_file_path() -> Result<PathBuf> {
-        let config_dir = config_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
-        
+        let config_dir =
+            config_dir().ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
+
         let trae_config_dir = config_dir.join("trae-agent");
-        
+
         // Create the directory if it doesn't exist
         if !trae_config_dir.exists() {
             fs::create_dir_all(&trae_config_dir)?;
         }
-        
+
         Ok(trae_config_dir.join("settings.json"))
     }
 
@@ -64,18 +64,18 @@ impl UserSettings {
             let content = fs::read_to_string(&local_config)?;
             return Ok(serde_json::from_str(&content)?);
         }
-        
+
         // Fall back to user config directory
         let config_path = Self::config_file_path()?;
-        
+
         if !config_path.exists() {
             // Return default settings if config file doesn't exist
             return Ok(Self::default());
         }
-        
+
         let content = fs::read_to_string(&config_path)?;
         let settings: UserSettings = serde_json::from_str(&content)?;
-        
+
         Ok(settings)
     }
 
@@ -104,7 +104,7 @@ impl UserSettings {
                 return Some(key.clone());
             }
         }
-        
+
         // Fall back to environment variables
         match self.provider.as_str() {
             "openai" => std::env::var("OPENAI_API_KEY")
@@ -124,7 +124,7 @@ impl UserSettings {
                 return Some(url.clone());
             }
         }
-        
+
         // Fall back to provider defaults
         match self.provider.as_str() {
             "openai" => Some("https://api.openai.com/v1".to_string()),
@@ -137,7 +137,7 @@ impl UserSettings {
     /// Update provider and reset model to default for that provider
     pub fn set_provider(&mut self, provider: String) {
         self.provider = provider.clone();
-        
+
         // Set default model for the provider
         self.model = match provider.as_str() {
             "openai" => "gpt-4".to_string(),
@@ -222,8 +222,12 @@ impl SettingsEditor {
                 } else {
                     "(not set)".to_string()
                 }
-            },
-            3 => self.settings.base_url.clone().unwrap_or("(default)".to_string()),
+            }
+            3 => self
+                .settings
+                .base_url
+                .clone()
+                .unwrap_or("(default)".to_string()),
             4 => self.settings.workspace.display().to_string(),
             _ => String::new(),
         }
@@ -260,18 +264,18 @@ impl SettingsEditor {
                     } else {
                         self.settings.api_key = Some(self.temp_input.clone());
                     }
-                },
+                }
                 3 => {
                     if self.temp_input.is_empty() {
                         self.settings.base_url = None;
                     } else {
                         self.settings.base_url = Some(self.temp_input.clone());
                     }
-                },
+                }
                 4 => {
                     self.settings.workspace = PathBuf::from(&self.temp_input);
-                },
-                _ => {},
+                }
+                _ => {}
             }
             self.cancel_editing();
         }

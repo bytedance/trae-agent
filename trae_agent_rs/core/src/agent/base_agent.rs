@@ -324,6 +324,32 @@ impl BaseAgent {
                         None => Err("Cannot find str_replace_based_edit tool".to_string()),
                     }
                 }
+
+                "list_directory" => match agent_tools.get("list_directory") {
+                    Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
+                    None => Err("Cannot find list_directory tool".to_string()),
+                },
+
+                "read_file" => match agent_tools.get("read_file") {
+                    Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
+                    None => Err("Cannot find read_file tool".to_string()),
+                },
+
+                "read_many_files" => match agent_tools.get("read_many_files") {
+                    Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
+                    None => Err("Cannot find read_many_files tool".to_string()),
+                },
+
+                "todo_list" => match agent_tools.get("todo_list") {
+                    Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
+                    None => Err("Cannot find todo_list tool".to_string()),
+                },
+
+                "write_file" => match agent_tools.get("write_file") {
+                    Some(x) => self.tools[*x].execute(tool.arguments.clone()).await,
+                    None => Err("Cannot find write_file tool".to_string()),
+                },
+
                 _ => Err("The requested tool is not found".to_string()),
             };
 

@@ -18,10 +18,10 @@ pub trait Tool: Send + Sync {
     fn get_input_schema(&self) -> Value;
 
     // Get descriptive message for a tool call
-    fn get_descriptive_message(
-        &self,
-        arguments: HashMap<String, Value>,
-    ) -> String;
+    fn get_descriptive_message(&self, arguments: &HashMap<String, Value>) -> String;
+
+    /// Check if the tool needs approval before execution
+    fn needs_approval(&self, arguments: &HashMap<String, Value>) -> bool;
 
     /// Execute the tool with the given arguments
     fn execute(
