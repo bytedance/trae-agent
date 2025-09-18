@@ -13,7 +13,7 @@ use trae_core::trae::TraeAgent;
 use trae_core::{
     agent::base_agent::{Agent, AgentExecution, BaseAgent},
     config::{ModelConfig, ModelProvider},
-    llm::{LLMClient},
+    llm::LLMClient,
 };
 
 /// Create a test TraeAgent for demonstration
@@ -23,8 +23,7 @@ fn create_demo_trae_agent() -> Result<TraeAgent, Box<dyn std::error::Error>> {
         .with_api_key("demo-api-key".to_string())
         .with_base_url("https://api.demo.com/v1".to_string());
 
-    let model_config =
-        ModelConfig::new("gpt-4".to_string(), provider).with_temperature(0.1);
+    let model_config = ModelConfig::new("gpt-4".to_string(), provider).with_temperature(0.1);
 
     // Create LLM client
     let llm_client = LLMClient::new(model_config.clone())?;
@@ -41,7 +40,10 @@ fn create_demo_trae_agent() -> Result<TraeAgent, Box<dyn std::error::Error>> {
     );
 
     // Create TraeAgent with a specific trajectory path
-    Ok(TraeAgent::new(base_agent, Some("./demo_trajectory.json".to_string())))
+    Ok(TraeAgent::new(
+        base_agent,
+        Some("./demo_trajectory.json".to_string()),
+    ))
 }
 
 #[tokio::main]
@@ -74,8 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     println!("✅ Task initialized successfully");
 
-    println!("\n🚀 Starting agent execution (this will fail due to no real API, but will save trajectory)...");
-    
+    println!(
+        "\n🚀 Starting agent execution (this will fail due to no real API, but will save trajectory)..."
+    );
+
     // Run the agent (this will fail due to no real API, but should still save trajectory)
     match agent.run().await {
         Ok(execution) => {
@@ -99,18 +103,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📁 Checking for trajectory file...");
     if std::path::Path::new("./demo_trajectory.json").exists() {
         println!("✅ Trajectory file created: ./demo_trajectory.json");
-        
+
         // Read and display the trajectory content
         match std::fs::read_to_string("./demo_trajectory.json") {
             Ok(content) => {
                 println!("\n📄 Trajectory file content:");
                 println!("{}", content);
-                
+
                 // Validate JSON format
                 match serde_json::from_str::<serde_json::Value>(&content) {
                     Ok(json) => {
                         println!("\n✅ Trajectory file is valid JSON");
-                        
+
                         // Show key information
                         if let Some(task) = json.get("task") {
                             println!("📋 Task: {}", task);
@@ -145,7 +149,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n🎉 Trajectory demo completed!");
-    println!("📝 Note: The trajectory file demonstrates the structure even when agent execution fails");
+    println!(
+        "📝 Note: The trajectory file demonstrates the structure even when agent execution fails"
+    );
 
     Ok(())
 }

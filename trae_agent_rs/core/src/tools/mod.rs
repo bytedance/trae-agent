@@ -3,7 +3,12 @@ use std::{collections::HashMap, fmt};
 
 pub mod base;
 pub mod bash;
-pub mod edit;
+pub mod edit_file;
+pub mod list_directory;
+pub mod read_file;
+pub mod read_many_files;
+pub mod todo_list;
+pub mod write_file;
 pub use base::Tool;
 
 /// Tool call arguments type alias

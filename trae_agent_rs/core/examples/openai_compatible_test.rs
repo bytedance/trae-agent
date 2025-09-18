@@ -37,6 +37,14 @@ impl Tool for CalculatorTool {
         "Performs basic arithmetic operations (add, subtract, multiply, divide)"
     }
 
+    fn get_descriptive_message(&self, arguments: &HashMap<String, serde_json::Value>) -> String {
+        format!("{:?}", arguments)
+    }
+
+    fn needs_approval(&self, arguments: &HashMap<String, serde_json::Value>) -> bool {
+        false
+    }
+
     fn get_input_schema(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
@@ -116,6 +124,14 @@ impl Tool for WeatherTool {
             },
             "required": ["location"]
         })
+    }
+
+    fn get_descriptive_message(&self, arguments: &HashMap<String, serde_json::Value>) -> String {
+        format!("{:?}", arguments)
+    }
+
+    fn needs_approval(&self, arguments: &HashMap<String, serde_json::Value>) -> bool {
+        false
     }
 
     fn execute(

@@ -58,7 +58,7 @@ pub struct TrajectoryDataUpdate {
 pub struct LLMRecord {
     pub step_number: u32,
     pub timestamp: String,
-    pub request_content: String, // The actual request sent to LLM
+    pub request_content: String,  // The actual request sent to LLM
     pub response_content: String, // The actual response from LLM
     pub token_usage: Option<u128>,
     pub model: Option<String>,
@@ -135,7 +135,12 @@ impl Trajectory {
         }
     }
 
-    pub fn finalize_recording(&mut self, success: bool, final_result: Option<String>, execution_time: f64) {
+    pub fn finalize_recording(
+        &mut self,
+        success: bool,
+        final_result: Option<String>,
+        execution_time: f64,
+    ) {
         if let Some(trajectory) = &mut self.trajectory_data {
             trajectory.end_time = Some(system_time_to_string(&SystemTime::now()));
             trajectory.success = success;

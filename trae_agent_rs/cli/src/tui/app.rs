@@ -1,6 +1,12 @@
 // Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
+use super::{
+    event::{Event, EventHandler},
+    layout::Layout,
+    settings::{SettingsEditor, UserSettings},
+    state::{AgentStatus, AppState},
+};
 use anyhow::Result;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, KeyCode, KeyModifiers},
@@ -13,20 +19,17 @@ use ratatui::{
     prelude::*,
     text::{Line, Span},
 };
-use tokio::sync::Mutex;
-use std::{collections::HashMap, io, path::PathBuf};
-use trae_core::{
-    agent::base_agent::{Agent, AgentExecution, BaseAgent}, config::{ModelConfig, ModelProvider}, llm::LLMClient, trae::{TraeAgent, AgentUpdate}
-};
 use std::sync::Arc;
-use super::{
-    event::{Event, EventHandler},
-    layout::Layout,
-    settings::{UserSettings, SettingsEditor},
-    state::{AgentStatus, AppState},
+use std::{collections::HashMap, io, path::PathBuf};
+use tokio::sync::Mutex;
+use trae_core::{
+    agent::base_agent::{Agent, AgentExecution, BaseAgent},
+    config::{ModelConfig, ModelProvider},
+    llm::LLMClient,
+    trae::{AgentUpdate, TraeAgent},
 };
 
-const MAX_TOKEN: u32 = 4096; 
+const MAX_TOKEN: u32 = 4096;
 const TEMPERATURE: f32 = 0.1;
 
 pub struct App {
@@ -53,8 +56,8 @@ impl App {
         let api_key = settings.get_api_key().unwrap_or_default();
         let base_url = settings.get_base_url();
 
-        let mut model_provider = ModelProvider::new(settings.provider.clone())
-            .with_api_key(api_key);
+        let mut model_provider =
+            ModelProvider::new(settings.provider.clone()).with_api_key(api_key);
 
         if let Some(url) = base_url {
             model_provider = model_provider.with_base_url(url);
@@ -97,6 +100,17 @@ impl App {
         // Run the app
         let result = self.run_app(&mut terminal).await;
 
+        // Stop the event handler to prevent further events
+        self.event_handler.stop().await;
+
+        // Give a small delay to ensure all background tasks complete
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // Flush any remaining output
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        let _ = std::io::stderr().flush();
+
         // Restore terminal
         disable_raw_mode()?;
         execute!(
@@ -105,6 +119,9 @@ impl App {
             DisableMouseCapture
         )?;
         terminal.show_cursor()?;
+
+        // Final flush after terminal restoration
+        let _ = std::io::stdout().flush();
 
         result
     }
@@ -136,14 +153,16 @@ impl App {
                         self.state.token_usage = token_usage;
                     }
                     Event::AgentStepUpdate { step, description } => {
-                        self.state.add_output_line(format!("Step {}: {}", step, description));
+                        self.state
+                            .add_output_line(format!("Step {}: {}", step, description));
                     }
                     Event::AgentError(error) => {
                         self.state.add_output_line(format!("Error: {}", error));
                         self.state.agent_status = AgentStatus::Error(error);
                     }
                     Event::TaskCompleted(summary) => {
-                        self.state.add_output_line(format!("Task completed: {}", summary));
+                        self.state
+                            .add_output_line(format!("Task completed: {}", summary));
                         self.state.agent_status = AgentStatus::Idle;
                     }
                     Event::Tick => {
@@ -279,7 +298,10 @@ impl App {
         Ok(())
     }
 
-    async fn handle_settings_popup_key(&mut self, key_event: crossterm::event::KeyEvent) -> Result<()> {
+    async fn handle_settings_popup_key(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+    ) -> Result<()> {
         if let Some(ref mut editor) = self.settings_editor {
             match key_event.code {
                 KeyCode::Esc => {
@@ -312,26 +334,27 @@ impl App {
                         // Update app configuration
                         self.settings = new_settings.clone();
                         self.workspace = new_settings.workspace.clone();
-                        
+
                         // Recreate model config with new settings
                         let api_key = new_settings.get_api_key().unwrap_or_default();
                         let base_url = new_settings.get_base_url();
-                        
-                        let mut model_provider = ModelProvider::new(new_settings.provider.clone())
-                            .with_api_key(api_key);
-                        
+
+                        let mut model_provider =
+                            ModelProvider::new(new_settings.provider.clone()).with_api_key(api_key);
+
                         if let Some(url) = base_url {
                             model_provider = model_provider.with_base_url(url);
                         }
-                        
-                        self.model_config = ModelConfig::new(new_settings.model.clone(), model_provider)
-                            .with_max_tokens(MAX_TOKEN)
-                            .with_temperature(TEMPERATURE);
-                        
+
+                        self.model_config =
+                            ModelConfig::new(new_settings.model.clone(), model_provider)
+                                .with_max_tokens(MAX_TOKEN)
+                                .with_temperature(TEMPERATURE);
+
                         // Reset agent to use new configuration
                         self.agent = None;
                     }
-                    
+
                     self.state.hide_settings_popup();
                     self.settings_editor = None;
                 }
@@ -473,7 +496,7 @@ impl App {
 
         // Get agent reference
         let agent_arc = self.agent.as_ref().expect("agent missing").clone();
-        
+
         // Initialize the task (do this in a separate scope to release the lock quickly)
         let init_result = {
             let mut agent = agent_arc.lock().await;
@@ -505,8 +528,9 @@ impl App {
         }
 
         // Create a channel for agent updates
-        let (agent_update_sender, mut agent_update_receiver) = tokio::sync::mpsc::unbounded_channel::<AgentUpdate>();
-        
+        let (agent_update_sender, mut agent_update_receiver) =
+            tokio::sync::mpsc::unbounded_channel::<AgentUpdate>();
+
         // Set up the agent with the update sender (in a separate scope)
         {
             let mut agent_guard = agent_arc.lock().await;
@@ -548,7 +572,7 @@ impl App {
             async move {
                 // Send initial status update
                 let _ = event_sender.send(Event::AgentStatusUpdate(AgentStatus::Running));
-                
+
                 // Run the agent
                 let result = {
                     let mut agent_guard = agent_arc.lock().await;
@@ -558,21 +582,26 @@ impl App {
                 // Handle completion or error
                 match result {
                     Ok(_) => {
-                        let _ = event_sender.send(Event::TaskCompleted("Task completed successfully".to_string()));
+                        let _ = event_sender.send(Event::TaskCompleted(
+                            "Task completed successfully".to_string(),
+                        ));
                     }
                     Err(e) => {
-                        let _ = event_sender.send(Event::AgentError(format!("Agent execution failed: {}", e)));
+                        let _ = event_sender
+                            .send(Event::AgentError(format!("Agent execution failed: {}", e)));
                     }
                 }
 
                 // Send final token usage (TODO: implement proper LLM usage tracking)
-                let _ = event_sender.send(Event::TokenUsageUpdate(crate::tui::state::TokenUsage { input: 100, output: 50 }));
+                let _ = event_sender.send(Event::TokenUsageUpdate(crate::tui::state::TokenUsage {
+                    input: 100,
+                    output: 50,
+                }));
             }
         });
 
         Ok(())
     }
-
 
     fn show_help(&mut self) {
         // Add styled help content
@@ -672,5 +701,3 @@ impl App {
         self.state.add_output_line_styled(Line::from(""));
     }
 }
-
-

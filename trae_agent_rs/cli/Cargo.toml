@@ -30,3 +30,7 @@ crossterm = "0.28.1"
 futures = "0.3"
 dirs = "5.0"
 tokio-stream = "0.1"
+yaml-rust = "0.4.5"
+
+[dev-dependencies]
+tempfile = "3.21.0"

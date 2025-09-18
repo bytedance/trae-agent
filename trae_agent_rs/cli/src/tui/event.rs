@@ -1,9 +1,10 @@
 // Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
-use crossterm::event::{self, KeyEvent, KeyCode, KeyModifiers};
+use crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers};
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 use crate::tui::state::{AgentStatus, TokenUsage};
 
@@ -23,12 +24,17 @@ pub enum Event {
 pub struct EventHandler {
     event_tx: mpsc::UnboundedSender<Event>,
     event_rx: mpsc::UnboundedReceiver<Event>,
+    event_loop_handle: Option<JoinHandle<()>>,
 }
 
 impl EventHandler {
     pub fn new() -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
-        Self { event_tx, event_rx }
+        Self { 
+            event_tx, 
+            event_rx,
+            event_loop_handle: None,
+        }
     }
 
     pub fn sender(&self) -> mpsc::UnboundedSender<Event> {
@@ -39,10 +45,10 @@ impl EventHandler {
         self.event_rx.recv().await
     }
 
-    pub async fn start_event_loop(&self) {
+    pub async fn start_event_loop(&mut self) {
         let tx = self.event_tx.clone();
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             // Terminal event polling
             let mut interval = tokio::time::interval(Duration::from_millis(100));
 
@@ -63,6 +69,15 @@ impl EventHandler {
                 }
             }
         });
+        
+        self.event_loop_handle = Some(handle);
+    }
+
+    pub async fn stop(&mut self) {
+        if let Some(handle) = self.event_loop_handle.take() {
+            handle.abort();
+            let _ = handle.await;
+        }
     }
 }
 
