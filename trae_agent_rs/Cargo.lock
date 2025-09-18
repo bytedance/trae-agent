@@ -1835,9 +1835,11 @@ dependencies = [
  "ratatui",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-stream",
  "trae-core",
+ "yaml-rust",
 ]
 
 [[package]]
