@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from trae_agent.agent import Agent
 from trae_agent.utils.cli import CLIConsole, ConsoleFactory, ConsoleMode, ConsoleType
@@ -38,7 +39,9 @@ def resolve_config_file(config_file: str) -> str:
         if yaml_path.exists():
             return str(yaml_path)
         elif json_path.exists():
-            console.print(f"[yellow]YAML config not found, using JSON config: {json_path}[/yellow]")
+            console.print(
+                f"[yellow]YAML config not found, using JSON config: {json_path}[/yellow]"
+            )
             return str(json_path)
         else:
             console.print(
@@ -52,7 +55,12 @@ def resolve_config_file(config_file: str) -> str:
 def check_docker(timeout=3):
     # 1) Check whether the docker CLI is installed
     if shutil.which("docker") is None:
-        return {"cli": False, "daemon": False, "version": None, "error": "docker CLI not found"}
+        return {
+            "cli": False,
+            "daemon": False,
+            "version": None,
+            "error": "docker CLI not found",
+        }
     # 2) Check whether the Docker daemon is reachable (this makes a real request)
     try:
         cp = subprocess.run(
@@ -62,7 +70,12 @@ def check_docker(timeout=3):
             timeout=timeout,
         )
         if cp.returncode == 0 and cp.stdout.strip():
-            return {"cli": True, "daemon": True, "version": cp.stdout.strip(), "error": None}
+            return {
+                "cli": True,
+                "daemon": True,
+                "version": cp.stdout.strip(),
+                "error": None,
+            }
         else:
             # The daemon may not be running or permissions may be insufficient
             return {
@@ -114,7 +127,9 @@ def cli():
 
 @cli.command()
 @click.argument("task", required=False)
-@click.option("--file", "-f", "file_path", help="Path to a file containing the task description.")
+@click.option(
+    "--file", "-f", "file_path", help="Path to a file containing the task description."
+)
 @click.option("--provider", "-p", help="LLM provider to use")
 @click.option("--model", "-m", help="Specific model to use")
 @click.option("--model-base-url", help="Base URL for the model API")
@@ -162,6 +177,7 @@ def cli():
     help="Keep or remove the Docker container after finishing the task",
 )
 # --- Docker Mode End ---
+
 
 @click.option(
     "--console-type",
@@ -257,8 +273,13 @@ def run(
         else:
             print(f"Docker is configured incorrectly. {check_msg['error']}")
             sys.exit(1)
-        if not (os.path.exists("trae_agent/dist") and os.path.exists("trae_agent/dist/_internal")):
-            print("Building tools of Docker mode for the first use, waiting for a few seconds...")
+        if not (
+            os.path.exists("trae_agent/dist")
+            and os.path.exists("trae_agent/dist/_internal")
+        ):
+            print(
+                "Building tools of Docker mode for the first use, waiting for a few seconds..."
+            )
             build_with_pyinstaller()
             print("Building finished.")
 
@@ -300,14 +321,18 @@ def run(
             ConsoleType.SIMPLE if console_type.lower() == "simple" else ConsoleType.RICH
         )
     else:
-        selected_console_type = ConsoleFactory.get_recommended_console_type(console_mode)
+        selected_console_type = ConsoleFactory.get_recommended_console_type(
+            console_mode
+        )
 
     cli_console = ConsoleFactory.create_console(
         console_type=selected_console_type, mode=console_mode
     )
 
     # For rich console in RUN mode, set the initial task
-    if selected_console_type == ConsoleType.RICH and hasattr(cli_console, "set_initial_task"):
+    if selected_console_type == ConsoleType.RICH and hasattr(
+        cli_console, "set_initial_task"
+    ):
         cli_console.set_initial_task(task)
 
     # agent = Agent(agent_type, config, trajectory_file, cli_console)
@@ -323,11 +348,14 @@ def run(
             console.print(f"[blue]Changed working directory to: {working_dir}[/blue]")
             working_dir = os.path.abspath(working_dir)
         except Exception as e:
-            console.print(f"[red]Error changing directory: {e}[/red]")
+            error_text = Text(f"Error changing directory: {e}", style="red")
+            console.print(error_text)
             sys.exit(1)
     else:
         working_dir = os.getcwd()
-        console.print(f"[blue]Using current directory as working directory: {working_dir}[/blue]")
+        console.print(
+            f"[blue]Using current directory as working directory: {working_dir}[/blue]"
+        )
 
     # Ensure working directory is an absolute path
     if not Path(working_dir).is_absolute():
@@ -349,7 +377,8 @@ def run(
         try:
             os.chdir(working_dir)
         except Exception as e:
-            console.print(f"[red]Error changing directory: {e}[/red]")
+            error_text = Text(f"Error changing directory: {e}", style="red")
+            console.print(error_text)
             sys.exit(1)
 
     try:
@@ -361,8 +390,12 @@ def run(
         }
 
         # Set up agent context for rich console if applicable
-        if selected_console_type == ConsoleType.RICH and hasattr(cli_console, "set_agent_context"):
-            cli_console.set_agent_context(agent, config.trae_agent, config_file, trajectory_file)
+        if selected_console_type == ConsoleType.RICH and hasattr(
+            cli_console, "set_agent_context"
+        ):
+            cli_console.set_agent_context(
+                agent, config.trae_agent, config_file, trajectory_file
+            )
 
         # Agent will handle starting the appropriate console
         _ = asyncio.run(agent.run(task, task_args))
@@ -371,24 +404,29 @@ def run(
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Task execution interrupted by user[/yellow]")
-        console.print(f"[blue]Partial trajectory saved to: {agent.trajectory_file}[/blue]")
+        console.print(
+            f"[blue]Partial trajectory saved to: {agent.trajectory_file}[/blue]"
+        )
         sys.exit(1)
     except Exception as e:
         try:
             from docker.errors import DockerException
 
             if isinstance(e, DockerException):
-                console.print(f"\n[red]Docker Error: {e}[/red]")
+                error_text = Text(f"Docker Error: {e}", style="red")
+                console.print(f"\n{error_text}")
                 console.print(
                     "[yellow]Please ensure the Docker daemon is running and you have the necessary permissions.[/yellow]"
                 )
             else:
                 raise e
         except ImportError:
-            console.print(f"\n[red]Unexpected error: {e}[/red]")
+            error_text = Text(f"Unexpected error: {e}", style="red")
+            console.print(f"\n{error_text}")
             console.print(traceback.format_exc())
         except Exception:
-            console.print(f"\n[red]Unexpected error: {e}[/red]")
+            error_text = Text(f"Unexpected error: {e}", style="red")
+            console.print(f"\n{error_text}")
             console.print(traceback.format_exc())
         console.print(f"[blue]Trajectory saved to: {agent.trajectory_file}[/blue]")
         sys.exit(1)
@@ -405,7 +443,9 @@ def run(
     default="trae_config.yaml",
     envvar="TRAE_CONFIG_FILE",
 )
-@click.option("--max-steps", help="Maximum number of execution steps", type=int, default=20)
+@click.option(
+    "--max-steps", help="Maximum number of execution steps", type=int, default=20
+)
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 @click.option(
     "--console-type",
@@ -452,7 +492,9 @@ def interactive(
     if config.trae_agent:
         trae_agent_config = config.trae_agent
     else:
-        console.print("[red]Error: trae_agent configuration is required in the config file.[/red]")
+        console.print(
+            "[red]Error: trae_agent configuration is required in the config file.[/red]"
+        )
         sys.exit(1)
 
     # Create CLI Console for interactive mode
@@ -462,10 +504,14 @@ def interactive(
             ConsoleType.SIMPLE if console_type.lower() == "simple" else ConsoleType.RICH
         )
     else:
-        selected_console_type = ConsoleFactory.get_recommended_console_type(console_mode)
+        selected_console_type = ConsoleFactory.get_recommended_console_type(
+            console_mode
+        )
 
     cli_console = ConsoleFactory.create_console(
-        console_type=selected_console_type, lakeview_config=config.lakeview, mode=console_mode
+        console_type=selected_console_type,
+        lakeview_config=config.lakeview,
+        mode=console_mode,
     )
 
     if not agent_type:
@@ -545,7 +591,9 @@ async def _run_simple_interactive_loop(
                 continue
 
             # Set up trajectory recording for this task
-            console.print(f"[blue]Trajectory will be saved to: {trajectory_file}[/blue]")
+            console.print(
+                f"[blue]Trajectory will be saved to: {trajectory_file}[/blue]"
+            )
 
             task_args = {
                 "project_path": working_dir,
@@ -572,7 +620,8 @@ async def _run_simple_interactive_loop(
             console.print("\n[green]Goodbye![/green]")
             break
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+            error_text = Text(f"Error: {e}", style="red")
+            console.print(error_text)
 
 
 async def _run_rich_interactive_loop(
@@ -585,7 +634,9 @@ async def _run_rich_interactive_loop(
     """Run the interactive loop for rich console."""
     # Set up the agent in the rich console so it can handle task execution
     if hasattr(cli_console, "set_agent_context"):
-        cli_console.set_agent_context(agent, trae_agent_config, config_file, trajectory_file)
+        cli_console.set_agent_context(
+            agent, trae_agent_config, config_file, trajectory_file
+        )
 
     # Start the console UI - this will handle the entire interaction
     await cli_console.start()
@@ -640,7 +691,9 @@ Using default settings and environment variables.""",
     if config.trae_agent:
         trae_agent_config = config.trae_agent
     else:
-        console.print("[red]Error: trae_agent configuration is required in the config file.[/red]")
+        console.print(
+            "[red]Error: trae_agent configuration is required in the config file.[/red]"
+        )
         sys.exit(1)
 
     # Display general settings
@@ -649,7 +702,8 @@ Using default settings and environment variables.""",
     general_table.add_column("Value", style="green")
 
     general_table.add_row(
-        "Default Provider", str(trae_agent_config.model.model_provider.provider or "Not set")
+        "Default Provider",
+        str(trae_agent_config.model.model_provider.provider or "Not set"),
     )
     general_table.add_row("Max Steps", str(trae_agent_config.max_steps or "Not set"))
 
@@ -666,9 +720,11 @@ Using default settings and environment variables.""",
     provider_table.add_row("API Version", provider_config.api_version or "Not set")
     provider_table.add_row(
         "API Key",
-        f"Set ({provider_config.api_key[:4]}...{provider_config.api_key[-4:]})"
-        if provider_config.api_key
-        else "Not set",
+        (
+            f"Set ({provider_config.api_key[:4]}...{provider_config.api_key[-4:]})"
+            if provider_config.api_key
+            else "Not set"
+        ),
     )
     provider_table.add_row("Max Tokens", str(trae_agent_config.model.max_tokens))
     provider_table.add_row("Temperature", str(trae_agent_config.model.temperature))
