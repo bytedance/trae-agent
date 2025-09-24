@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
-use super::{settings::SettingsEditor, state::AppState};
+use super::{review_history::ReviewHistoryDisplay, settings::SettingsEditor, state::AppState};
 
 pub struct Layout;
 
@@ -19,7 +19,13 @@ impl Layout {
     /// - Agent state and token usage (minimal height needed)
     /// - Input box (minimal height needed)
     /// - Shortcuts (minimal height needed)
-    pub fn render(frame: &mut Frame, state: &mut AppState, settings_editor: &Option<SettingsEditor>) {
+    pub fn render(
+        frame: &mut Frame, 
+        state: &mut AppState, 
+        settings_editor: &Option<SettingsEditor>,
+        review_history: &mut ReviewHistoryDisplay,
+        show_review_history: bool,
+    ) {
         let size = frame.area();
         // Create main layout chunks with dynamic sizing
         let chunks = ratatui::layout::Layout::default()
@@ -49,6 +55,10 @@ impl Layout {
 
         if state.show_settings {
             Self::render_settings_popup(frame, size, state, settings_editor);
+        }
+
+        if show_review_history {
+            review_history.render_popup(frame, size);
         }
     }
 

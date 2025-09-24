@@ -1,0 +1,31 @@
+{
+  "id": "review_002",
+  "timestamp": "2025-01-20T14:00:00Z",
+  "task_description": "Add dark mode support to UI components",
+  "reviewer": "Bob Smith",
+  "status": "InProgress",
+  "rating": null,
+  "comments": [
+    {
+      "id": "comment_003",
+      "timestamp": "2025-01-20T14:15:00Z",
+      "author": "Bob Smith",
+      "content": "The theme switching logic looks good, but we need to test it across all components.",
+      "comment_type": "General",
+      "file_path": "src/components/theme.rs",
+      "line_number": 23
+    }
+  ],
+  "tags": [
+    "ui",
+    "frontend",
+    "theme"
+  ],
+  "duration_seconds": 1800,
+  "files_reviewed": [
+    "src/components/theme.rs",
+    "src/styles/dark.css"
+  ],
+  "created_at": "2025-01-20T14:00:00Z",
+  "updated_at": "2025-01-20T14:30:00Z"
+}

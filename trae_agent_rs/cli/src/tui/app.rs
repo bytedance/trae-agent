@@ -4,6 +4,7 @@
 use super::{
     event::{Event, EventHandler},
     layout::Layout,
+    review_history::ReviewHistoryDisplay,
     settings::{SettingsEditor, UserSettings},
     state::{AgentStatus, AppState},
 };
@@ -40,6 +41,8 @@ pub struct App {
     workspace: PathBuf,
     settings: UserSettings,
     settings_editor: Option<SettingsEditor>,
+    review_history: ReviewHistoryDisplay,
+    show_review_history: bool,
 }
 
 impl App {
@@ -74,6 +77,8 @@ impl App {
             workspace: settings.workspace.clone(),
             settings,
             settings_editor: None,
+            review_history: ReviewHistoryDisplay::new(),
+            show_review_history: false,
         })
     }
 
@@ -129,7 +134,7 @@ impl App {
         loop {
             // Draw the UI
             terminal.draw(|frame| {
-                Layout::render(frame, &mut self.state, &self.settings_editor);
+                Layout::render(frame, &mut self.state, &self.settings_editor, &mut self.review_history, self.show_review_history);
             })?;
 
             // Handle events
@@ -186,6 +191,10 @@ impl App {
 
         if self.state.show_settings {
             return self.handle_settings_popup_key(key_event).await;
+        }
+
+        if self.show_review_history {
+            return self.handle_review_history_key(key_event).await;
         }
 
         // Handle autocomplete interactions
@@ -402,6 +411,30 @@ impl App {
         Ok(())
     }
 
+    async fn handle_review_history_key(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+    ) -> Result<()> {
+        match key_event.code {
+            KeyCode::Esc => {
+                self.show_review_history = false;
+            }
+            KeyCode::Char('r') | KeyCode::Char('R') => {
+                if let Err(e) = self.review_history.load_records() {
+                    self.state.add_output_line_styled(Line::from(vec![
+                        Span::styled("❌ ", Style::default().fg(Color::Red)),
+                        Span::styled("Failed to refresh review history: ", Style::default().fg(Color::Red)),
+                        Span::styled(e.to_string(), Style::default().fg(Color::Yellow)),
+                    ]));
+                }
+            }
+            _ => {
+                self.review_history.handle_navigation(key_event.code);
+            }
+        }
+        Ok(())
+    }
+
     async fn handle_task(&mut self, task: String) -> Result<()> {
         // Check for special commands first (before showing "Running task")
         if task.trim() == "/help" {
@@ -420,6 +453,17 @@ impl App {
             return Ok(());
         }
 
+        if task.trim() == "/review" || task.trim() == "/reviews" {
+            self.show_review_history = true;
+            if let Err(e) = self.review_history.load_records() {
+                self.state.add_output_line_styled(Line::from(vec![
+                    Span::styled("❌ ", Style::default().fg(Color::Red)),
+                    Span::styled("Failed to load review history: ", Style::default().fg(Color::Red)),
+                    Span::styled(e.to_string(), Style::default().fg(Color::Yellow)),
+                ]));
+            }
+            return Ok(());
+        }
 
         // Check for unsupported commands starting with "/"
         if task.trim().starts_with('/') {
@@ -441,6 +485,8 @@ impl App {
                 Span::styled("/help", Style::default().fg(Color::Green)),
                 Span::styled(", ", Style::default().fg(Color::Gray)),
                 Span::styled("/settings", Style::default().fg(Color::Green)),
+                Span::styled(", ", Style::default().fg(Color::Gray)),
+                Span::styled("/review", Style::default().fg(Color::Green)),
                 Span::styled(", ", Style::default().fg(Color::Gray)),
                 Span::styled("/quit", Style::default().fg(Color::Red)),
                 Span::styled(", ", Style::default().fg(Color::Gray)),
@@ -497,9 +543,11 @@ impl App {
             None, // tools will be set in new_task
             vec![],
         );
+        // Create proper trajectory file path
+        let trajectory_path = self.workspace.join("trajectory.json");
         Ok(TraeAgent::new(
             base_agent,
-            Some(self.workspace.to_string_lossy().to_string()),
+            Some(trajectory_path.to_string_lossy().to_string()),
         ))
     }
 
@@ -661,6 +709,15 @@ impl App {
             Span::styled("/settings", Style::default().fg(Color::Green)),
             Span::styled(
                 " - Configure API key, base URL, and workspace",
+                Style::default().fg(Color::Gray),
+            ),
+        ]));
+
+        self.state.add_output_line_styled(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("/review", Style::default().fg(Color::Cyan)),
+            Span::styled(
+                " - View review history records",
                 Style::default().fg(Color::Gray),
             ),
         ]));

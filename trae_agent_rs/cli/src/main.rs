@@ -215,8 +215,9 @@ async fn create_and_run_agent(
         vec![],
     );
 
-    // Create TraeAgent
-    let mut agent = TraeAgent::new(base_agent, Some(workspace.to_string_lossy().to_string()));
+    // Create TraeAgent with proper trajectory file path
+    let trajectory_path = workspace.join("trajectory.json");
+    let mut agent = TraeAgent::new(base_agent, Some(trajectory_path.to_string_lossy().to_string()));
 
     println!("🎯 Initializing task...");
 

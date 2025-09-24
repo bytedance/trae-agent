@@ -394,6 +394,7 @@ impl AppState {
             let commands = vec![
                 "/help".to_string(),
                 "/settings".to_string(),
+                "/review".to_string(),
                 "/quit".to_string(),
                 "/exit".to_string(),
             ];

@@ -1,0 +1,40 @@
+{
+  "id": "review_003",
+  "timestamp": "2025-01-20T15:30:00Z",
+  "task_description": "Optimize database queries for better performance",
+  "reviewer": "Carol Davis",
+  "status": "Rejected",
+  "rating": 2,
+  "comments": [
+    {
+      "id": "comment_004",
+      "timestamp": "2025-01-20T16:20:00Z",
+      "author": "Carol Davis",
+      "content": "The N+1 query problem still exists in the user loading logic.",
+      "comment_type": "Issue",
+      "file_path": "src/models/user.rs",
+      "line_number": 156
+    },
+    {
+      "id": "comment_005",
+      "timestamp": "2025-01-20T16:25:00Z",
+      "author": "Carol Davis",
+      "content": "Please implement proper indexing and consider using eager loading.",
+      "comment_type": "Suggestion",
+      "file_path": "src/database/queries.rs",
+      "line_number": 89
+    }
+  ],
+  "tags": [
+    "database",
+    "performance",
+    "optimization"
+  ],
+  "duration_seconds": 2700,
+  "files_reviewed": [
+    "src/database/queries.rs",
+    "src/models/user.rs"
+  ],
+  "created_at": "2025-01-20T15:30:00Z",
+  "updated_at": "2025-01-20T16:30:00Z"
+}
