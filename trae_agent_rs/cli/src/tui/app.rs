@@ -4,6 +4,7 @@
 use super::{
     event::{Event, EventHandler},
     layout::Layout,
+    popup_input::PopupInputEditor,
     review_history::ReviewHistoryDisplay,
     settings::{SettingsEditor, UserSettings},
     state::{AgentStatus, AppState},
@@ -41,18 +42,34 @@ pub struct App {
     workspace: PathBuf,
     settings: UserSettings,
     settings_editor: Option<SettingsEditor>,
+    popup_input_editor: PopupInputEditor,
     review_history: ReviewHistoryDisplay,
     show_review_history: bool,
 }
 
 impl App {
     pub fn new(provider: String, model: String) -> Result<Self> {
+        Self::new_with_workspace(provider, model, None)
+    }
+
+    pub fn new_with_workspace(provider: String, model: String, workspace: Option<PathBuf>) -> Result<Self> {
         // Load existing settings or create new ones
-        let settings = UserSettings::load()
+        let mut settings = UserSettings::load()
             .unwrap_or_else(|_| UserSettings::new(provider.clone(), model.clone()));
 
-        // Note: We now prioritize loaded settings over command line defaults
-        // Command line arguments would need to be handled differently if we want to override
+        // Override workspace if provided via command line
+        let final_workspace = if let Some(ws) = workspace {
+            // Convert to absolute path
+            let absolute_workspace = if ws.is_absolute() {
+                ws
+            } else {
+                std::env::current_dir()?.join(ws)
+            };
+            settings.workspace = absolute_workspace.clone();
+            absolute_workspace
+        } else {
+            settings.workspace.clone()
+        };
 
         // Create model configuration from settings
         let api_key = settings.get_api_key().unwrap_or_default();
@@ -74,9 +91,10 @@ impl App {
             event_handler: EventHandler::new(),
             agent: None,
             model_config,
-            workspace: settings.workspace.clone(),
+            workspace: final_workspace,
             settings,
             settings_editor: None,
+            popup_input_editor: PopupInputEditor::with_title("Multi-line Input".to_string()),
             review_history: ReviewHistoryDisplay::new(),
             show_review_history: false,
         })
@@ -134,7 +152,7 @@ impl App {
         loop {
             // Draw the UI
             terminal.draw(|frame| {
-                Layout::render(frame, &mut self.state, &self.settings_editor, &mut self.review_history, self.show_review_history);
+                Layout::render(frame, &mut self.state, &self.settings_editor, &mut self.popup_input_editor, &mut self.review_history, self.show_review_history);
             })?;
 
             // Handle events
@@ -148,26 +166,64 @@ impl App {
                         self.handle_key_event(key_event).await?;
                     }
                     Event::AgentOutput(output) => {
-                        self.state.add_output_line(output);
+                        self.state.add_output_line(output.clone());
+                        
+                        // Also add to current step history
+                        let styled_line = Line::from(Span::styled(output, Style::default().fg(Color::White)));
+                        self.state.add_output_to_current_step(styled_line);
                     }
                     Event::AgentStatusUpdate(status) => {
-                        self.state.agent_status = status;
+                        self.state.agent_status = status.clone();
+                        self.state.update_current_step_status(status);
                     }
                     Event::TokenUsageUpdate(token_usage) => {
                         self.state.token_usage = token_usage;
                     }
                     Event::AgentStepUpdate { step, description } => {
-                        self.state
-                            .add_output_line(format!("Step {}: {}", step, description));
+                        // Complete previous step if exists
+                        if self.state.current_step.is_some() && self.state.current_step != Some(step) {
+                            self.state.complete_current_step();
+                        }
+                        
+                        // Start new step tracking
+                        self.state.start_new_step(step, description.clone());
+                        
+                        // Add to regular output
+                        let step_line = format!("Step {}: {}", step, description);
+                        self.state.add_output_line(step_line.clone());
+                        
+                        // Also add to current step history
+                        let styled_line = Line::from(vec![
+                            Span::styled("🔄 ", Style::default().fg(Color::Yellow)),
+                            Span::styled(step_line, Style::default().fg(Color::Cyan)),
+                        ]);
+                        self.state.add_output_to_current_step(styled_line);
                     }
                     Event::AgentError(error) => {
-                        self.state.add_output_line(format!("Error: {}", error));
-                        self.state.agent_status = AgentStatus::Error(error);
+                        let error_msg = format!("Error: {}", error);
+                        self.state.add_output_line(error_msg.clone());
+                        self.state.agent_status = AgentStatus::Error(error.clone());
+                        
+                        // Add error to current step history
+                        let styled_line = Line::from(vec![
+                            Span::styled("❌ ", Style::default().fg(Color::Red)),
+                            Span::styled(error_msg, Style::default().fg(Color::Red)),
+                        ]);
+                        self.state.add_output_to_current_step(styled_line);
+                        self.state.update_current_step_status(AgentStatus::Error(error));
                     }
                     Event::TaskCompleted(summary) => {
-                        self.state
-                            .add_output_line(format!("Task completed: {}", summary));
+                        let completion_msg = format!("Task completed: {}", summary);
+                        self.state.add_output_line(completion_msg.clone());
                         self.state.agent_status = AgentStatus::Idle;
+                        
+                        // Add completion to current step history and complete the step
+                        let styled_line = Line::from(vec![
+                            Span::styled("✅ ", Style::default().fg(Color::Green)),
+                            Span::styled(completion_msg, Style::default().fg(Color::Green)),
+                        ]);
+                        self.state.add_output_to_current_step(styled_line);
+                        self.state.complete_current_step();
                     }
                     Event::Tick => {
                         // Regular update tick - can be used for periodic updates
@@ -193,8 +249,16 @@ impl App {
             return self.handle_settings_popup_key(key_event).await;
         }
 
+        if self.state.show_popup_input {
+            return self.handle_popup_input_key(key_event).await;
+        }
+
         if self.show_review_history {
             return self.handle_review_history_key(key_event).await;
+        }
+
+        if self.state.show_step_history {
+            return self.handle_step_history_key(key_event).await;
         }
 
         // Handle autocomplete interactions
@@ -239,18 +303,70 @@ impl App {
                 }
             }
             KeyCode::Enter => {
-                if !self.state.input_text.trim().is_empty() {
-                    let task = self.state.input_text.clone();
-                    self.state.clear_input();
-                    self.state.hide_autocomplete();
-                    self.handle_task(task).await?;
+                // Check for Shift+Enter to insert newline
+                if key_event.modifiers.contains(KeyModifiers::SHIFT) {
+                    // Shift+Enter inserts a new line
+                    self.state.insert_newline();
+                    self.state.update_autocomplete();
+                } else {
+                    // Regular Enter submits the task
+                    if !self.state.get_input_text().trim().is_empty() {
+                        let task = self.state.get_input_text();
+                        // Add command to history before clearing input
+                        self.state.add_to_history(task.clone());
+                        self.state.clear_input();
+                        self.state.hide_autocomplete();
+                        self.handle_task(task).await?;
+                    }
                 }
             }
             KeyCode::Char(c) => {
-                self.state.insert_char(c);
-                self.state.update_autocomplete();
+                // Reset history navigation when user types
+                self.state.reset_history_navigation();
+                
+                // Handle special key combinations
+                if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                    match c {
+                        'a' => self.state.move_cursor_to_line_start(),
+                        'e' => self.state.move_cursor_to_line_end(),
+                        'h' => self.state.toggle_step_history_view(),
+                        'u' => {
+                            // Ctrl+U: Scroll up (alternative scroll-up binding)
+                            if !self.state.show_autocomplete {
+                                self.state.scroll_page_up(5);
+                            }
+                        },
+                        'd' => {
+                            // Ctrl+D: Scroll down (alternative scroll-down binding)
+                            if !self.state.show_autocomplete {
+                                self.state.scroll_page_down(5);
+                            }
+                        },
+                        'k' => {
+                            // Ctrl+K: Scroll up one line (vim-like)
+                            if !self.state.show_autocomplete {
+                                self.state.scroll_up();
+                            }
+                        },
+                        'j' => {
+                            // Ctrl+J: Scroll down one line (vim-like)
+                            if !self.state.show_autocomplete {
+                                self.state.scroll_down();
+                            }
+                        },
+                        _ => {
+                            self.state.insert_char(c);
+                            self.state.update_autocomplete();
+                        }
+                    }
+                } else {
+                    self.state.insert_char(c);
+                    self.state.update_autocomplete();
+                }
             }
             KeyCode::Backspace => {
+                // Reset history navigation when user edits
+                self.state.reset_history_navigation();
                 self.state.delete_char();
                 self.state.update_autocomplete();
             }
@@ -261,13 +377,31 @@ impl App {
                 self.state.move_cursor_right();
             }
             KeyCode::Up => {
-                if !self.state.show_autocomplete {
+                if self.state.show_autocomplete {
+                    self.state.select_prev_suggestion();
+                } else if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                    // Ctrl+Up: Jump to first (oldest) command in history
+                    self.state.history_jump_to_first();
+                } else if key_event.modifiers.contains(KeyModifiers::SHIFT) {
+                    // Shift+Up: Scroll output up (enhanced scroll-up functionality)
                     self.state.scroll_up();
+                } else {
+                    // Regular Up: Navigate to previous command in history
+                    self.state.history_previous();
                 }
             }
             KeyCode::Down => {
-                if !self.state.show_autocomplete {
+                if self.state.show_autocomplete {
+                    self.state.select_next_suggestion();
+                } else if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                    // Ctrl+Down: Jump to last (newest) command in history
+                    self.state.history_jump_to_last();
+                } else if key_event.modifiers.contains(KeyModifiers::SHIFT) {
+                    // Shift+Down: Scroll output down (enhanced scroll-down functionality)
                     self.state.scroll_down();
+                } else {
+                    // Regular Down: Navigate to next command in history
+                    self.state.history_next();
                 }
             }
             KeyCode::PageUp => {
@@ -282,13 +416,25 @@ impl App {
                 }
             }
             KeyCode::Home => {
-                if !self.state.show_autocomplete {
-                    self.state.scroll_to_top();
+                if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                    // Ctrl+Home: scroll output to top
+                    if !self.state.show_autocomplete {
+                        self.state.scroll_to_top();
+                    }
+                } else {
+                    // Home: move cursor to line start
+                    self.state.move_cursor_to_line_start();
                 }
             }
             KeyCode::End => {
-                if !self.state.show_autocomplete {
-                    self.state.scroll_to_bottom();
+                if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                    // Ctrl+End: scroll output to bottom
+                    if !self.state.show_autocomplete {
+                        self.state.scroll_to_bottom();
+                    }
+                } else {
+                    // End: move cursor to line end
+                    self.state.move_cursor_to_line_end();
                 }
             }
             KeyCode::Tab => {
@@ -411,6 +557,50 @@ impl App {
         Ok(())
     }
 
+    async fn handle_popup_input_key(&mut self, key_event: crossterm::event::KeyEvent) -> Result<()> {
+        match key_event.code {
+            KeyCode::Esc => {
+                self.state.hide_popup_input();
+            }
+            KeyCode::Enter if key_event.modifiers.contains(KeyModifiers::SHIFT) => {
+                // Shift+Enter adds a new line
+                self.popup_input_editor.insert_char('\n');
+            }
+            KeyCode::Enter => {
+                // Regular Enter submits the input
+                let content = self.popup_input_editor.get_text();
+                self.state.input.set_text(content);
+                self.state.hide_popup_input();
+            }
+            KeyCode::Backspace => {
+                self.popup_input_editor.delete_char();
+            }
+            KeyCode::Left => {
+                self.popup_input_editor.move_cursor_left();
+            }
+            KeyCode::Right => {
+                self.popup_input_editor.move_cursor_right();
+            }
+            KeyCode::Up => {
+                self.popup_input_editor.move_cursor_up();
+            }
+            KeyCode::Down => {
+                self.popup_input_editor.move_cursor_down();
+            }
+            KeyCode::Home => {
+                self.popup_input_editor.move_cursor_to_line_start();
+            }
+            KeyCode::End => {
+                self.popup_input_editor.move_cursor_to_line_end();
+            }
+            KeyCode::Char(c) => {
+                self.popup_input_editor.insert_char(c);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     async fn handle_review_history_key(
         &mut self,
         key_event: crossterm::event::KeyEvent,
@@ -435,6 +625,66 @@ impl App {
         Ok(())
     }
 
+    async fn handle_step_history_key(
+        &mut self,
+        key_event: crossterm::event::KeyEvent,
+    ) -> Result<()> {
+        match key_event.code {
+            KeyCode::Esc | KeyCode::Char('h') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.state.toggle_step_history_view();
+            }
+            KeyCode::Up => {
+                if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                    // Ctrl+Up: Scroll content up within current step
+                    self.state.scroll_step_content_up();
+                } else {
+                    // Up: Navigate to previous step
+                    self.state.navigate_step_history_previous();
+                }
+            }
+            KeyCode::Down => {
+                if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                     // Ctrl+Down: Scroll content down within current step
+                     self.state.scroll_step_content_down(20); // Use reasonable page size
+                 } else {
+                    // Down: Navigate to next step
+                    self.state.navigate_step_history_next();
+                }
+            }
+            KeyCode::Home => {
+                if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                    // Ctrl+Home: Go to first step
+                    self.state.navigate_step_history_first();
+                } else {
+                    // Home: Scroll to top of current step content
+                    self.state.step_content_scroll = 0;
+                }
+            }
+            KeyCode::End => {
+                if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                    // Ctrl+End: Go to last step
+                    self.state.navigate_step_history_last();
+                } else {
+                    // End: Scroll to bottom of current step content
+                    if let Some(step) = self.state.get_current_viewed_step() {
+                        let max_scroll = step.output_lines.len().saturating_sub(1);
+                        self.state.step_content_scroll = max_scroll;
+                    }
+                }
+            }
+            KeyCode::PageUp => {
+                // Page Up: Navigate to previous step (same as Up for now)
+                self.state.navigate_step_history_previous();
+            }
+            KeyCode::PageDown => {
+                // Page Down: Navigate to next step (same as Down for now)
+                self.state.navigate_step_history_next();
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     async fn handle_task(&mut self, task: String) -> Result<()> {
         // Check for special commands first (before showing "Running task")
         if task.trim() == "/help" {
@@ -450,6 +700,12 @@ impl App {
         if task.trim() == "/settings" {
             self.state.show_settings_popup();
             self.settings_editor = Some(SettingsEditor::new(self.settings.clone()));
+            return Ok(());
+        }
+
+        if task.trim() == "/input" || task.trim() == "/popup" {
+            self.state.show_popup_input();
+            self.popup_input_editor.activate(Some(self.state.get_input_text()));
             return Ok(());
         }
 
@@ -709,6 +965,17 @@ impl App {
             Span::styled("/settings", Style::default().fg(Color::Green)),
             Span::styled(
                 " - Configure API key, base URL, and workspace",
+                Style::default().fg(Color::Gray),
+            ),
+        ]));
+
+        self.state.add_output_line_styled(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("/input", Style::default().fg(Color::Magenta)),
+            Span::styled(" or ", Style::default().fg(Color::Gray)),
+            Span::styled("/popup", Style::default().fg(Color::Magenta)),
+            Span::styled(
+                " - Open popup multi-line input editor",
                 Style::default().fg(Color::Gray),
             ),
         ]));

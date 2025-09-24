@@ -205,21 +205,24 @@ impl BaseAgent {
 
         let llm_response = match response {
             Ok(t) => Some(t),
-            Err(_e) => Some(LLMResponse {
-                content: vec![ContentItem::Text(TextContent {
-                    text: "error occur for llm responses".to_string(),
-                })],
-                usage: Some(LLMUsage {
-                    input_tokens: 0,
-                    output_tokens: 0,
-                    cache_creation_input_tokens: 0,
-                    cache_read_input_tokens: 0,
-                    reasoning_tokens: 0,
-                }),
-                model: Some(self.llm_client.get_provider_name().to_string()),
-                finish_reason: llm::FinishReason::Error,
-                tool_calls: None,
-            }),
+            Err(e) => {
+                eprintln!("LLM API Error: {}", e);
+                Some(LLMResponse {
+                    content: vec![ContentItem::Text(TextContent {
+                        text: format!("LLM API Error: {}", e),
+                    })],
+                    usage: Some(LLMUsage {
+                        input_tokens: 0,
+                        output_tokens: 0,
+                        cache_creation_input_tokens: 0,
+                        cache_read_input_tokens: 0,
+                        reasoning_tokens: 0,
+                    }),
+                    model: Some(self.llm_client.get_provider_name().to_string()),
+                    finish_reason: llm::FinishReason::Error,
+                    tool_calls: None,
+                })
+            }
         };
 
         step.llm_response = llm_response.clone();
