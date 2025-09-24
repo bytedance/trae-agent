@@ -43,10 +43,10 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(provider: String, model: String, workspace: PathBuf) -> Result<Self> {
+    pub fn new(provider: String, model: String) -> Result<Self> {
         // Load existing settings or create new ones
         let settings = UserSettings::load().unwrap_or_else(|_| {
-            UserSettings::new(provider.clone(), model.clone(), workspace.clone())
+            UserSettings::new(provider.clone(), model.clone())
         });
 
         // Note: We now prioritize loaded settings over command line defaults

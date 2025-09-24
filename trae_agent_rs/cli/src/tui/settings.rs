@@ -16,6 +16,7 @@ pub struct UserSettings {
     pub model: String,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
+    #[serde(skip)]
     pub workspace: PathBuf,
     pub max_steps: u32,
 }
@@ -27,7 +28,7 @@ impl Default for UserSettings {
             model: "gpt-4".to_string(),
             api_key: None,
             base_url: None,
-            workspace: PathBuf::from("."),
+            workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             max_steps: 200,
         }
     }
@@ -35,13 +36,13 @@ impl Default for UserSettings {
 
 impl UserSettings {
     /// Create new settings with provided values
-    pub fn new(provider: String, model: String, workspace: PathBuf) -> Self {
+    pub fn new(provider: String, model: String) -> Self {
         Self {
             provider,
             model,
             api_key: None,
             base_url: None,
-            workspace,
+            workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             max_steps: 200,
         }
     }
@@ -56,7 +57,7 @@ impl UserSettings {
             model: model_config.model.clone(),
             api_key: provider.api_key.clone(),
             base_url: provider.base_url.clone(),
-            workspace: PathBuf::from("."), // Default workspace, can be overridden
+            workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             max_steps: config.trae_agent_config.max_steps,
         }
     }
@@ -242,6 +243,24 @@ mcp_servers: {{}}
         };
     }
 
+    /// Get the current workspace (always the current working directory)
+    pub fn get_workspace(&self) -> &PathBuf {
+        &self.workspace
+    }
+
+    /// Update the workspace to the current working directory
+    pub fn refresh_workspace(&mut self) {
+        self.workspace = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    }
+
+    /// Get the workspace path formatted with ~ prefix if it starts with home directory
+    pub fn get_workspace_display(&self) -> String {
+        if let Some(home_dir) = dirs::home_dir() && let Ok(stripped) = self.workspace.strip_prefix(&home_dir) {
+            return format!("~/{}", stripped.display());
+        }
+        self.workspace.display().to_string()
+    }
+
     /// Validate the current settings
     pub fn validate(&self) -> Result<()> {
         // Check if API key is available
@@ -285,9 +304,14 @@ impl SettingsEditor {
         }
     }
 
-    /// Get the number of editable fields
+    /// Get the number of editable fields (including read-only workspace)
     pub fn field_count() -> usize {
-        5 // provider, model, api_key, base_url, workspace
+        5 // provider, model, api_key, base_url, workspace (read-only)
+    }
+
+    /// Get the number of editable fields (excluding read-only workspace)
+    pub fn editable_field_count() -> usize {
+        4 // provider, model, api_key, base_url
     }
 
     /// Get the field name for display
@@ -323,20 +347,24 @@ impl SettingsEditor {
                 .base_url
                 .clone()
                 .unwrap_or("(default)".to_string()),
-            4 => self.settings.workspace.display().to_string(),
+            4 => self.settings.get_workspace_display(),
             _ => String::new(),
         }
     }
 
-    /// Start editing a field
+    /// Start editing a field (workspace is read-only)
     pub fn start_editing(&mut self, index: usize) {
+        // Don't allow editing workspace (index 4)
+        if index == 4 {
+            return;
+        }
+        
         self.editing_field = Some(index);
         self.temp_input = match index {
             0 => self.settings.provider.clone(),
             1 => self.settings.model.clone(),
             2 => self.settings.api_key.clone().unwrap_or_default(),
             3 => self.settings.base_url.clone().unwrap_or_default(),
-            4 => self.settings.workspace.display().to_string(),
             _ => String::new(),
         };
     }
@@ -366,9 +394,6 @@ impl SettingsEditor {
                     } else {
                         self.settings.base_url = Some(self.temp_input.clone());
                     }
-                }
-                4 => {
-                    self.settings.workspace = PathBuf::from(&self.temp_input);
                 }
                 _ => {}
             }
@@ -431,6 +456,11 @@ impl SettingsEditor {
     pub fn get_current_field(&self) -> usize {
         self.selected_field
     }
+
+    /// Check if a field is editable (workspace is read-only)
+    pub fn is_field_editable(&self, index: usize) -> bool {
+        index != 4 // workspace is not editable
+    }
 }
 
 #[cfg(test)]
@@ -444,7 +474,7 @@ mod tests {
             model: "gpt-4".to_string(),
             api_key: Some("test-key".to_string()),
             base_url: Some("https://api.openai.com/v1".to_string()),
-            workspace: PathBuf::from("/test/workspace"),
+            workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             max_steps: 200,
         };
         
@@ -455,6 +485,8 @@ mod tests {
         assert_eq!(converted_settings.model, "gpt-4");
         assert_eq!(converted_settings.api_key, Some("test-key".to_string()));
         assert_eq!(converted_settings.base_url, Some("https://api.openai.com/v1".to_string()));
+        // Workspace is always current directory, so we just verify it's set
+        assert!(converted_settings.workspace.is_absolute() || converted_settings.workspace == PathBuf::from("."));
     }
     
     #[test]
@@ -464,7 +496,7 @@ mod tests {
             model: "claude-3-sonnet".to_string(),
             api_key: Some("test-anthropic-key".to_string()),
             base_url: None,
-            workspace: PathBuf::from("."),
+            workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             max_steps: 200,
         };
         
@@ -474,5 +506,38 @@ mod tests {
         assert!(yaml_content.contains("test-anthropic-key"));
         assert!(yaml_content.contains("model_providers:"));
         assert!(yaml_content.contains("agents:"));
+    }
+    
+    #[test]
+    fn test_workspace_display_with_tilde() {
+        // Test workspace display with home directory prefix
+        if let Some(home_dir) = dirs::home_dir() {
+            let workspace_in_home = home_dir.join("Projects").join("test");
+            let settings = UserSettings {
+                provider: "openai".to_string(),
+                model: "gpt-4".to_string(),
+                api_key: None,
+                base_url: None,
+                workspace: workspace_in_home,
+                max_steps: 200,
+            };
+            
+            let display = settings.get_workspace_display();
+            assert!(display.starts_with("~/"), "Display should start with ~/: {}", display);
+            assert!(display.contains("Projects/test"), "Display should contain the path: {}", display);
+        }
+        
+        // Test workspace display with non-home directory
+        let settings = UserSettings {
+            provider: "openai".to_string(),
+            model: "gpt-4".to_string(),
+            api_key: None,
+            base_url: None,
+            workspace: PathBuf::from("/tmp/test"),
+            max_steps: 200,
+        };
+        
+        let display = settings.get_workspace_display();
+        assert_eq!(display, "/tmp/test");
     }
 }
