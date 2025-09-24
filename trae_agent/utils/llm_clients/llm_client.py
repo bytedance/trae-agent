@@ -22,6 +22,7 @@ class LLMProvider(Enum):
     OPENROUTER = "openrouter"
     DOUBAO = "doubao"
     GOOGLE = "google"
+    BURNCLOUD = "burncloud"
 
 
 class LLMClient:
@@ -60,6 +61,10 @@ class LLMClient:
                 from .google_client import GoogleClient
 
                 self.client = GoogleClient(model_config)
+            case LLMProvider.BURNCLOUD:
+                from .burncloud_client import BurnCloudClient
+
+                self.client = BurnCloudClient(model_config)
 
     def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for the underlying client."""
