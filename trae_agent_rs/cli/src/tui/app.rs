@@ -420,13 +420,6 @@ impl App {
             return Ok(());
         }
 
-        if task.trim() == "/test-scroll" {
-            // Generate many lines to test scrolling
-            for i in 1..=50 {
-                self.state.add_output_line(format!("Test line {} - This is a long line to test scrolling behavior. Lorem ipsum dolor sit amet, consectetur adipiscing elit.", i));
-            }
-            return Ok(());
-        }
 
         // Check for unsupported commands starting with "/"
         if task.trim().starts_with('/') {
