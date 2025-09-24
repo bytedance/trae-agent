@@ -74,20 +74,26 @@ impl Tool for ListDirectory {
                 return Err("Path cannot be empty".to_string());
             }
 
-            let include_patterns = arguments.get("include")
+            let include_patterns = arguments
+                .get("include")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str())
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
 
-            let exclude_patterns = arguments.get("exclude")
+            let exclude_patterns = arguments
+                .get("exclude")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str())
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
 
             let result = list_directory(&path, &include_patterns, &exclude_patterns).await;
@@ -132,14 +138,15 @@ async fn list_directory(
         for include_pattern in include_patterns {
             match process_path_pattern(include_pattern) {
                 Ok(mut entries) => included_entries.append(&mut entries),
-                Err(e) => errors.push(format!("Error processing include pattern '{}': {}", include_pattern, e)),
+                Err(e) => errors.push(format!(
+                    "Error processing include pattern '{}': {}",
+                    include_pattern, e
+                )),
             }
         }
-        
+
         // Keep only entries that match include patterns
-        all_entries.retain(|entry| {
-            included_entries.iter().any(|included| included == entry)
-        });
+        all_entries.retain(|entry| included_entries.iter().any(|included| included == entry));
     }
 
     // Apply exclude patterns if specified
@@ -148,14 +155,15 @@ async fn list_directory(
         for exclude_pattern in exclude_patterns {
             match process_path_pattern(exclude_pattern) {
                 Ok(mut entries) => excluded_entries.append(&mut entries),
-                Err(e) => errors.push(format!("Error processing exclude pattern '{}': {}", exclude_pattern, e)),
+                Err(e) => errors.push(format!(
+                    "Error processing exclude pattern '{}': {}",
+                    exclude_pattern, e
+                )),
             }
         }
-        
+
         // Remove entries that match exclude patterns
-        all_entries.retain(|entry| {
-            !excluded_entries.iter().any(|excluded| excluded == entry)
-        });
+        all_entries.retain(|entry| !excluded_entries.iter().any(|excluded| excluded == entry));
     }
 
     // Remove duplicates and sort
@@ -164,7 +172,7 @@ async fn list_directory(
 
     // Format output
     let mut output = String::new();
-    
+
     if !errors.is_empty() {
         output.push_str("Warnings:\n");
         for error in &errors {
@@ -186,7 +194,11 @@ async fn list_directory(
 
     Ok(ToolExecResult {
         output: Some(output),
-        error: if errors.is_empty() { None } else { Some(errors.join("; ")) },
+        error: if errors.is_empty() {
+            None
+        } else {
+            Some(errors.join("; "))
+        },
         error_code: None,
     })
 }
@@ -263,9 +275,8 @@ enum ListDirectoryError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use serde_json::json;
-
+    use tempfile::TempDir;
 
     // this function is used to setup a temporary directory for testing
     fn setup_temporary_directory() -> TempDir {
@@ -285,21 +296,54 @@ mod tests {
         fs::create_dir_all(temp_dir.path().join("foo_dir/sub_dir1/sub_sub_dir1")).unwrap();
         fs::create_dir_all(temp_dir.path().join("foo_dir/sub_dir1/sub_sub_dir2")).unwrap();
 
-
         fs::create_dir_all(temp_dir.path().join("test_dir/sub_dir1")).unwrap();
         fs::create_dir_all(temp_dir.path().join("test_dir/sub_dir2")).unwrap();
         fs::create_dir_all(temp_dir.path().join("test_dir/sub_dir1/sub_sub_dir1")).unwrap();
         fs::create_dir_all(temp_dir.path().join("test_dir/sub_dir1/sub_sub_dir2")).unwrap();
 
         // create some temp files in test_dir/sub_dir1/sub_sub_dir1
-        fs::write(temp_dir.path().join("test_dir/sub_dir1/sub_sub_dir1/file1.txt"), "file1").unwrap();
-        fs::write(temp_dir.path().join("test_dir/sub_dir1/sub_sub_dir1/file2.txt"), "file2").unwrap();
-        fs::write(temp_dir.path().join("test_dir/sub_dir1/sub_sub_dir1/file3.txt"), "file3").unwrap();
-        fs::write(temp_dir.path().join("test_dir/sub_dir1/sub_sub_dir1/file4.txt"), "file4").unwrap();
-        fs::write(temp_dir.path().join("test_dir/sub_dir1/sub_sub_dir1/file5.txt"), "file5").unwrap();
-        fs::write(temp_dir.path().join("test_dir/sub_dir1/sub_sub_dir1/file6.txt"), "file6").unwrap();
-
-
+        fs::write(
+            temp_dir
+                .path()
+                .join("test_dir/sub_dir1/sub_sub_dir1/file1.txt"),
+            "file1",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir
+                .path()
+                .join("test_dir/sub_dir1/sub_sub_dir1/file2.txt"),
+            "file2",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir
+                .path()
+                .join("test_dir/sub_dir1/sub_sub_dir1/file3.txt"),
+            "file3",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir
+                .path()
+                .join("test_dir/sub_dir1/sub_sub_dir1/file4.txt"),
+            "file4",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir
+                .path()
+                .join("test_dir/sub_dir1/sub_sub_dir1/file5.txt"),
+            "file5",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir
+                .path()
+                .join("test_dir/sub_dir1/sub_sub_dir1/file6.txt"),
+            "file6",
+        )
+        .unwrap();
 
         temp_dir
     }
@@ -344,7 +388,11 @@ mod tests {
         let mut list_directory = ListDirectory::default();
         let mut args = HashMap::new();
         let temp_dir = setup_temporary_directory();
-        let path = temp_dir.path().join("foo_*/*").to_string_lossy().to_string();
+        let path = temp_dir
+            .path()
+            .join("foo_*/*")
+            .to_string_lossy()
+            .to_string();
         args.insert("path".to_string(), json!(path));
         let result = list_directory.execute(args).await;
         assert!(result.is_ok());
@@ -360,7 +408,11 @@ mod tests {
         let mut list_directory = ListDirectory::default();
         let mut args = HashMap::new();
         let temp_dir = setup_temporary_directory();
-        let path = temp_dir.path().join("foo_*/**").to_string_lossy().to_string();
+        let path = temp_dir
+            .path()
+            .join("foo_*/**")
+            .to_string_lossy()
+            .to_string();
         args.insert("path".to_string(), json!(path));
         let result = list_directory.execute(args).await;
         assert!(result.is_ok());
@@ -371,14 +423,22 @@ mod tests {
         assert!(content.contains("foo_dir/sub_dir1/sub_sub_dir1"));
         assert!(content.contains("foo_dir/sub_dir1/sub_sub_dir2"));
     }
-    
+
     #[tokio::test]
     async fn test_list_directory_with_include() {
         let mut list_directory = ListDirectory::default();
         let mut args = HashMap::new();
         let temp_dir = setup_temporary_directory();
-        let path = temp_dir.path().join("test_*/**/*").to_string_lossy().to_string();
-        let include_path = temp_dir.path().join("test_dir/**/*.txt").to_string_lossy().to_string();
+        let path = temp_dir
+            .path()
+            .join("test_*/**/*")
+            .to_string_lossy()
+            .to_string();
+        let include_path = temp_dir
+            .path()
+            .join("test_dir/**/*.txt")
+            .to_string_lossy()
+            .to_string();
         args.insert("path".to_string(), json!(path));
         args.insert("include".to_string(), json!(vec![include_path]));
         let result = list_directory.execute(args).await;
@@ -399,8 +459,16 @@ mod tests {
         let mut list_directory = ListDirectory::default();
         let mut args = HashMap::new();
         let temp_dir = setup_temporary_directory();
-        let path = temp_dir.path().join("test_*/**/*").to_string_lossy().to_string();
-        let exclude_path = temp_dir.path().join("test_dir/**/*.txt").to_string_lossy().to_string();
+        let path = temp_dir
+            .path()
+            .join("test_*/**/*")
+            .to_string_lossy()
+            .to_string();
+        let exclude_path = temp_dir
+            .path()
+            .join("test_dir/**/*.txt")
+            .to_string_lossy()
+            .to_string();
         args.insert("path".to_string(), json!(path));
         args.insert("exclude".to_string(), json!(vec![exclude_path]));
         let result = list_directory.execute(args).await;
@@ -420,9 +488,21 @@ mod tests {
         let mut list_directory = ListDirectory::default();
         let mut args = HashMap::new();
         let temp_dir = setup_temporary_directory();
-        let path = temp_dir.path().join("test_*/**/*").to_string_lossy().to_string();
-        let include_path = temp_dir.path().join("test_dir/**/*.txt").to_string_lossy().to_string();
-        let exclude_path = temp_dir.path().join("test_dir/**/file1.txt").to_string_lossy().to_string();
+        let path = temp_dir
+            .path()
+            .join("test_*/**/*")
+            .to_string_lossy()
+            .to_string();
+        let include_path = temp_dir
+            .path()
+            .join("test_dir/**/*.txt")
+            .to_string_lossy()
+            .to_string();
+        let exclude_path = temp_dir
+            .path()
+            .join("test_dir/**/file1.txt")
+            .to_string_lossy()
+            .to_string();
         args.insert("path".to_string(), json!(path));
         args.insert("include".to_string(), json!(vec![include_path]));
         args.insert("exclude".to_string(), json!(vec![exclude_path]));
@@ -437,6 +517,4 @@ mod tests {
         assert!(content.contains("test_dir/sub_dir1/sub_sub_dir1/file5.txt"));
         assert!(content.contains("test_dir/sub_dir1/sub_sub_dir1/file6.txt"));
     }
-    
 }
-    

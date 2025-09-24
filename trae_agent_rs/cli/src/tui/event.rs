@@ -30,8 +30,8 @@ pub struct EventHandler {
 impl EventHandler {
     pub fn new() -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
-        Self { 
-            event_tx, 
+        Self {
+            event_tx,
             event_rx,
             event_loop_handle: None,
         }
@@ -69,7 +69,7 @@ impl EventHandler {
                 }
             }
         });
-        
+
         self.event_loop_handle = Some(handle);
     }
 

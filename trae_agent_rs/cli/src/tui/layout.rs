@@ -329,7 +329,7 @@ impl Layout {
                     let is_selected = i == current_field;
                     let is_editing = editor.editing_field == Some(i);
                     let is_editable = editor.is_field_editable(i);
-                    
+
                     let label = SettingsEditor::field_name(i);
                     let value = editor.field_value(i);
 

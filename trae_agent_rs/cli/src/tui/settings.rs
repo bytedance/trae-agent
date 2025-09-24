@@ -51,7 +51,7 @@ impl UserSettings {
     pub fn from_config(config: &Config) -> Self {
         let model_config = &config.trae_agent_config.model;
         let provider = &model_config.model_provider;
-        
+
         Self {
             provider: provider.name.clone(),
             model: model_config.model.clone(),
@@ -81,16 +81,17 @@ impl UserSettings {
         };
 
         let trae_agent_config = TraeAgentConfig {
-            tools: vec!["bash".to_string(), "str_replace_based_edit_tool".to_string()], // Default tools
+            tools: vec![
+                "bash".to_string(),
+                "str_replace_based_edit_tool".to_string(),
+            ], // Default tools
             model: model_config,
             max_steps: self.max_steps,
             allow_mcp_servers: vec![],
             mcp_servers_config: HashMap::new(),
         };
 
-        Config {
-            trae_agent_config,
-        }
+        Config { trae_agent_config }
     }
 
     /// Convert Config to YAML string
@@ -125,7 +126,10 @@ allow_mcp_servers: []
 mcp_servers: {{}}
 "#,
             config.trae_agent_config.max_steps,
-            config.trae_agent_config.tools.iter()
+            config
+                .trae_agent_config
+                .tools
+                .iter()
                 .map(|tool| format!("      - {}", tool))
                 .collect::<Vec<_>>()
                 .join("\n"),
@@ -134,10 +138,22 @@ mcp_servers: {{}}
             provider.base_url.as_ref().unwrap_or(&"null".to_string()),
             provider.name,
             model_config.model,
-            model_config.temperature.map(|t| t.to_string()).unwrap_or("null".to_string()),
-            model_config.top_p.map(|t| t.to_string()).unwrap_or("null".to_string()),
-            model_config.max_tokens.map(|t| t.to_string()).unwrap_or("null".to_string()),
-            model_config.max_retries.map(|t| t.to_string()).unwrap_or("null".to_string()),
+            model_config
+                .temperature
+                .map(|t| t.to_string())
+                .unwrap_or("null".to_string()),
+            model_config
+                .top_p
+                .map(|t| t.to_string())
+                .unwrap_or("null".to_string()),
+            model_config
+                .max_tokens
+                .map(|t| t.to_string())
+                .unwrap_or("null".to_string()),
+            model_config
+                .max_retries
+                .map(|t| t.to_string())
+                .unwrap_or("null".to_string()),
         );
 
         Ok(yaml_content)
@@ -199,7 +215,9 @@ mcp_servers: {{}}
     /// Get the effective API key (from settings or environment)
     pub fn get_api_key(&self) -> Option<String> {
         // First try the stored API key
-        if let Some(ref key) = self.api_key && !key.is_empty() {
+        if let Some(ref key) = self.api_key
+            && !key.is_empty()
+        {
             return Some(key.clone());
         }
 
@@ -217,7 +235,9 @@ mcp_servers: {{}}
     /// Get the effective base URL (from settings or default)
     pub fn get_base_url(&self) -> Option<String> {
         // First try the stored base URL
-        if let Some(ref url) = self.base_url && !url.is_empty() {
+        if let Some(ref url) = self.base_url
+            && !url.is_empty()
+        {
             return Some(url.clone());
         }
 
@@ -255,7 +275,9 @@ mcp_servers: {{}}
 
     /// Get the workspace path formatted with ~ prefix if it starts with home directory
     pub fn get_workspace_display(&self) -> String {
-        if let Some(home_dir) = dirs::home_dir() && let Ok(stripped) = self.workspace.strip_prefix(&home_dir) {
+        if let Some(home_dir) = dirs::home_dir()
+            && let Ok(stripped) = self.workspace.strip_prefix(&home_dir)
+        {
             return format!("~/{}", stripped.display());
         }
         self.workspace.display().to_string()
@@ -358,7 +380,7 @@ impl SettingsEditor {
         if index == 4 {
             return;
         }
-        
+
         self.editing_field = Some(index);
         self.temp_input = match index {
             0 => self.settings.provider.clone(),
@@ -466,7 +488,7 @@ impl SettingsEditor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_config_conversion() {
         let settings = UserSettings {
@@ -477,18 +499,24 @@ mod tests {
             workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             max_steps: 200,
         };
-        
+
         let config = settings.to_config();
         let converted_settings = UserSettings::from_config(&config);
-        
+
         assert_eq!(converted_settings.provider, "openai");
         assert_eq!(converted_settings.model, "gpt-4");
         assert_eq!(converted_settings.api_key, Some("test-key".to_string()));
-        assert_eq!(converted_settings.base_url, Some("https://api.openai.com/v1".to_string()));
+        assert_eq!(
+            converted_settings.base_url,
+            Some("https://api.openai.com/v1".to_string())
+        );
         // Workspace is always current directory, so we just verify it's set
-        assert!(converted_settings.workspace.is_absolute() || converted_settings.workspace == PathBuf::from("."));
+        assert!(
+            converted_settings.workspace.is_absolute()
+                || converted_settings.workspace == PathBuf::from(".")
+        );
     }
-    
+
     #[test]
     fn test_yaml_generation() {
         let settings = UserSettings {
@@ -499,7 +527,7 @@ mod tests {
             workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             max_steps: 200,
         };
-        
+
         let yaml_content = settings.config_to_yaml().unwrap();
         assert!(yaml_content.contains("anthropic"));
         assert!(yaml_content.contains("claude-3-sonnet"));
@@ -507,7 +535,7 @@ mod tests {
         assert!(yaml_content.contains("model_providers:"));
         assert!(yaml_content.contains("agents:"));
     }
-    
+
     #[test]
     fn test_workspace_display_with_tilde() {
         // Test workspace display with home directory prefix
@@ -521,12 +549,20 @@ mod tests {
                 workspace: workspace_in_home,
                 max_steps: 200,
             };
-            
+
             let display = settings.get_workspace_display();
-            assert!(display.starts_with("~/"), "Display should start with ~/: {}", display);
-            assert!(display.contains("Projects/test"), "Display should contain the path: {}", display);
+            assert!(
+                display.starts_with("~/"),
+                "Display should start with ~/: {}",
+                display
+            );
+            assert!(
+                display.contains("Projects/test"),
+                "Display should contain the path: {}",
+                display
+            );
         }
-        
+
         // Test workspace display with non-home directory
         let settings = UserSettings {
             provider: "openai".to_string(),
@@ -536,7 +572,7 @@ mod tests {
             workspace: PathBuf::from("/tmp/test"),
             max_steps: 200,
         };
-        
+
         let display = settings.get_workspace_display();
         assert_eq!(display, "/tmp/test");
     }

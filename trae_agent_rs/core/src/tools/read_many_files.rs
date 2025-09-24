@@ -269,8 +269,8 @@ enum ReadManyFilesError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use serde_json::json;
+    use tempfile::TempDir;
 
     fn prepare_test_file() -> TempDir {
         let temp_dir = TempDir::new().unwrap();
@@ -288,8 +288,16 @@ mod tests {
         let mut read_many_files = ReadManyFiles::default();
         let mut args = HashMap::new();
         let temp_dir = prepare_test_file();
-        let path1 = temp_dir.path().join("test.txt").to_string_lossy().to_string();
-        let path2 = temp_dir.path().join("test2.txt").to_string_lossy().to_string();
+        let path1 = temp_dir
+            .path()
+            .join("test.txt")
+            .to_string_lossy()
+            .to_string();
+        let path2 = temp_dir
+            .path()
+            .join("test2.txt")
+            .to_string_lossy()
+            .to_string();
         args.insert("paths".to_string(), json!(vec![path1, path2]));
         let result = read_many_files.execute(args).await;
         assert!(result.is_ok());
@@ -305,7 +313,11 @@ mod tests {
         let mut args = HashMap::new();
         let temp_dir = prepare_test_file();
         let path = temp_dir.path().join("*.txt").to_string_lossy().to_string();
-        let include_path = temp_dir.path().join("test2.txt").to_string_lossy().to_string();
+        let include_path = temp_dir
+            .path()
+            .join("test2.txt")
+            .to_string_lossy()
+            .to_string();
         args.insert("paths".to_string(), json!(vec![path]));
         args.insert("include".to_string(), json!(vec![include_path]));
         let result = read_many_files.execute(args).await;
@@ -321,7 +333,11 @@ mod tests {
         let mut args = HashMap::new();
         let temp_dir = prepare_test_file();
         let path = temp_dir.path().join("*.txt").to_string_lossy().to_string();
-        let exclude_path = temp_dir.path().join("test2.txt").to_string_lossy().to_string();
+        let exclude_path = temp_dir
+            .path()
+            .join("test2.txt")
+            .to_string_lossy()
+            .to_string();
         args.insert("paths".to_string(), json!(vec![path]));
         args.insert("exclude".to_string(), json!(vec![exclude_path]));
         let result = read_many_files.execute(args).await;
@@ -330,5 +346,4 @@ mod tests {
         assert!(!content.contains("11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n"));
         assert!(content.contains("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"));
     }
-
 }

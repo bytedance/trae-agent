@@ -64,7 +64,6 @@ impl TodoList {
         next_id.to_string()
     }
 
-
     fn new_todo_list(&self, items: Vec<String>) -> Result<String, TodoListError> {
         let mut todo_items = self.items.lock().unwrap();
         todo_items.clear();
@@ -122,28 +121,37 @@ impl TodoList {
         Ok(format!("Added {} items to todo list", items_count))
     }
 
-    fn update_item(&self, id: &str, new_content: Option<String>, new_status: Option<TodoStatus>) -> Result<String, TodoListError> {
+    fn update_item(
+        &self,
+        id: &str,
+        new_content: Option<String>,
+        new_status: Option<TodoStatus>,
+    ) -> Result<String, TodoListError> {
         let mut todo_items = self.items.lock().unwrap();
 
         match todo_items.iter_mut().find(|item| item.id == id) {
             Some(item) => {
                 let mut updates = Vec::new();
-                
+
                 if let Some(content) = new_content {
                     item.content = content;
                     updates.push("content");
                 }
-                
+
                 if let Some(status) = new_status {
                     item.status = status;
                     updates.push("status");
                 }
-                
+
                 if updates.is_empty() {
                     return Err(TodoListError::NoUpdateProvided);
                 }
-                
-                Ok(format!("Updated {} for item '{}'", updates.join(" and "), id))
+
+                Ok(format!(
+                    "Updated {} for item '{}'",
+                    updates.join(" and "),
+                    id
+                ))
             }
             None => Err(TodoListError::ItemNotFound(id.to_string())),
         }
@@ -198,7 +206,7 @@ impl Tool for TodoList {
 
     fn get_description(&self) -> &str {
         "Manage todo lists for agents to plan and track tasks. Supports creating, adding, updating, deleting items and displaying the list.
-        
+
         Subcommands:
         * `new` - Create a new todo list with initial items (all start as 'todo' status)
         * `add_items` - Add new items to the list, optionally after a specific item ID
@@ -306,9 +314,7 @@ impl Tool for TodoList {
                         .get("content")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
-                    let status_str = arguments
-                        .get("status")
-                        .and_then(|v| v.as_str());
+                    let status_str = arguments.get("status").and_then(|v| v.as_str());
 
                     if id.is_empty() {
                         return Err("ID parameter is required for update_item".to_string());
@@ -343,7 +349,7 @@ impl Tool for TodoList {
                 _ => Err(format!(
                     "Unknown command: {}. Supported commands are: new, add_items, update_item, delete_item, display",
                     subcommand
-                ))
+                )),
             }
         })
     }
@@ -398,7 +404,10 @@ mod tests {
         let mut todo_list = TodoList::default();
         let mut args = HashMap::new();
         args.insert("command".to_string(), json!("new"));
-        args.insert("items".to_string(), json!(["Item 1".to_string(), "Item 2".to_string()]));
+        args.insert(
+            "items".to_string(),
+            json!(["Item 1".to_string(), "Item 2".to_string()]),
+        );
         let result = todo_list.execute(args).await;
         assert_eq!(result.unwrap(), "Created new todo list with 2 items");
         assert_eq!(todo_list.items.lock().unwrap().len(), 2);
@@ -411,7 +420,10 @@ mod tests {
         let mut todo_list = get_todo_list(2).await;
         let mut args = HashMap::new();
         args.insert("command".to_string(), json!("add_items"));
-        args.insert("items".to_string(), json!(["added_item_1".to_string(), "added_item_2".to_string()]));
+        args.insert(
+            "items".to_string(),
+            json!(["added_item_1".to_string(), "added_item_2".to_string()]),
+        );
         args.insert("id".to_string(), json!("1"));
         let result = todo_list.execute(args).await;
         assert_eq!(result.unwrap(), "Added 2 items to todo list");
@@ -449,7 +461,10 @@ mod tests {
         args.insert("status".to_string(), json!("in_progress".to_string()));
         let result = todo_list.execute(args).await;
         assert_eq!(result.unwrap(), "Updated status for item '1'");
-        assert_eq!(todo_list.items.lock().unwrap()[0].status, TodoStatus::InProgress);
+        assert_eq!(
+            todo_list.items.lock().unwrap()[0].status,
+            TodoStatus::InProgress
+        );
     }
 
     #[tokio::test]

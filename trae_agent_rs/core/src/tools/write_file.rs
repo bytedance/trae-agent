@@ -74,8 +74,8 @@ impl Tool for WriteFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use serde_json::json;
+    use tempfile::TempDir;
 
     fn get_temp_direcotry() -> TempDir {
         TempDir::new().unwrap()
@@ -87,10 +87,16 @@ mod tests {
         let mut args = HashMap::new();
         let temp_dir = get_temp_direcotry();
         let path = temp_dir.path().join("test.txt");
-        args.insert("path".to_string(), json!(path.to_string_lossy().to_string()));
+        args.insert(
+            "path".to_string(),
+            json!(path.to_string_lossy().to_string()),
+        );
         args.insert("content".to_string(), json!("Hello, world!"));
         let result = write_file.execute(args).await;
-        assert_eq!(result.unwrap(), format!("File created successfully at: {}", path.to_string_lossy()));
+        assert_eq!(
+            result.unwrap(),
+            format!("File created successfully at: {}", path.to_string_lossy())
+        );
         assert!(path.exists());
         assert_eq!(fs::read_to_string(path).unwrap(), "Hello, world!");
     }
@@ -102,7 +108,10 @@ mod tests {
         let temp_dir = get_temp_direcotry();
         let path = temp_dir.path().join("test.txt");
         fs::write(&path, "Hello, world!").unwrap();
-        args.insert("path".to_string(), json!(path.to_string_lossy().to_string()));
+        args.insert(
+            "path".to_string(),
+            json!(path.to_string_lossy().to_string()),
+        );
         args.insert("content".to_string(), json!("New Content."));
         let result = write_file.execute(args).await;
         assert!(result.is_ok());

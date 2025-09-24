@@ -191,11 +191,18 @@ mod tests {
         let mut read_file = ReadFile::default();
         let mut args = HashMap::new();
         let temp_dir = prepare_test_file();
-        let path = temp_dir.path().join("test.txt").to_string_lossy().to_string();
+        let path = temp_dir
+            .path()
+            .join("test.txt")
+            .to_string_lossy()
+            .to_string();
         args.insert("path".to_string(), serde_json::json!(path));
         args.insert("view_range".to_string(), serde_json::json!([1, 2]));
         let result = read_file.execute(args).await;
-        assert_eq!(result.unwrap(), format!("Here's the result of reading {} (lines 1-2):\n1\n2\n", path));
+        assert_eq!(
+            result.unwrap(),
+            format!("Here's the result of reading {} (lines 1-2):\n1\n2\n", path)
+        );
     }
 
     #[tokio::test]
@@ -203,10 +210,20 @@ mod tests {
         let mut read_file = ReadFile::default();
         let mut args = HashMap::new();
         let temp_dir = prepare_test_file();
-        let path = temp_dir.path().join("test.txt").to_string_lossy().to_string();
+        let path = temp_dir
+            .path()
+            .join("test.txt")
+            .to_string_lossy()
+            .to_string();
         args.insert("path".to_string(), serde_json::json!(path));
         let result = read_file.execute(args).await;
-        assert_eq!(result.unwrap(), format!("Here's the full content of the file: {}\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n\n", path));
+        assert_eq!(
+            result.unwrap(),
+            format!(
+                "Here's the full content of the file: {}\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n\n",
+                path
+            )
+        );
     }
 
     #[tokio::test]
@@ -214,7 +231,11 @@ mod tests {
         let mut read_file = ReadFile::default();
         let mut args = HashMap::new();
         let temp_dir = prepare_test_file();
-        let path = temp_dir.path().join("test.txt").to_string_lossy().to_string();
+        let path = temp_dir
+            .path()
+            .join("test.txt")
+            .to_string_lossy()
+            .to_string();
         args.insert("path".to_string(), serde_json::json!(path));
         args.insert("view_range".to_string(), serde_json::json!([1, 100]));
         let result = read_file.execute(args).await;
@@ -226,7 +247,9 @@ mod tests {
         if let Err(msg) = result {
             assert!(msg.contains("Tool execution failed: invalid line range: Line number is larger than the total number of lines in the file"));
         } else {
-            panic!("Expected error message containing 'Line number is larger than the total number of lines in the file'");
+            panic!(
+                "Expected error message containing 'Line number is larger than the total number of lines in the file'"
+            );
         }
     }
 }
