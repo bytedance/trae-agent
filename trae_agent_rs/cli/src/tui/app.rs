@@ -129,7 +129,7 @@ impl App {
         loop {
             // Draw the UI
             terminal.draw(|frame| {
-                Layout::render(frame, &self.state, &self.settings_editor);
+                Layout::render(frame, &mut self.state, &self.settings_editor);
             })?;
 
             // Handle events
@@ -259,6 +259,27 @@ impl App {
             KeyCode::Down => {
                 if !self.state.show_autocomplete {
                     self.state.scroll_down();
+                }
+            }
+            KeyCode::PageUp => {
+                if !self.state.show_autocomplete {
+                    // Use a heuristic page size; layout height is unavailable here, so use 10
+                    self.state.scroll_page_up(10);
+                }
+            }
+            KeyCode::PageDown => {
+                if !self.state.show_autocomplete {
+                    self.state.scroll_page_down(10);
+                }
+            }
+            KeyCode::Home => {
+                if !self.state.show_autocomplete {
+                    self.state.scroll_to_top();
+                }
+            }
+            KeyCode::End => {
+                if !self.state.show_autocomplete {
+                    self.state.scroll_to_bottom();
                 }
             }
             KeyCode::Tab => {
@@ -396,6 +417,14 @@ impl App {
         if task.trim() == "/settings" {
             self.state.show_settings_popup();
             self.settings_editor = Some(SettingsEditor::new(self.settings.clone()));
+            return Ok(());
+        }
+
+        if task.trim() == "/test-scroll" {
+            // Generate many lines to test scrolling
+            for i in 1..=50 {
+                self.state.add_output_line(format!("Test line {} - This is a long line to test scrolling behavior. Lorem ipsum dolor sit amet, consectetur adipiscing elit.", i));
+            }
             return Ok(());
         }
 
@@ -639,6 +668,15 @@ impl App {
             Span::styled("/settings", Style::default().fg(Color::Green)),
             Span::styled(
                 " - Configure API key, base URL, and workspace",
+                Style::default().fg(Color::Gray),
+            ),
+        ]));
+
+        self.state.add_output_line_styled(Line::from(vec![
+            Span::styled("  ", Style::default()),
+            Span::styled("/test-scroll", Style::default().fg(Color::Cyan)),
+            Span::styled(
+                " - Generate test content to test scrolling",
                 Style::default().fg(Color::Gray),
             ),
         ]));

@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
         .filter_level(if cli.verbose {
             log::LevelFilter::Debug
         } else {
-            log::LevelFilter::Info
+            log::LevelFilter::Error  // Only show errors by default, suppress warnings and info
         })
         .init();
 

@@ -177,10 +177,16 @@ mcp_servers: {{}}
     /// Load settings from config file
     pub fn load() -> Result<Self> {
         // First try to load from trae_config.yaml in current directory
-        let local_config = PathBuf::from("trae_config.yaml");
-        if local_config.exists() {
-            let config = Config::from_yaml(local_config.to_str().unwrap())?;
+        let local_yaml_config = PathBuf::from("trae_config.yaml");
+        if local_yaml_config.exists() {
+            let config = Config::from_yaml(local_yaml_config.to_str().unwrap())?;
             return Ok(Self::from_config(&config));
+        }
+
+        // Try to load from trae_config.json in current directory (fallback)
+        let local_json_config = PathBuf::from("trae_config.json");
+        if local_json_config.exists() {
+            return Self::load_from_json(&local_json_config);
         }
 
         // Fall back to user config directory
@@ -195,20 +201,41 @@ mcp_servers: {{}}
         Ok(Self::from_config(&config))
     }
 
+    /// Load settings from JSON file (fallback support)
+    fn load_from_json(path: &PathBuf) -> Result<Self> {
+        let content = fs::read_to_string(path)?;
+        log::debug!("Loading settings from JSON file: {}", path.display());
+        log::debug!("JSON content: {}", content);
+        let settings: UserSettings = serde_json::from_str(&content)?;
+        log::debug!("Loaded settings: provider={}, model={}, api_key={:?}", 
+                   settings.provider, settings.model, settings.api_key.is_some());
+        Ok(settings)
+    }
+
     /// Save settings to config file
     pub fn save(&self) -> Result<()> {
         // Check if trae_config.yaml exists in current directory
-        let local_config = PathBuf::from("trae_config.yaml");
-        if local_config.exists() {
-            // Save to local config if it exists
+        let local_yaml_config = PathBuf::from("trae_config.yaml");
+        if local_yaml_config.exists() {
+            // Save to local YAML config if it exists
             let content = self.config_to_yaml()?;
-            fs::write(&local_config, content)?;
+            fs::write(&local_yaml_config, content)?;
+        } else if PathBuf::from("trae_config.json").exists() {
+            // Save to local JSON config if it exists
+            self.save_to_json(&PathBuf::from("trae_config.json"))?;
         } else {
-            // Save to user config directory
+            // Save to user config directory as YAML
             let config_path = Self::config_file_path()?;
             let content = self.config_to_yaml()?;
             fs::write(&config_path, content)?;
         }
+        Ok(())
+    }
+
+    /// Save settings to JSON file
+    fn save_to_json(&self, path: &PathBuf) -> Result<()> {
+        let content = serde_json::to_string_pretty(self)?;
+        fs::write(path, content)?;
         Ok(())
     }
 
@@ -245,20 +272,22 @@ mcp_servers: {{}}
         match self.provider.as_str() {
             "openai" => Some("https://api.openai.com/v1".to_string()),
             "anthropic" => Some("https://api.anthropic.com".to_string()),
-            "azure" => std::env::var("AZURE_BASE_URL").ok(),
+            "openai_compatible" => None, // No default URL for compatible providers
             _ => None,
         }
     }
 
     /// Update provider and reset model to default for that provider
     pub fn set_provider(&mut self, provider: String) {
-        self.provider = provider.clone();
+        // Normalize provider name to lowercase
+        let normalized_provider = provider.to_lowercase();
+        self.provider = normalized_provider.clone();
 
         // Set default model for the provider
-        self.model = match provider.as_str() {
+        self.model = match normalized_provider.as_str() {
             "openai" => "gpt-4".to_string(),
             "anthropic" => "claude-3-sonnet-20240229".to_string(),
-            "azure" => "gpt-4".to_string(),
+            "openai_compatible" => "gpt-4".to_string(),
             _ => "gpt-4".to_string(),
         };
     }
@@ -534,6 +563,26 @@ mod tests {
         assert!(yaml_content.contains("test-anthropic-key"));
         assert!(yaml_content.contains("model_providers:"));
         assert!(yaml_content.contains("agents:"));
+    }
+
+    #[test]
+    fn test_json_loading() {
+        // Test JSON loading functionality
+        let temp_json = r#"{
+            "provider": "openai",
+            "model": "gpt-4",
+            "api_key": "test-key-123",
+            "base_url": "https://api.openai.com/v1",
+            "workspace": ".",
+            "max_steps": 200
+        }"#;
+        
+        let settings: UserSettings = serde_json::from_str(temp_json).unwrap();
+        assert_eq!(settings.provider, "openai");
+        assert_eq!(settings.model, "gpt-4");
+        assert_eq!(settings.api_key, Some("test-key-123".to_string()));
+        assert_eq!(settings.base_url, Some("https://api.openai.com/v1".to_string()));
+        assert_eq!(settings.max_steps, 200);
     }
 
     #[test]

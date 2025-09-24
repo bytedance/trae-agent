@@ -283,8 +283,8 @@ impl AppState {
             self.output_lines.pop_front();
         }
 
-        // Auto-scroll to bottom
-        self.output_scroll = self.output_lines.len().saturating_sub(1);
+        // Auto-scroll to bottom (set to max value, layout will clamp appropriately)
+        self.output_scroll = usize::MAX;
     }
 
     pub fn clear_input(&mut self) {
@@ -324,9 +324,40 @@ impl AppState {
     }
 
     pub fn scroll_down(&mut self) {
-        if self.output_scroll < self.output_lines.len().saturating_sub(1) {
+        // output_scroll represents lines to skip from top
+        // We can scroll down until we've skipped enough lines that the remaining content fits in the view
+        // Add basic bounds checking - we'll let the layout do the final clamping
+        if self.output_lines.len() > 1 {
             self.output_scroll += 1;
         }
+    }
+
+    pub fn scroll_page_up(&mut self, page_size: usize) {
+        self.output_scroll = self.output_scroll.saturating_sub(page_size);
+    }
+
+    pub fn scroll_page_down(&mut self, page_size: usize) {
+        self.output_scroll += page_size;
+    }
+
+    pub fn scroll_to_top(&mut self) {
+        self.output_scroll = 0;
+    }
+
+    pub fn scroll_to_bottom(&mut self) {
+        // Set scroll to a very large number - the layout will clamp it appropriately
+        self.output_scroll = usize::MAX;
+    }
+
+    /// Clamp scroll position to valid bounds given the viewport height
+    pub fn clamp_scroll(&mut self, viewport_height: usize) {
+        let total_lines = self.output_lines.len();
+        let max_scroll = if total_lines > viewport_height {
+            total_lines - viewport_height
+        } else {
+            0
+        };
+        self.output_scroll = std::cmp::min(self.output_scroll, max_scroll);
     }
 
     pub fn update_token_usage(&mut self, input_tokens: u64, output_tokens: u64) {

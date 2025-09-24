@@ -19,7 +19,7 @@ impl Layout {
     /// - Agent state and token usage (minimal height needed)
     /// - Input box (minimal height needed)
     /// - Shortcuts (minimal height needed)
-    pub fn render(frame: &mut Frame, state: &AppState, settings_editor: &Option<SettingsEditor>) {
+    pub fn render(frame: &mut Frame, state: &mut AppState, settings_editor: &Option<SettingsEditor>) {
         let size = frame.area();
         // Create main layout chunks with dynamic sizing
         let chunks = ratatui::layout::Layout::default()
@@ -52,7 +52,7 @@ impl Layout {
         }
     }
 
-    fn render_output_area(frame: &mut Frame, area: Rect, state: &AppState) {
+    fn render_output_area(frame: &mut Frame, area: Rect, state: &mut AppState) {
         let output_lines = if state.output_lines.is_empty() {
             vec![Line::from(Span::styled(
                 "No output yet...",
@@ -61,16 +61,46 @@ impl Layout {
                     .add_modifier(ratatui::style::Modifier::ITALIC),
             ))]
         } else {
-            state
-                .output_lines
-                .iter()
-                .skip(state.output_scroll.saturating_sub(area.height as usize))
-                .take(area.height as usize)
-                .cloned()
-                .collect::<Vec<_>>()
+            state.output_lines.iter().cloned().collect::<Vec<_>>()
         };
 
-        let paragraph = Paragraph::new(output_lines).wrap(Wrap { trim: false });
+        // Calculate scroll parameters
+        let total_lines = output_lines.len();
+        let visible_height = area.height as usize;
+        
+        // Clamp scroll position to valid bounds
+        state.clamp_scroll(visible_height);
+        
+        // output_scroll represents the number of lines to skip from the top
+        let max_scroll = if total_lines > visible_height {
+            total_lines - visible_height
+        } else {
+            0
+        };
+        
+        let clamped_scroll = std::cmp::min(state.output_scroll, max_scroll);
+        
+        // Create the paragraph with proper scrolling
+        let visible_lines = if total_lines == 0 {
+            // No content case
+            output_lines
+        } else if total_lines <= visible_height {
+            // Content fits entirely in view - no scrolling needed
+            output_lines
+        } else {
+            // Content is larger than view - apply scrolling
+            let start = clamped_scroll;
+            let end = std::cmp::min(start + visible_height, total_lines);
+            if start < total_lines {
+                output_lines[start..end].to_vec()
+            } else {
+                // Fallback if scroll position is invalid
+                output_lines
+            }
+        };
+        
+        let paragraph = Paragraph::new(visible_lines)
+            .wrap(Wrap { trim: false });
 
         frame.render_widget(paragraph, area);
     }
@@ -161,7 +191,7 @@ impl Layout {
                 ),
                 Span::styled(": Quit │ ", Style::default().fg(Color::Gray)),
                 Span::styled(
-                    "↑/↓",
+                    "↑/↓/PgUp/PgDn/Home/End",
                     Style::default()
                         .fg(Color::Blue)
                         .add_modifier(ratatui::style::Modifier::BOLD),
