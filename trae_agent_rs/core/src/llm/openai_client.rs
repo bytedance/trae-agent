@@ -140,7 +140,7 @@ impl OpenAIClient {
     }
 
     async fn create_response(&self, request: OpenAIResponsesRequest) -> LLMResult<OpenAIResponse> {
-        let url = format!("{}/responses", self.base_url);
+        let url = format!("{}/chat/completions", self.base_url);
 
         let response = self
             .client
@@ -168,7 +168,7 @@ impl OpenAIClient {
         &self,
         request: OpenAIResponsesRequest,
     ) -> LLMResult<LLMStream> {
-        let url = format!("{}/responses", self.base_url);
+        let url = format!("{}/chat/completions", self.base_url);
 
         let response = self
             .client

@@ -6,11 +6,61 @@ use ratatui::{
     text::{Line, Span},
 };
 use std::collections::VecDeque;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use super::multiline_input::MultiLineInput;
 
 #[derive(Debug, Clone, Default)]
 pub struct TokenUsage {
     pub input: u64,
     pub output: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct StepHistoryEntry {
+    pub step_number: u32,
+    pub timestamp: f64,
+    pub description: String,
+    pub status: AgentStatus,
+    pub output_lines: Vec<Line<'static>>,
+    pub token_usage: Option<TokenUsage>,
+}
+
+impl StepHistoryEntry {
+    pub fn new(step_number: u32, description: String, status: AgentStatus) -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64();
+        
+        Self {
+            step_number,
+            timestamp,
+            description,
+            status,
+            output_lines: Vec::new(),
+            token_usage: None,
+        }
+    }
+    
+    pub fn add_output_line(&mut self, line: Line<'static>) {
+        self.output_lines.push(line);
+    }
+    
+    pub fn formatted_timestamp(&self) -> String {
+        let duration = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64() - self.timestamp;
+        
+        if duration < 60.0 {
+            format!("{:.0}s ago", duration)
+        } else if duration < 3600.0 {
+            format!("{:.0}m ago", duration / 60.0)
+        } else {
+            format!("{:.1}h ago", duration / 3600.0)
+        }
+    }
 }
 
 impl TokenUsage {
@@ -74,11 +124,8 @@ pub struct AppState {
     /// Agent output lines (main display area)
     pub output_lines: VecDeque<Line<'static>>,
 
-    /// Current input text
-    pub input_text: String,
-
-    /// Input cursor position
-    pub input_cursor: usize,
+    /// Multi-line input widget
+    pub input: MultiLineInput,
 
     /// Whether the app should quit
     pub should_quit: bool,
@@ -103,6 +150,39 @@ pub struct AppState {
 
     /// Whether to show settings popup
     pub show_settings: bool,
+
+    /// Whether to show popup input
+    pub show_popup_input: bool,
+
+    /// Command history for up/down navigation
+    pub command_history: Vec<String>,
+
+    /// Current position in command history (None means not navigating history)
+    pub history_index: Option<usize>,
+
+    /// Temporary storage for current input when navigating history
+    pub temp_input: Option<String>,
+
+    /// Chronological step history for navigation
+    pub step_history: Vec<StepHistoryEntry>,
+
+    /// Current step being executed (for tracking)
+    pub current_step: Option<u32>,
+
+    /// Whether we're in history view mode
+    pub show_step_history: bool,
+
+    /// Current position in step history view (None means viewing current/latest)
+    pub history_view_index: Option<usize>,
+
+    /// Scroll position within a specific step's content
+    pub step_content_scroll: usize,
+
+    /// Temporary storage for current input when navigating step history
+    pub step_history_temp_input: Option<String>,
+
+    /// Temporary storage for current output scroll when navigating step history
+    pub step_history_temp_output_scroll: Option<usize>,
 }
 
 impl Default for AppState {
@@ -111,8 +191,7 @@ impl Default for AppState {
             agent_status: AgentStatus::default(),
             token_usage: TokenUsage::default(),
             output_lines: VecDeque::new(),
-            input_text: String::new(),
-            input_cursor: 0,
+            input: MultiLineInput::new().with_placeholder("Type your task here...".to_string()),
             should_quit: false,
             output_scroll: 0,
             max_output_lines: 1000,
@@ -121,6 +200,17 @@ impl Default for AppState {
             autocomplete_selected: 0,
             show_autocomplete: false,
             show_settings: false,
+            show_popup_input: false,
+            command_history: Vec::new(),
+            history_index: None,
+            temp_input: None,
+            step_history: Vec::new(),
+            current_step: None,
+            show_step_history: false,
+            history_view_index: None,
+            step_content_scroll: 0,
+            step_history_temp_input: None,
+            step_history_temp_output_scroll: None,
         }
     }
 }
@@ -283,38 +373,57 @@ impl AppState {
             self.output_lines.pop_front();
         }
 
-        // Auto-scroll to bottom
-        self.output_scroll = self.output_lines.len().saturating_sub(1);
+        // Auto-scroll to bottom (set to max value, layout will clamp appropriately)
+        self.output_scroll = usize::MAX;
     }
 
     pub fn clear_input(&mut self) {
-        self.input_text.clear();
-        self.input_cursor = 0;
+        self.input.clear();
         self.hide_autocomplete();
     }
 
     pub fn insert_char(&mut self, c: char) {
-        self.input_text.insert(self.input_cursor, c);
-        self.input_cursor += 1;
+        self.input.insert_char(c);
     }
 
     pub fn delete_char(&mut self) {
-        if self.input_cursor > 0 {
-            self.input_cursor -= 1;
-            self.input_text.remove(self.input_cursor);
-        }
+        self.input.delete_char();
     }
 
     pub fn move_cursor_left(&mut self) {
-        if self.input_cursor > 0 {
-            self.input_cursor -= 1;
-        }
+        self.input.move_cursor_left();
     }
 
     pub fn move_cursor_right(&mut self) {
-        if self.input_cursor < self.input_text.len() {
-            self.input_cursor += 1;
-        }
+        self.input.move_cursor_right();
+    }
+
+    pub fn move_cursor_up(&mut self) {
+        self.input.move_cursor_up();
+    }
+
+    pub fn move_cursor_down(&mut self) {
+        self.input.move_cursor_down();
+    }
+
+    pub fn move_cursor_to_line_start(&mut self) {
+        self.input.move_cursor_to_line_start();
+    }
+
+    pub fn move_cursor_to_line_end(&mut self) {
+        self.input.move_cursor_to_line_end();
+    }
+
+    pub fn insert_newline(&mut self) {
+        self.input.insert_newline();
+    }
+
+    pub fn get_input_text(&self) -> String {
+        self.input.get_text()
+    }
+
+    pub fn is_input_empty(&self) -> bool {
+        self.input.is_empty()
     }
 
     pub fn scroll_up(&mut self) {
@@ -324,8 +433,114 @@ impl AppState {
     }
 
     pub fn scroll_down(&mut self) {
-        if self.output_scroll < self.output_lines.len().saturating_sub(1) {
+        // Only scroll down if there's content to scroll
+        if self.output_lines.len() > 0 {
             self.output_scroll += 1;
+        }
+    }
+
+    /// Enhanced scroll up with multiple lines
+    pub fn scroll_up_lines(&mut self, lines: usize) {
+        if self.output_scroll >= lines {
+            self.output_scroll -= lines;
+        } else {
+            self.output_scroll = 0;
+        }
+    }
+
+    /// Enhanced scroll down with multiple lines
+    pub fn scroll_down_lines(&mut self, lines: usize) {
+        if self.output_lines.len() > 0 {
+            self.output_scroll += lines;
+        }
+    }
+
+    /// Smooth scroll up with acceleration
+    pub fn smooth_scroll_up(&mut self, acceleration: usize) {
+        let scroll_amount = std::cmp::max(1, acceleration);
+        self.scroll_up_lines(scroll_amount);
+    }
+
+    /// Smooth scroll down with acceleration
+    pub fn smooth_scroll_down(&mut self, acceleration: usize) {
+        let scroll_amount = std::cmp::max(1, acceleration);
+        self.scroll_down_lines(scroll_amount);
+    }
+
+    pub fn scroll_page_up(&mut self, page_size: usize) {
+        self.output_scroll = self.output_scroll.saturating_sub(page_size);
+    }
+
+    pub fn scroll_page_down(&mut self, page_size: usize) {
+        self.output_scroll += page_size;
+    }
+
+    pub fn scroll_to_top(&mut self) {
+        self.output_scroll = 0;
+    }
+
+    pub fn scroll_to_bottom(&mut self) {
+        // Set scroll to a very large number - the layout will clamp it appropriately
+        self.output_scroll = usize::MAX;
+    }
+
+    /// Clamp scroll position to valid bounds given the viewport height
+    pub fn clamp_scroll(&mut self, viewport_height: usize) {
+        let total_lines = self.output_lines.len();
+        let max_scroll = if total_lines > viewport_height {
+            total_lines - viewport_height
+        } else {
+            0
+        };
+        self.output_scroll = std::cmp::min(self.output_scroll, max_scroll);
+    }
+
+    /// Get scroll position as a percentage (0-100)
+    pub fn get_scroll_percentage(&self, viewport_height: usize) -> u8 {
+        let total_lines = self.output_lines.len();
+        if total_lines <= viewport_height {
+            return 100; // At bottom when all content fits
+        }
+        
+        let max_scroll = total_lines - viewport_height;
+        if max_scroll == 0 {
+            return 100;
+        }
+        
+        let percentage = (self.output_scroll as f64 / max_scroll as f64) * 100.0;
+        percentage.round() as u8
+    }
+
+    /// Check if we're at the top of the output
+    pub fn is_at_top(&self) -> bool {
+        self.output_scroll == 0
+    }
+
+    /// Check if we're at the bottom of the output
+    pub fn is_at_bottom(&self, viewport_height: usize) -> bool {
+        let total_lines = self.output_lines.len();
+        if total_lines <= viewport_height {
+            return true;
+        }
+        
+        let max_scroll = total_lines - viewport_height;
+        self.output_scroll >= max_scroll
+    }
+
+    /// Get scroll position info for display
+    pub fn get_scroll_info(&self, viewport_height: usize) -> String {
+        let total_lines = self.output_lines.len();
+        if total_lines <= viewport_height {
+            return "All".to_string();
+        }
+        
+        let percentage = self.get_scroll_percentage(viewport_height);
+        if self.is_at_top() {
+            "Top".to_string()
+        } else if self.is_at_bottom(viewport_height) {
+            "Bot".to_string()
+        } else {
+            format!("{}%", percentage)
         }
     }
 
@@ -358,16 +573,18 @@ impl AppState {
     }
 
     pub fn update_autocomplete(&mut self) {
-        if self.input_text.starts_with('/') {
+        let input_text = self.input.get_text();
+        if input_text.starts_with('/') {
             // Only show supported commands
             let commands = vec![
                 "/help".to_string(),
                 "/settings".to_string(),
+                "/review".to_string(),
                 "/quit".to_string(),
                 "/exit".to_string(),
             ];
 
-            let input_lower = self.input_text.to_lowercase();
+            let input_lower = input_text.to_lowercase();
             self.autocomplete_suggestions = commands
                 .into_iter()
                 .filter(|cmd| cmd.starts_with(&input_lower))
@@ -407,8 +624,7 @@ impl AppState {
             .autocomplete_suggestions
             .get(self.autocomplete_selected)
         {
-            self.input_text = suggestion.clone();
-            self.input_cursor = self.input_text.len();
+            self.input.set_text(suggestion.clone());
             self.hide_autocomplete();
         }
     }
@@ -421,5 +637,312 @@ impl AppState {
     /// Hide settings popup
     pub fn hide_settings_popup(&mut self) {
         self.show_settings = false;
+    }
+
+    pub fn show_popup_input(&mut self) {
+        self.show_popup_input = true;
+    }
+
+    pub fn hide_popup_input(&mut self) {
+        self.show_popup_input = false;
+    }
+
+    /// Adjust horizontal scroll for the input field based on viewport width
+    pub fn adjust_input_horizontal_scroll(&mut self, viewport_width: usize) {
+        self.input.adjust_horizontal_scroll_for_viewport(viewport_width);
+    }
+
+    /// Add a command to history when it's submitted
+    pub fn add_to_history(&mut self, command: String) {
+        if !command.trim().is_empty() && !self.command_history.contains(&command) {
+            self.command_history.push(command);
+            // Keep history size reasonable (last 100 commands)
+            if self.command_history.len() > 100 {
+                self.command_history.remove(0);
+            }
+        }
+        // Reset history navigation state
+        self.history_index = None;
+        self.temp_input = None;
+    }
+
+    /// Navigate to previous command in history (up arrow)
+    pub fn history_previous(&mut self) {
+        if self.command_history.is_empty() {
+            return;
+        }
+
+        // If not currently navigating history, save current input
+        if self.history_index.is_none() {
+            let current_input = self.get_input_text();
+            if !current_input.trim().is_empty() {
+                self.temp_input = Some(current_input);
+            }
+            self.history_index = Some(self.command_history.len() - 1);
+        } else if let Some(index) = self.history_index {
+            if index > 0 {
+                self.history_index = Some(index - 1);
+            }
+        }
+
+        // Set input to the selected history item and position cursor at end
+        if let Some(index) = self.history_index {
+            if let Some(command) = self.command_history.get(index) {
+                self.input.set_text(command.clone());
+                // Position cursor at the end of the recalled command for immediate editing
+                self.input.move_cursor_to_end();
+            }
+        }
+    }
+
+    /// Navigate to next command in history (down arrow)
+    pub fn history_next(&mut self) {
+        if let Some(index) = self.history_index {
+            if index < self.command_history.len() - 1 {
+                self.history_index = Some(index + 1);
+                if let Some(command) = self.command_history.get(index + 1) {
+                    self.input.set_text(command.clone());
+                    // Position cursor at the end of the recalled command for immediate editing
+                    self.input.move_cursor_to_end();
+                }
+            } else {
+                // Reached the end of history, restore temp input or clear
+                self.history_index = None;
+                if let Some(temp) = self.temp_input.take() {
+                    self.input.set_text(temp);
+                    // Position cursor at the end of restored input
+                    self.input.move_cursor_to_end();
+                } else {
+                    self.input.clear();
+                }
+            }
+        }
+    }
+
+    /// Check if we're currently navigating through history
+    pub fn is_navigating_history(&self) -> bool {
+        self.history_index.is_some()
+    }
+
+    /// Reset history navigation state (called when user types)
+    pub fn reset_history_navigation(&mut self) {
+        self.history_index = None;
+        self.temp_input = None;
+    }
+
+    /// Get the current history position for display purposes
+    pub fn get_history_position(&self) -> Option<(usize, usize)> {
+        if let Some(index) = self.history_index {
+            Some((index + 1, self.command_history.len()))
+        } else {
+            None
+        }
+    }
+
+    /// Check if there are any commands in history
+    pub fn has_history(&self) -> bool {
+        !self.command_history.is_empty()
+    }
+
+    /// Jump to the first (oldest) command in history
+    pub fn history_jump_to_first(&mut self) {
+        if self.command_history.is_empty() {
+            return;
+        }
+
+        // Save current input if not already navigating
+        if !self.is_navigating_history() {
+            let current_input = self.get_input_text();
+            if !current_input.trim().is_empty() {
+                self.temp_input = Some(current_input);
+            }
+        }
+
+        // Jump to first (oldest) command
+        self.history_index = Some(0);
+        if let Some(command) = self.command_history.get(0) {
+            self.input.set_text(command.clone());
+            self.input.move_cursor_to_end();
+        }
+    }
+
+    /// Jump to the last (newest) command in history
+    pub fn history_jump_to_last(&mut self) {
+        if self.command_history.is_empty() {
+            return;
+        }
+
+        // Save current input if not already navigating
+        if !self.is_navigating_history() {
+            let current_input = self.get_input_text();
+            if !current_input.trim().is_empty() {
+                self.temp_input = Some(current_input);
+            }
+        }
+
+        // Jump to last (newest) command
+        let last_index = self.command_history.len() - 1;
+        self.history_index = Some(last_index);
+        if let Some(command) = self.command_history.get(last_index) {
+            self.input.set_text(command.clone());
+            self.input.move_cursor_to_end();
+        }
+    }
+
+    // Step History Management Methods
+    
+    pub fn start_new_step(&mut self, step_number: u32, description: String) {
+        let entry = StepHistoryEntry::new(step_number, description, self.agent_status.clone());
+        self.step_history.push(entry);
+        self.current_step = Some(step_number);
+    }
+    
+    pub fn add_output_to_current_step(&mut self, line: Line<'static>) {
+        if let Some(current_step) = self.current_step {
+            if let Some(entry) = self.step_history.iter_mut()
+                .find(|e| e.step_number == current_step) {
+                entry.add_output_line(line);
+            }
+        }
+    }
+    
+    pub fn update_current_step_status(&mut self, status: AgentStatus) {
+        if let Some(current_step) = self.current_step {
+            if let Some(entry) = self.step_history.iter_mut()
+                .find(|e| e.step_number == current_step) {
+                entry.status = status;
+            }
+        }
+    }
+    
+    pub fn complete_current_step(&mut self) {
+        if let Some(current_step) = self.current_step {
+            if let Some(entry) = self.step_history.iter_mut()
+                .find(|e| e.step_number == current_step) {
+                entry.status = AgentStatus::Completed;
+            }
+        }
+        self.current_step = None;
+    }
+    
+    // Step History Navigation Methods
+    
+    pub fn toggle_step_history_view(&mut self) {
+        self.show_step_history = !self.show_step_history;
+        if self.show_step_history {
+            // Save current context before entering history view
+            self.step_history_temp_input = Some(self.get_input_text());
+            self.step_history_temp_output_scroll = Some(self.output_scroll);
+            
+            // When showing history, start at the latest step
+            if !self.step_history.is_empty() {
+                self.history_view_index = Some(self.step_history.len() - 1);
+            }
+        } else {
+            // Restore context when exiting history view
+            if let Some(saved_input) = self.step_history_temp_input.take() {
+                self.input.set_text(saved_input);
+            }
+            if let Some(saved_scroll) = self.step_history_temp_output_scroll.take() {
+                self.output_scroll = saved_scroll;
+            }
+            
+            self.history_view_index = None;
+            self.step_content_scroll = 0;
+        }
+    }
+    
+    pub fn navigate_step_history_previous(&mut self) {
+        if self.step_history.is_empty() {
+            return;
+        }
+        
+        match self.history_view_index {
+            None => {
+                // Start from the latest step
+                self.history_view_index = Some(self.step_history.len() - 1);
+            }
+            Some(index) => {
+                if index > 0 {
+                    self.history_view_index = Some(index - 1);
+                }
+            }
+        }
+        self.step_content_scroll = 0;
+    }
+    
+    pub fn navigate_step_history_next(&mut self) {
+        if self.step_history.is_empty() {
+            return;
+        }
+        
+        if let Some(index) = self.history_view_index {
+            if index < self.step_history.len() - 1 {
+                self.history_view_index = Some(index + 1);
+            } else {
+                // Go back to current view
+                self.history_view_index = None;
+            }
+            self.step_content_scroll = 0;
+        }
+    }
+    
+    pub fn navigate_step_history_first(&mut self) {
+        if !self.step_history.is_empty() {
+            self.history_view_index = Some(0);
+            self.step_content_scroll = 0;
+        }
+    }
+    
+    pub fn navigate_step_history_last(&mut self) {
+        if !self.step_history.is_empty() {
+            self.history_view_index = Some(self.step_history.len() - 1);
+            self.step_content_scroll = 0;
+        }
+    }
+    
+    pub fn scroll_step_content_up(&mut self) {
+        if self.step_content_scroll > 0 {
+            self.step_content_scroll -= 1;
+        }
+    }
+    
+    pub fn scroll_step_content_down(&mut self, max_lines: usize) {
+        if let Some(step) = self.get_current_viewed_step() {
+            let content_lines = step.output_lines.len();
+            if content_lines > max_lines && self.step_content_scroll < content_lines - max_lines {
+                self.step_content_scroll += 1;
+            }
+        }
+    }
+    
+    pub fn get_current_viewed_step(&self) -> Option<&StepHistoryEntry> {
+        if let Some(index) = self.history_view_index {
+            self.step_history.get(index)
+        } else {
+            // Return the latest step if not viewing history
+            self.step_history.last()
+        }
+    }
+    
+    pub fn get_step_history_position(&self) -> Option<(usize, usize)> {
+        if self.step_history.is_empty() {
+            return None;
+        }
+        
+        let current = self.history_view_index.unwrap_or(self.step_history.len() - 1);
+        Some((current + 1, self.step_history.len()))
+    }
+    
+    pub fn is_navigating_step_history(&self) -> bool {
+        self.show_step_history && self.history_view_index.is_some()
+    }
+    
+    pub fn clear_step_history(&mut self) {
+        self.step_history.clear();
+        self.current_step = None;
+        self.history_view_index = None;
+        self.step_content_scroll = 0;
+        self.show_step_history = false;
     }
 }

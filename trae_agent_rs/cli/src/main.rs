@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
         .filter_level(if cli.verbose {
             log::LevelFilter::Debug
         } else {
-            log::LevelFilter::Info
+            log::LevelFilter::Error  // Only show errors by default, suppress warnings and info
         })
         .init();
 
@@ -90,11 +90,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn handle_interactive(_workspace: PathBuf, provider: String, model: String) -> Result<()> {
+async fn handle_interactive(workspace: PathBuf, provider: String, model: String) -> Result<()> {
     println!("🚀 Starting interactive session...");
 
-    // Create the TUI application first to load settings
-    let mut app = App::new(provider, model)?;
+    // Create the TUI application with the specified workspace
+    let mut app = App::new_with_workspace(provider, model, Some(workspace))?;
     let settings = app.get_settings();
 
     println!(
@@ -139,9 +139,16 @@ async fn handle_run(
             .unwrap_or_default(),
         "anthropic" => std::env::var("ANTHROPIC_API_KEY").unwrap_or_default(),
         "azure" => std::env::var("AZURE_API_KEY").unwrap_or_default(),
+        "openai_compatible" => std::env::var("OPENAI_COMPATIBLE_API_KEY")
+            .or_else(|_| std::env::var("API_KEY"))
+            .unwrap_or_default(),
+        "openrouter" => std::env::var("OPENROUTER_API_KEY")
+            .or_else(|_| std::env::var("OPENAI_COMPATIBLE_API_KEY"))
+            .or_else(|_| std::env::var("API_KEY"))
+            .unwrap_or_default(),
         _ => {
             eprintln!(
-                "❌ Unknown provider: {}. Supported providers: openai, anthropic, azure",
+                "❌ Unknown provider: {}. Supported providers: openai, anthropic, azure, openai_compatible, openrouter",
                 provider
             );
             std::process::exit(1);
@@ -154,6 +161,8 @@ async fn handle_run(
             "openai" => eprintln!("   export OPENAI_API_KEY=your_key_here"),
             "anthropic" => eprintln!("   export ANTHROPIC_API_KEY=your_key_here"),
             "azure" => eprintln!("   export AZURE_API_KEY=your_key_here"),
+            "openai_compatible" => eprintln!("   export OPENAI_COMPATIBLE_API_KEY=your_key_here"),
+            "openrouter" => eprintln!("   export OPENROUTER_API_KEY=your_key_here (or OPENAI_COMPATIBLE_API_KEY)"),
             _ => {}
         }
         std::process::exit(1);
@@ -163,6 +172,8 @@ async fn handle_run(
         "openai" => Some("https://api.openai.com/v1".to_string()),
         "anthropic" => Some("https://api.anthropic.com".to_string()),
         "azure" => std::env::var("AZURE_BASE_URL").ok(),
+        "openai_compatible" => std::env::var("OPENAI_COMPATIBLE_BASE_URL").ok(),
+        "openrouter" => Some("https://openrouter.ai/api/v1".to_string()),
         _ => None,
     };
 
@@ -181,14 +192,9 @@ async fn handle_run(
     println!("⚙️ Model config: {:?}", model_config);
 
     // Create and initialize the agent
-    match create_and_run_agent(model_config, workspace, task).await {
-        Ok(_) => {
-            println!("✅ Task completed successfully!");
-        }
-        Err(e) => {
-            eprintln!("❌ Task failed: {}", e);
-            std::process::exit(1);
-        }
+    if let Err(e) = create_and_run_agent(model_config, workspace, task).await {
+        eprintln!("❌ Task failed: {}", e);
+        std::process::exit(1);
     }
 
     Ok(())
@@ -215,8 +221,9 @@ async fn create_and_run_agent(
         vec![],
     );
 
-    // Create TraeAgent
-    let mut agent = TraeAgent::new(base_agent, Some(workspace.to_string_lossy().to_string()));
+    // Create TraeAgent with proper trajectory file path
+    let trajectory_path = workspace.join("trajectory.json");
+    let mut agent = TraeAgent::new(base_agent, Some(trajectory_path.to_string_lossy().to_string()));
 
     println!("🎯 Initializing task...");
 
@@ -242,6 +249,14 @@ async fn create_and_run_agent(
         .map_err(|e| anyhow::anyhow!("Agent execution failed: {}", e))?;
 
     println!("📋 Execution result: {:?}", result);
+
+    // Check if the task actually succeeded
+    if result.success {
+        println!("✅ Task completed successfully!");
+    } else {
+        let error_msg = result.final_result.unwrap_or_else(|| "Unknown error".to_string());
+        return Err(anyhow::anyhow!("❌ Task failed: {}", error_msg));
+    }
 
     Ok(())
 }

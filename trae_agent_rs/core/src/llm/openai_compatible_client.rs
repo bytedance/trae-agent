@@ -137,10 +137,8 @@ impl OpenAICompatibleClient {
         } else if base_url.ends_with("/") {
             format!("{}chat/completions", base_url)
         } else {
-            base_url.to_string()
+            format!("{}/chat/completions", base_url)
         };
-
-        println!("url: {}", url);
 
         let mut headers = reqwest::header::HeaderMap::new();
         let api_key = self
@@ -220,7 +218,17 @@ impl OpenAICompatibleClient {
 
         serde_json::from_str::<OpenAIResponse>(&response_text).map_err(|e| {
             eprintln!("Failed to parse response: {}", response_text);
-            LLMError::JsonError(e)
+            if response_text.trim().is_empty() {
+                LLMError::ApiError {
+                    status_code: 200,
+                    message: "Empty response body received from API".to_string(),
+                }
+            } else {
+                LLMError::ApiError {
+                    status_code: 200,
+                    message: format!("Invalid JSON response: {}. Response body: {}", e, response_text.chars().take(500).collect::<String>()),
+                }
+            }
         })
     }
 
@@ -240,7 +248,7 @@ impl OpenAICompatibleClient {
         } else if base_url.ends_with("/") {
             format!("{}chat/completions", base_url)
         } else {
-            base_url.to_string()
+            format!("{}/chat/completions", base_url)
         };
 
         let mut headers = reqwest::header::HeaderMap::new();

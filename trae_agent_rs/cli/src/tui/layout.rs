@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
-use super::{settings::SettingsEditor, state::AppState};
+use super::{popup_input::PopupInputEditor, review_history::ReviewHistoryDisplay, settings::SettingsEditor, state::AppState};
 
 pub struct Layout;
 
@@ -19,7 +19,14 @@ impl Layout {
     /// - Agent state and token usage (minimal height needed)
     /// - Input box (minimal height needed)
     /// - Shortcuts (minimal height needed)
-    pub fn render(frame: &mut Frame, state: &AppState, settings_editor: &Option<SettingsEditor>) {
+    pub fn render(
+        frame: &mut Frame, 
+        state: &mut AppState, 
+        settings_editor: &Option<SettingsEditor>,
+        popup_input_editor: &mut PopupInputEditor,
+        review_history: &mut ReviewHistoryDisplay,
+        show_review_history: bool,
+    ) {
         let size = frame.area();
         // Create main layout chunks with dynamic sizing
         let chunks = ratatui::layout::Layout::default()
@@ -50,9 +57,21 @@ impl Layout {
         if state.show_settings {
             Self::render_settings_popup(frame, size, state, settings_editor);
         }
+
+        if state.show_popup_input {
+            Self::render_popup_input(frame, size, popup_input_editor);
+        }
+
+        if show_review_history {
+            review_history.render_popup(frame, size);
+        }
+
+        if state.show_step_history {
+            Self::render_step_history_popup(frame, size, state);
+        }
     }
 
-    fn render_output_area(frame: &mut Frame, area: Rect, state: &AppState) {
+    fn render_output_area(frame: &mut Frame, area: Rect, state: &mut AppState) {
         let output_lines = if state.output_lines.is_empty() {
             vec![Line::from(Span::styled(
                 "No output yet...",
@@ -61,16 +80,62 @@ impl Layout {
                     .add_modifier(ratatui::style::Modifier::ITALIC),
             ))]
         } else {
-            state
-                .output_lines
-                .iter()
-                .skip(state.output_scroll.saturating_sub(area.height as usize))
-                .take(area.height as usize)
-                .cloned()
-                .collect::<Vec<_>>()
+            state.output_lines.iter().cloned().collect::<Vec<_>>()
         };
 
-        let paragraph = Paragraph::new(output_lines).wrap(Wrap { trim: false });
+        // Calculate scroll parameters
+        let total_lines = output_lines.len();
+        let visible_height = area.height as usize;
+        
+        // Clamp scroll position to valid bounds
+        state.clamp_scroll(visible_height);
+        
+        // output_scroll represents the number of lines to skip from the top
+        let max_scroll = if total_lines > visible_height {
+            total_lines - visible_height
+        } else {
+            0
+        };
+        
+        let clamped_scroll = std::cmp::min(state.output_scroll, max_scroll);
+
+        // Create scroll indicator for the title
+        let scroll_info = if total_lines > visible_height {
+            format!(" [{}]", state.get_scroll_info(visible_height))
+        } else {
+            String::new()
+        };
+
+        // Create title with scroll indicator
+        let title = format!("Output{}", scroll_info);
+        
+        // Create the paragraph with proper scrolling
+        let visible_lines = if total_lines == 0 {
+            // No content case
+            output_lines
+        } else if total_lines <= visible_height {
+            // Content fits entirely in view - no scrolling needed
+            output_lines
+        } else {
+            // Content is larger than view - apply scrolling
+            let start = clamped_scroll;
+            let end = std::cmp::min(start + visible_height, total_lines);
+            if start < total_lines {
+                output_lines[start..end].to_vec()
+            } else {
+                // Fallback if scroll position is invalid
+                output_lines
+            }
+        };
+        
+        let paragraph = Paragraph::new(visible_lines)
+            .wrap(Wrap { trim: false })
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .border_style(Style::default().fg(Color::Gray))
+            );
 
         frame.render_widget(paragraph, area);
     }
@@ -93,104 +158,47 @@ impl Layout {
         frame.render_widget(status_paragraph, area);
     }
 
-    fn render_input_area(frame: &mut Frame, area: Rect, state: &AppState) {
-        // Create styled prompt
-        let prompt_span = Span::styled(
-            "❯ ",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        );
-
-        let input_line = if state.input_text.is_empty() {
-            // Show placeholder text
-            let placeholder_span = Span::styled(
-                "Type your task here...",
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(ratatui::style::Modifier::ITALIC),
-            );
-            Line::from(vec![prompt_span, placeholder_span])
-        } else {
-            // Show actual input text
-
-            let input_span = Span::styled(&state.input_text, Style::default().fg(Color::White));
-            Line::from(vec![prompt_span, input_span])
-        };
-
-        let input_paragraph = Paragraph::new(vec![input_line]).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan))
-                .title("Input"),
-        );
-
-        frame.render_widget(input_paragraph, area);
-
-        // Position cursor after the prompt (accounting for border)
-        let cursor_x = 1
-            + 2
-            + if state.input_text.is_empty() {
-                0
-            } else {
-                state.input_cursor
-            }; // border + "❯ " + cursor position
-
-        frame.set_cursor_position(Position {
-            x: area.x + cursor_x as u16,
-            y: area.y + 1, // Account for top border
-        });
+    fn render_input_area(frame: &mut Frame, area: Rect, state: &mut AppState) {
+        // Adjust horizontal scroll before rendering to ensure cursor visibility
+        state.adjust_input_horizontal_scroll(area.width as usize);
+        
+        // Render the multi-line input widget
+        state.input.render(frame, area);
     }
 
     fn render_shortcuts_area(frame: &mut Frame, area: Rect) {
-        let shortcuts_lines = vec![
-            // Main shortcuts with highlighting
+        let shortcuts = vec![
             Line::from(vec![
-                Span::styled(
-                    "Enter",
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::styled(": Run │ ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    "Ctrl+C/Q/Esc",
-                    Style::default()
-                        .fg(Color::Red)
-                        .add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::styled(": Quit │ ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    "↑/↓",
-                    Style::default()
-                        .fg(Color::Blue)
-                        .add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::styled(": Scroll │ ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    "/help",
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(ratatui::style::Modifier::BOLD),
-                ),
-                Span::styled(": Help", Style::default().fg(Color::Gray)),
+                Span::styled("Enter", Style::default().fg(Color::Yellow)),
+                Span::raw(": Submit │ "),
+                Span::styled("Shift+Enter", Style::default().fg(Color::Yellow)),
+                Span::raw(": New line │ "),
+                Span::styled("↑/↓", Style::default().fg(Color::Yellow)),
+                Span::raw(": History │ "),
+                Span::styled("Tab", Style::default().fg(Color::Yellow)),
+                Span::raw(": Autocomplete"),
             ]),
-            Line::from(""),
-            // Commands line
             Line::from(vec![
-                Span::styled("Commands: ", Style::default().fg(Color::DarkGray)),
-                Span::styled("/help", Style::default().fg(Color::Green)),
-                Span::styled(", ", Style::default().fg(Color::DarkGray)),
-                Span::styled("/settings", Style::default().fg(Color::Green)),
-                Span::styled(", ", Style::default().fg(Color::DarkGray)),
-                Span::styled("/quit", Style::default().fg(Color::Red)),
-                Span::styled(", ", Style::default().fg(Color::DarkGray)),
-                Span::styled("/exit", Style::default().fg(Color::Red)),
+                Span::styled("Shift+↑/↓", Style::default().fg(Color::Yellow)),
+                Span::raw(": Scroll │ "),
+                Span::styled("Ctrl+K/J", Style::default().fg(Color::Yellow)),
+                Span::raw(": Scroll line │ "),
+                Span::styled("Ctrl+U/D", Style::default().fg(Color::Yellow)),
+                Span::raw(": Scroll page │ "),
+                Span::styled("PgUp/PgDn", Style::default().fg(Color::Yellow)),
+                Span::raw(": Page scroll"),
             ]),
-            Line::from(""),
+            Line::from(vec![
+                Span::styled("Ctrl+Home/End", Style::default().fg(Color::Yellow)),
+                Span::raw(": Top/Bottom │ "),
+                Span::styled("Ctrl+H", Style::default().fg(Color::Yellow)),
+                Span::raw(": History │ "),
+                Span::styled("Ctrl+Q", Style::default().fg(Color::Yellow)),
+                Span::raw(": Quit"),
+            ]),
         ];
 
-        let shortcuts_paragraph = Paragraph::new(shortcuts_lines);
+        let shortcuts_paragraph = Paragraph::new(shortcuts);
         frame.render_widget(shortcuts_paragraph, area);
     }
 
@@ -378,5 +386,277 @@ impl Layout {
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center);
         frame.render_widget(instructions_paragraph, field_chunks[5]);
+    }
+
+    fn render_popup_input(
+        frame: &mut Frame,
+        area: Rect,
+        popup_input_editor: &mut PopupInputEditor,
+    ) {
+        // Calculate popup size (larger than settings popup for multiline input)
+        let popup_width = std::cmp::min(100, area.width.saturating_sub(4));
+        let popup_height = std::cmp::min(25, area.height.saturating_sub(4));
+        let x = (area.width.saturating_sub(popup_width)) / 2;
+        let y = (area.height.saturating_sub(popup_height)) / 2;
+        let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+        // Update scroll to ensure proper display of multi-line content
+        popup_input_editor.update_scroll(popup_height as usize);
+
+        // Clear the area behind the popup
+        frame.render_widget(Clear, popup_area);
+
+        // Create the popup block
+        let popup_block = Block::default()
+            .title(popup_input_editor.title.clone())
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Blue))
+            .style(Style::default().bg(Color::Black));
+
+        // Split popup into sections
+        let inner_area = popup_block.inner(popup_area);
+        let popup_chunks = ratatui::layout::Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(0),    // Text content area
+                Constraint::Length(1), // Instructions
+            ])
+            .split(inner_area);
+
+        // Render the popup border
+        frame.render_widget(popup_block, popup_area);
+
+        // Render text content
+        let lines = popup_input_editor.get_lines();
+        let scroll_offset = popup_input_editor.get_scroll_offset();
+        let horizontal_scroll = popup_input_editor.get_horizontal_scroll();
+        let (cursor_line, cursor_col) = popup_input_editor.get_cursor_position();
+
+        let content_height = popup_chunks[0].height as usize;
+        let content_width = popup_chunks[0].width as usize;
+
+        // Create display lines with cursor
+        let mut display_lines = Vec::new();
+        let visible_start = scroll_offset;
+        let visible_end = std::cmp::min(lines.len(), visible_start + content_height);
+
+        for (line_idx, line) in lines.iter().enumerate().skip(visible_start).take(content_height) {
+            if line_idx >= visible_end {
+                break;
+            }
+
+            let mut display_line = if line.len() > horizontal_scroll {
+                line.chars().skip(horizontal_scroll).take(content_width).collect::<String>()
+            } else {
+                String::new()
+            };
+
+            // Add cursor if this is the cursor line
+            if line_idx == cursor_line {
+                let cursor_pos_in_line = if cursor_col >= horizontal_scroll {
+                    cursor_col.saturating_sub(horizontal_scroll)
+                } else {
+                    0
+                };
+
+                if cursor_pos_in_line <= display_line.len() {
+                    // Insert cursor character
+                    if cursor_pos_in_line == display_line.len() {
+                        display_line.push('│');
+                    } else {
+                        display_line.insert(cursor_pos_in_line, '│');
+                    }
+                }
+            }
+
+            display_lines.push(Line::from(display_line));
+        }
+
+        // Fill remaining lines if needed
+        while display_lines.len() < content_height {
+            display_lines.push(Line::from(""));
+        }
+
+        let content_paragraph = Paragraph::new(display_lines)
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: false });
+        frame.render_widget(content_paragraph, popup_chunks[0]);
+
+        // Render instructions
+        let instructions_paragraph = Paragraph::new(popup_input_editor.instructions.clone())
+            .style(Style::default().fg(Color::Gray))
+            .wrap(Wrap { trim: false });
+        frame.render_widget(instructions_paragraph, popup_chunks[1]);
+    }
+
+    fn render_step_history_popup(frame: &mut Frame, area: Rect, state: &AppState) {
+        // Clear the background
+        frame.render_widget(Clear, area);
+
+        // Create popup area (80% of screen)
+        let popup_width = (area.width as f32 * 0.8) as u16;
+        let popup_height = (area.height as f32 * 0.8) as u16;
+        let popup_x = (area.width.saturating_sub(popup_width)) / 2;
+        let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+        
+        let popup_area = Rect {
+            x: popup_x,
+            y: popup_y,
+            width: popup_width,
+            height: popup_height,
+        };
+
+        // Create main block
+        let block = Block::default()
+            .title("Step History (Ctrl+H to close)")
+            .borders(Borders::ALL)
+            .style(Style::default().fg(Color::White));
+        frame.render_widget(block, popup_area);
+
+        // Create inner area for content
+        let inner_area = popup_area.inner(ratatui::layout::Margin { horizontal: 1, vertical: 1 });
+
+        // Split into two panels: step list (left) and step content (right)
+        let panels = ratatui::layout::Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(30), // Step list
+                Constraint::Percentage(70), // Step content
+            ])
+            .split(inner_area);
+
+        // Render step list
+        Self::render_step_list(frame, panels[0], state);
+        
+        // Render step content
+        Self::render_step_content(frame, panels[1], state);
+    }
+
+    fn render_step_list(frame: &mut Frame, area: Rect, state: &AppState) {
+        let block = Block::default()
+            .title("Steps")
+            .borders(Borders::ALL)
+            .style(Style::default().fg(Color::Blue));
+
+        let inner_area = area.inner(ratatui::layout::Margin { horizontal: 1, vertical: 1 });
+
+        if state.step_history.is_empty() {
+            let no_steps = Paragraph::new("No steps recorded yet")
+                .style(Style::default().fg(Color::Gray))
+                .alignment(Alignment::Center);
+            frame.render_widget(block, area);
+            frame.render_widget(no_steps, inner_area);
+            return;
+        }
+
+        // Create list items for each step
+        let items: Vec<ListItem> = state.step_history
+            .iter()
+            .enumerate()
+            .map(|(idx, step)| {
+                let is_selected = state.history_view_index == Some(idx);
+                let status_icon = match step.status {
+                    super::state::AgentStatus::Running => "🔄",
+                    super::state::AgentStatus::Idle => "✅",
+                    super::state::AgentStatus::Thinking => "🤔",
+                    super::state::AgentStatus::CallingTool => "🔧",
+                    super::state::AgentStatus::Reflecting => "💭",
+                    super::state::AgentStatus::Completed => "✅",
+                    super::state::AgentStatus::Error(_) => "❌",
+                };
+                
+                let style = if is_selected {
+                    Style::default().bg(Color::Blue).fg(Color::White)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+
+                let content = format!("{} Step {}: {}", 
+                    status_icon, 
+                    step.step_number, 
+                    step.description.chars().take(40).collect::<String>()
+                );
+                
+                ListItem::new(content).style(style)
+            })
+            .collect();
+
+        let list = List::new(items)
+            .style(Style::default().fg(Color::White));
+
+        frame.render_widget(block, area);
+        frame.render_widget(list, inner_area);
+    }
+
+    fn render_step_content(frame: &mut Frame, area: Rect, state: &AppState) {
+        let block = Block::default()
+            .title("Step Details")
+            .borders(Borders::ALL)
+            .style(Style::default().fg(Color::Green));
+
+        let inner_area = area.inner(ratatui::layout::Margin { horizontal: 1, vertical: 1 });
+
+        if let Some(step) = state.get_current_viewed_step() {
+            // Create header with step info
+            let header_height = 3;
+            let content_area = Rect {
+                x: inner_area.x,
+                y: inner_area.y + header_height,
+                width: inner_area.width,
+                height: inner_area.height.saturating_sub(header_height),
+            };
+            
+            let header_area = Rect {
+                x: inner_area.x,
+                y: inner_area.y,
+                width: inner_area.width,
+                height: header_height,
+            };
+
+            // Render header
+            let header_lines = vec![
+                Line::from(vec![
+                    Span::styled("Step: ", Style::default().fg(Color::Yellow)),
+                    Span::styled(step.step_number.to_string(), Style::default().fg(Color::White)),
+                ]),
+                Line::from(vec![
+                    Span::styled("Time: ", Style::default().fg(Color::Yellow)),
+                    Span::styled(step.formatted_timestamp(), Style::default().fg(Color::White)),
+                ]),
+                Line::from(vec![
+                    Span::styled("Description: ", Style::default().fg(Color::Yellow)),
+                    Span::styled(&step.description, Style::default().fg(Color::White)),
+                ]),
+            ];
+            
+            let header_paragraph = Paragraph::new(header_lines);
+            frame.render_widget(header_paragraph, header_area);
+
+            // Render step content with scrolling
+            let visible_height = content_area.height as usize;
+            let total_lines = step.output_lines.len();
+            let scroll_offset = state.step_content_scroll;
+            
+            let visible_lines = if total_lines == 0 {
+                vec![Line::from("No output for this step")]
+            } else if total_lines <= visible_height {
+                step.output_lines.clone()
+            } else {
+                let start = scroll_offset.min(total_lines.saturating_sub(visible_height));
+                let end = (start + visible_height).min(total_lines);
+                step.output_lines[start..end].to_vec()
+            };
+
+            let content_paragraph = Paragraph::new(visible_lines)
+                .wrap(Wrap { trim: false });
+            frame.render_widget(content_paragraph, content_area);
+        } else {
+            let no_selection = Paragraph::new("Select a step to view details")
+                .style(Style::default().fg(Color::Gray))
+                .alignment(Alignment::Center);
+            frame.render_widget(no_selection, inner_area);
+        }
+
+        frame.render_widget(block, area);
     }
 }
