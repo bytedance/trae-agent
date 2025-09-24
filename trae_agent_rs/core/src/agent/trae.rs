@@ -7,14 +7,24 @@ use std::vec;
 use tokio::sync::mpsc;
 
 use crate::agent::base_agent::*;
-use crate::bash::Bash;
-use crate::edit::Edit;
 use crate::llm_basics::{LLMUsage, TextContent};
 use crate::trajectory::Recorder;
 use crate::utils::trajectory::{LLMRecord, Trajectory, system_time_to_string};
 use crate::{ContentItem, LLMMessage, Tool, agent};
+use crate::{
+    bash::Bash, edit_file::EditFile, read_file::ReadFile, read_many_files::ReadManyFiles,
+    todo_list::TodoList, tools::list_directory::ListDirectory, write_file::WriteFile,
+};
 
-const TRAE_AGENT_TOOL_NAMES: [&str; 2] = ["str_replace_based_edit_tool", "bash"];
+const TRAE_AGENT_TOOL_NAMES: [&str; 7] = [
+    "str_replace_based_edit_tool",
+    "bash",
+    "list_directory",
+    "read_file",
+    "read_many_files",
+    "todo_list",
+    "write_file",
+];
 
 /// Messages that can be sent from TraeAgent to CLI for real-time updates
 #[derive(Debug, Clone)]
@@ -42,7 +52,7 @@ pub struct TraeAgent {
     pub base_commit: Option<String>,
     pub must_patch: Option<String>,
     pub patch_path: Option<String>,
-    
+
     /// Optional channel sender for real-time updates to CLI
     pub update_sender: Option<mpsc::UnboundedSender<AgentUpdate>>,
 }
@@ -56,7 +66,7 @@ impl TraeAgent {
                 .as_secs();
             format!("./trajectories/trajectory_{}.json", timestamp)
         };
-        
+
         TraeAgent {
             baseagent: base_agent,
             initial_msgs: vec![],
@@ -73,12 +83,12 @@ impl TraeAgent {
             update_sender: None,
         }
     }
-    
+
     /// Set the update sender for real-time communication with CLI
     pub fn set_update_sender(&mut self, sender: mpsc::UnboundedSender<AgentUpdate>) {
         self.update_sender = Some(sender);
     }
-    
+
     /// Send an update to the CLI if sender is available
     fn send_update(&self, update: AgentUpdate) {
         if let Some(sender) = &self.update_sender {
@@ -110,7 +120,32 @@ impl Agent for TraeAgent {
                         tools_map.insert(tool.to_string().clone(), tools.len() - 1);
                     }
                     "str_replace_based_edit_tool" => {
-                        tools.push(Box::new(Edit::default()));
+                        tools.push(Box::new(EditFile::default()));
+
+                        tools_map.insert(tool.to_string().clone(), tools.len() - 1);
+                    }
+                    "list_directory" => {
+                        tools.push(Box::new(ListDirectory::default()));
+
+                        tools_map.insert(tool.to_string().clone(), tools.len() - 1);
+                    }
+                    "read_file" => {
+                        tools.push(Box::new(ReadFile::default()));
+
+                        tools_map.insert(tool.to_string().clone(), tools.len() - 1);
+                    }
+                    "read_many_files" => {
+                        tools.push(Box::new(ReadManyFiles::default()));
+
+                        tools_map.insert(tool.to_string().clone(), tools.len() - 1);
+                    }
+                    "todo_list" => {
+                        tools.push(Box::new(TodoList::default()));
+
+                        tools_map.insert(tool.to_string().clone(), tools.len() - 1);
+                    }
+                    "write_file" => {
+                        tools.push(Box::new(WriteFile::default()));
 
                         tools_map.insert(tool.to_string().clone(), tools.len() - 1);
                     }
@@ -196,10 +231,14 @@ impl Agent for TraeAgent {
     }
     async fn run(&mut self) -> Result<AgentExecution, &'static str> {
         let start_time = SystemTime::now();
-        
+
         // Send initial status update
-        self.send_update(AgentUpdate::StatusUpdate("Starting task execution".to_string()));
-        self.send_update(AgentUpdate::Output("🚀 Agent execution started".to_string()));
+        self.send_update(AgentUpdate::StatusUpdate(
+            "Starting task execution".to_string(),
+        ));
+        self.send_update(AgentUpdate::Output(
+            "🚀 Agent execution started".to_string(),
+        ));
 
         //dbg!(&start_time);
         let mut exec_agent = AgentExecution {
@@ -219,15 +258,18 @@ impl Agent for TraeAgent {
 
         while step_number <= self.baseagent.max_step {
             // Send step update
-            self.send_update(AgentUpdate::StepUpdate { 
-                step: step_number, 
-                description: format!("Executing step {}", step_number) 
+            self.send_update(AgentUpdate::StepUpdate {
+                step: step_number,
+                description: format!("Executing step {}", step_number),
             });
-            self.send_update(AgentUpdate::Output(format!("🔄 Step {}: Starting execution", step_number)));
-            
+            self.send_update(AgentUpdate::Output(format!(
+                "🔄 Step {}: Starting execution",
+                step_number
+            )));
+
             // start a new step record
             let mut new_llm_record = LLMRecord {
-                step_number: step_number,
+                step_number,
                 timestamp: SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .unwrap()
@@ -279,7 +321,7 @@ impl Agent for TraeAgent {
                     new_llm_record.response_content = format!("Error: {}", e);
                     new_llm_record.error_message = Some(e.to_string());
                     new_llm_record.steps = Some(step.clone());
-                    
+
                     self.trajectory_recorder.add_llm_record(new_llm_record);
                     self.trajectory_recorder.increment_error_count();
 
@@ -296,17 +338,18 @@ impl Agent for TraeAgent {
 
                     let success_msg = format!("✅ Step {} completed successfully", step_number);
                     self.send_update(AgentUpdate::Output(success_msg));
-                    
+
                     // Send token usage update if available
                     // TODO: Extract actual token usage from step execution
-                    self.send_update(AgentUpdate::TokenUsage { 
+                    self.send_update(AgentUpdate::TokenUsage {
                         input: 100, // Placeholder - should be extracted from actual execution
-                        output: 50  // Placeholder - should be extracted from actual execution
+                        output: 50, // Placeholder - should be extracted from actual execution
                     });
 
-                    new_llm_record.response_content = format!("Step completed with {} new messages", new_messages.len());
+                    new_llm_record.response_content =
+                        format!("Step completed with {} new messages", new_messages.len());
                     new_llm_record.steps = Some(step.clone());
-                    
+
                     self.trajectory_recorder.add_llm_record(new_llm_record);
 
                     self.baseagent.finalize_step(
@@ -318,7 +361,9 @@ impl Agent for TraeAgent {
                     // Check if task is completed
                     if exec_agent.agent_state == AgentState::COMPLETED {
                         self.send_update(AgentUpdate::StatusUpdate("Completed".to_string()));
-                        self.send_update(AgentUpdate::TaskCompleted("Task completed successfully".to_string()));
+                        self.send_update(AgentUpdate::TaskCompleted(
+                            "Task completed successfully".to_string(),
+                        ));
                         break;
                     }
                 }
@@ -330,16 +375,19 @@ impl Agent for TraeAgent {
         // Check if we exceeded max steps without completion
         if step_number > self.baseagent.max_step && exec_agent.agent_state != AgentState::COMPLETED
         {
-            let timeout_msg = "⏰ Task execution exceeded maximum steps without completion".to_string();
+            let timeout_msg =
+                "⏰ Task execution exceeded maximum steps without completion".to_string();
             exec_agent.final_result = Some(timeout_msg.clone());
             exec_agent.agent_state = AgentState::ERROR;
             exec_agent.success = false;
-            
+
             self.send_update(AgentUpdate::Error(timeout_msg.clone()));
             self.send_update(AgentUpdate::Output(timeout_msg));
         } else if exec_agent.agent_state == AgentState::COMPLETED {
             exec_agent.success = true;
-            self.send_update(AgentUpdate::Output("🎉 Task execution completed successfully!".to_string()));
+            self.send_update(AgentUpdate::Output(
+                "🎉 Task execution completed successfully!".to_string(),
+            ));
         }
 
         // Calculate execution time
@@ -349,7 +397,10 @@ impl Agent for TraeAgent {
         exec_agent.execution_time = dur.as_secs_f64();
 
         // Send final execution time update
-        self.send_update(AgentUpdate::Output(format!("⏱️ Total execution time: {:.2}s", exec_agent.execution_time)));
+        self.send_update(AgentUpdate::Output(format!(
+            "⏱️ Total execution time: {:.2}s",
+            exec_agent.execution_time
+        )));
 
         // Collect total token usage from all steps
         exec_agent.total_token = Some(LLMUsage {
@@ -366,7 +417,7 @@ impl Agent for TraeAgent {
             exec_agent.final_result.clone(),
             exec_agent.execution_time,
         );
-        
+
         // Close tools implementation
         self.baseagent.close_tools();
 
@@ -379,10 +430,7 @@ impl Agent for TraeAgent {
         // This method is required by the trait but not used in our implementation
         // We use the set_update_sender method instead for channel communication
     }
-
 }
-
-
 
 pub const TRAE_AGENT_SYSTEM_PROMPT: &str = r###"You are an expert AI software engineering agent.
 

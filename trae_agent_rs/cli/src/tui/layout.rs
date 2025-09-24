@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
-use super::{state::AppState, settings::SettingsEditor};
+use super::{settings::SettingsEditor, state::AppState};
 
 pub struct Layout;
 
@@ -78,11 +78,10 @@ impl Layout {
     fn render_status_area(frame: &mut Frame, area: Rect, state: &AppState) {
         // Create a single line status bar with both agent status and token usage
         let status_text = format!(
-            "Status: {} │ Tokens: In:{} Out:{} Total:{}",
+            "Status: {} │ Tokens: ⬆️ {} ⬇️ {}",
             state.agent_status.display(),
             state.token_usage.input,
             state.token_usage.output,
-            state.token_usage.total()
         );
 
         let status_paragraph = Paragraph::new(status_text).style(
@@ -182,6 +181,8 @@ impl Layout {
                 Span::styled("Commands: ", Style::default().fg(Color::DarkGray)),
                 Span::styled("/help", Style::default().fg(Color::Green)),
                 Span::styled(", ", Style::default().fg(Color::DarkGray)),
+                Span::styled("/settings", Style::default().fg(Color::Green)),
+                Span::styled(", ", Style::default().fg(Color::DarkGray)),
                 Span::styled("/quit", Style::default().fg(Color::Red)),
                 Span::styled(", ", Style::default().fg(Color::DarkGray)),
                 Span::styled("/exit", Style::default().fg(Color::Red)),
@@ -277,10 +278,15 @@ impl Layout {
         frame.render_widget(popup_paragraph, popup_area);
     }
 
-    fn render_settings_popup(frame: &mut Frame, area: Rect, state: &AppState, settings_editor: &Option<SettingsEditor>) {
+    fn render_settings_popup(
+        frame: &mut Frame,
+        area: Rect,
+        _state: &AppState,
+        settings_editor: &Option<SettingsEditor>,
+    ) {
         // Calculate popup size (larger than quit popup for form fields)
-        let popup_width = 60;
-        let popup_height = 16;
+        let popup_width = 80;
+        let popup_height = 18;
         let x = (area.width.saturating_sub(popup_width)) / 2;
         let y = (area.height.saturating_sub(popup_height)) / 2;
         let popup_area = Rect::new(x, y, popup_width, popup_height);
@@ -315,46 +321,43 @@ impl Layout {
 
         // Get actual settings values from editor
         if let Some(editor) = settings_editor {
-            let settings = editor.get_settings();
             let current_field = editor.get_current_field();
-            
-            let fields = [
-                ("Provider", settings.provider.as_str()),
-                ("Model", settings.model.as_str()),
-                ("API Key", settings.api_key.as_deref().unwrap_or("")),
-                ("Base URL", settings.base_url.as_deref().unwrap_or("")),
-                ("Workspace", &settings.workspace.to_string_lossy().to_string()),
-            ];
 
             // Render each field
-            for (i, (label, value)) in fields.iter().enumerate() {
+            for i in 0..SettingsEditor::field_count() {
                 if i < field_chunks.len() - 2 {
                     let is_selected = i == current_field;
                     let is_editing = editor.editing_field == Some(i);
-                    
+                    let is_editable = editor.is_field_editable(i);
+
+                    let label = SettingsEditor::field_name(i);
+                    let value = editor.field_value(i);
+
                     let display_value = if is_editing {
                         // Show current input when editing
                         &editor.temp_input
-                    } else if label == &"API Key" && !value.is_empty() {
-                        "***hidden***"
                     } else {
-                        value
+                        &value
                     };
-                    
+
                     let field_text = if is_editing {
                         format!("{}: {}|", label, display_value) // Add cursor indicator
                     } else {
                         format!("{}: {}", label, display_value)
                     };
-                    
+
                     let style = if is_editing {
                         Style::default().fg(Color::Green).bg(Color::DarkGray)
+                    } else if is_selected && !is_editable {
+                        Style::default().fg(Color::Gray).bg(Color::DarkGray)
                     } else if is_selected {
                         Style::default().fg(Color::Yellow).bg(Color::DarkGray)
+                    } else if !is_editable {
+                        Style::default().fg(Color::Gray)
                     } else {
                         Style::default().fg(Color::White)
                     };
-                    
+
                     let field_paragraph = Paragraph::new(field_text).style(style);
                     frame.render_widget(field_paragraph, field_chunks[i]);
                 }
@@ -366,10 +369,10 @@ impl Layout {
             if editor.editing_field.is_some() {
                 "Enter: Confirm • Esc: Cancel"
             } else {
-                "Tab/↑↓: Navigate • Enter: Edit • s: Save • Esc: Close"
+                "Tab/↑↓: Navigate • Enter: Edit (Workspace is read-only) • s: Save • Esc: Close"
             }
         } else {
-            "Tab/↑↓: Navigate • Enter: Edit • s: Save • Esc: Close"
+            "Tab/↑↓: Navigate • Enter: Edit (Workspace is read-only) • s: Save • Esc: Close"
         };
         let instructions_paragraph = Paragraph::new(instructions)
             .style(Style::default().fg(Color::Gray))

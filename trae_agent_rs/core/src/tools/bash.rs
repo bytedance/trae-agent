@@ -93,6 +93,21 @@ impl Tool for Bash {
         v
     }
 
+    fn get_descriptive_message(
+        &self,
+        arguments: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> String {
+        let cmd = arguments
+            .get("command")
+            .and_then(|x| x.as_str())
+            .unwrap_or("");
+        format!("Running bash command: {}", cmd)
+    }
+
+    fn needs_approval(&self, _arguments: &std::collections::HashMap<String, Value>) -> bool {
+        true
+    }
+
     fn execute(
         &mut self,
         arguments: std::collections::HashMap<String, serde_json::Value>,

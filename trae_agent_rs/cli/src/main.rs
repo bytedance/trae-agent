@@ -90,13 +90,13 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn handle_interactive(workspace: PathBuf, provider: String, model: String) -> Result<()> {
+async fn handle_interactive(_workspace: PathBuf, provider: String, model: String) -> Result<()> {
     println!("🚀 Starting interactive session...");
-    
+
     // Create the TUI application first to load settings
-    let mut app = App::new(provider, model, workspace)?;
+    let mut app = App::new(provider, model)?;
     let settings = app.get_settings();
-    
+
     println!(
         "📁 Workspace: {}",
         settings.workspace.display().to_string().bright_blue()
