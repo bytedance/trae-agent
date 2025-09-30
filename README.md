@@ -80,15 +80,30 @@ models:
 
 **Note:** The `trae_config.yaml` file is ignored by git to protect your API keys.
 
+### Using Base URL
+In some cases, we need to use a custom URL for the api. Just add the `base_url` field after `provider`, take the following config as an example:
+
+```
+openai:
+    api_key: your_openrouter_api_key
+    provider: openai
+    base_url: https://openrouter.ai/api/v1
+```
+**Note:** For field formatting, use spaces only. Tabs (\t) are not allowed.
+
 ### Environment Variables (Alternative)
 
 You can also configure API keys using environment variables and store them in the .env file:
 
 ```bash
 export OPENAI_API_KEY="your-openai-api-key"
+export OPENAI_BASE_URL="your-openai-base-url"
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
+export ANTHROPIC_BASE_URL="your-anthropic-base-url"
 export GOOGLE_API_KEY="your-google-api-key"
+export GOOGLE_BASE_URL="your-google-base-url"
 export OPENROUTER_API_KEY="your-openrouter-api-key"
+export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
 export DOUBAO_API_KEY="your-doubao-api-key"
 export DOUBAO_BASE_URL="https://ark.cn-beijing.volces.com/api/v3/"
 ```
@@ -161,6 +176,31 @@ trae-cli run "Update API endpoints" --must-patch
 
 # Interactive mode with custom settings
 trae-cli interactive --provider openai --model gpt-4o --max-steps 30
+```
+
+## Docker Mode Commands
+### Preparation
+**Important**: You need to make sure Docker is configured in your environment.
+
+### Usage
+```bash
+# Specify a Docker image to run the task in a new container
+trae-cli run "Add tests for utils module" --docker-image python:3.11
+
+# Specify a Docker image to run the task in a new container and mount the directory
+trae-cli run "write a script to print helloworld" --docker-image python:3.12 --working-dir test_workdir/
+
+# Attach to an existing Docker container by ID (`--working-dir` is invalid with `--docker-container-id`)
+trae-cli run "Update API endpoints" --docker-container-id 91998a56056c
+
+# Specify an absolute path to a Dockerfile to build an environment
+trae-cli run "Debug authentication" --dockerfile-path test_workspace/Dockerfile
+
+# Specify a path to a local Docker image file (tar archive) to load
+trae-cli run "Fix the bug in main.py" --docker-image-file test_workspace/trae_agent_custom.tar
+
+# Remove the Docker container after finishing the task (keep default)
+trae-cli run "Add tests for utils module" --docker-image python:3.11 --docker-keep false
 ```
 
 ### Interactive Mode Commands
