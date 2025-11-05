@@ -21,10 +21,10 @@ class ModelParameters:
 
     model: str
     api_key: str
-    max_tokens: int
-    temperature: float
-    top_p: float
-    top_k: int
+    # max_tokens: int
+    # temperature: float
+    # top_p: float
+    # top_k: int
     parallel_tool_calls: bool
     max_retries: int
     base_url: str | None = None
@@ -131,10 +131,10 @@ class LegacyConfig:
                     base_url=str(provider_config.get("base_url"))
                     if "base_url" in provider_config
                     else None,
-                    max_tokens=int(provider_config.get("max_tokens", 1000)),
-                    temperature=float(provider_config.get("temperature", 0.5)),
-                    top_p=float(provider_config.get("top_p", 1)),
-                    top_k=int(provider_config.get("top_k", 0)),
+                    # max_tokens=int(provider_config.get("max_tokens", 1000)),
+                    # temperature=float(provider_config.get("temperature", 0.5)),
+                    # top_p=float(provider_config.get("top_p", 1)),
+                    # top_k=int(provider_config.get("top_k", 0)),
                     max_retries=int(provider_config.get("max_retries", 10)),
                     parallel_tool_calls=bool(provider_config.get("parallel_tool_calls", False)),
                     api_version=str(provider_config.get("api_version"))

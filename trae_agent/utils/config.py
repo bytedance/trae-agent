@@ -34,9 +34,16 @@ class ModelConfig:
 
     model: str
     model_provider: ModelProvider
+<<<<<<< HEAD
+    # max_tokens: int
+    # temperature: float
+    # top_p: float
+    # top_k: int
+=======
     temperature: float
     top_p: float
     top_k: int
+>>>>>>> 7116aea43f7256e285bffc36d1833c4cd8bc55da
     parallel_tool_calls: bool
     max_retries: int
     max_tokens: int | None = None  # Legacy max_tokens parameter, optional
@@ -346,10 +353,10 @@ class Config:
         model_config = ModelConfig(
             model=legacy_config.model_providers[legacy_config.default_provider].model,
             model_provider=model_provider,
-            max_tokens=legacy_config.model_providers[legacy_config.default_provider].max_tokens,
-            temperature=legacy_config.model_providers[legacy_config.default_provider].temperature,
-            top_p=legacy_config.model_providers[legacy_config.default_provider].top_p,
-            top_k=legacy_config.model_providers[legacy_config.default_provider].top_k,
+            # max_tokens=legacy_config.model_providers[legacy_config.default_provider].max_tokens,
+            # temperature=legacy_config.model_providers[legacy_config.default_provider].temperature,
+            # top_p=legacy_config.model_providers[legacy_config.default_provider].top_p,
+            # top_k=legacy_config.model_providers[legacy_config.default_provider].top_k,
             parallel_tool_calls=legacy_config.model_providers[
                 legacy_config.default_provider
             ].parallel_tool_calls,
