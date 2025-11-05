@@ -34,15 +34,41 @@ class ModelConfig:
 
     model: str
     model_provider: ModelProvider
+<<<<<<< HEAD
     # max_tokens: int
     # temperature: float
     # top_p: float
     # top_k: int
+=======
+    temperature: float
+    top_p: float
+    top_k: int
+>>>>>>> 7116aea43f7256e285bffc36d1833c4cd8bc55da
     parallel_tool_calls: bool
     max_retries: int
+    max_tokens: int | None = None  # Legacy max_tokens parameter, optional
     supports_tool_calling: bool = True
     candidate_count: int | None = None  # Gemini specific field
     stop_sequences: list[str] | None = None
+    max_completion_tokens: int | None = None  # Azure OpenAI specific field
+
+    def get_max_tokens_param(self) -> int:
+        """Get the maximum tokens parameter value.Prioritizes max_completion_tokens, falls back to max_tokens if not available."""
+        if self.max_completion_tokens is not None:
+            return self.max_completion_tokens
+        elif self.max_tokens is not None:
+            return self.max_tokens
+        else:
+            # Return default value if neither is set
+            return 4096
+
+    def should_use_max_completion_tokens(self) -> bool:
+        """Determine whether to use the max_completion_tokens parameter.Primarily used for Azure OpenAI's newer models (e.g., gpt-5)."""
+        return (
+            self.max_completion_tokens is not None
+            and self.model_provider.provider == "azure"
+            and ("gpt-5" in self.model or "o3" in self.model or "o4-mini" in self.model)
+        )
 
     def resolve_config_values(
         self,
