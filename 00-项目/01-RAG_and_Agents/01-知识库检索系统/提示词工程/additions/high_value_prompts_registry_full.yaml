@@ -1,0 +1,290 @@
+prompt_catalog:
+- id: prompt_001
+  title: We would like to request your feedback on the performance of two AI assistants
+    i..
+  category: auto
+  tags: []
+  variants:
+    short: We would like to request your feedback on the performance of two AI assistants
+      in response to the user question shown...
+    detailed: We would like to request your feedback on the performance of two AI
+      assistants in response to the user question shown above. Please give two numeric
+      scores (Assistant 1 and Assistant 2) on a 1-10 scale, and then provide a concise,
+      unbiased rationale for those scores (helpfulness, relevance, accuracy, level
+      of detail).
+    template: '{context}
+
+      Assistant1: {assistant1_response}
+
+      Assistant2: {assistant2_response}
+
+      Task: We would like to request your feedback on the performance of two AI assistants
+      in response to the user question shown above. Please give two numeric scores
+      ({assistant1_response} and {assistant2_response}) on a 1-10 scale, and then
+      provide a concise, unbiased rationale for those scores (helpfulness, relevance,
+      accuracy, level of detail).'
+- id: prompt_002
+  title: Your task is to evaluate the coding abilities of the above two assistants.
+    Revie..
+  category: auto
+  tags: []
+  variants:
+    short: Your task is to evaluate the coding abilities of the above two assistants.
+      Review their submitted code for correctnes...
+    detailed: Your task is to evaluate the coding abilities of the above two assistants.
+      Review their submitted code for correctness, readability, performance, and helpful
+      comments. Output two numeric scores (1-10) on a single line for Assistant 1
+      and Assistant 2, then provide a paragraph with strengths / weaknesses / recommended
+      fixes.
+    template: '{context}
+
+      Assistant1: {assistant1_response}
+
+      Assistant2: {assistant2_response}
+
+      Task: Your task is to evaluate the coding abilities of the above two assistants.
+      Review their submitted code for correctness, readability, performance, and helpful
+      comments. Output two numeric scores (1-10) on a single line for {assistant1_response}
+      and {assistant2_response}, then provide a paragraph with strengths / weaknesses
+      / recommended fixes.'
+- id: prompt_003
+  title: We would like a math-focused evaluation of two assistant answers. Solve the
+    prob..
+  category: auto
+  tags: []
+  variants:
+    short: We would like a math-focused evaluation of two assistant answers. Solve
+      the problem yourself, then compare each assis...
+    detailed: We would like a math-focused evaluation of two assistant answers. Solve
+      the problem yourself, then compare each assistant's step-by-step solution and
+      produce two numeric scores (1-10) and a short error analysis where they exist.
+    template: '{context}
+
+      Assistant1: {assistant1_response}
+
+      Assistant2: {assistant2_response}
+
+      Task: We would like a math-focused evaluation of two assistant answers. Solve
+      the problem yourself, then compare each assistant''s step-by-step solution and
+      produce two numeric scores (1-10) and a short error analysis where they exist.'
+- id: prompt_004
+  title: Rate Assistant A and Assistant B on clarity and factual accuracy (1-10 each)
+    for..
+  category: auto
+  tags: []
+  variants:
+    short: Rate Assistant A and Assistant B on clarity and factual accuracy (1-10
+      each) for the provided image analysis prompt; ...
+    detailed: Rate Assistant A and Assistant B on clarity and factual accuracy (1-10
+      each) for the provided image analysis prompt; then explain the reasons and which
+      assistant is better and why.
+    template: '{context}
+
+      Assistant1: {assistant1_response}
+
+      Assistant2: {assistant2_response}
+
+      Task: Rate {assistantA_response} and {assistantB_response} on clarity and factual
+      accuracy (1-10 each) for the provided image analysis prompt; then explain the
+      reasons and which assistant is better and why.'
+- id: prompt_005
+  title: Write a comprehensive set of unit tests for the selected code. The tests
+    should ..
+  category: auto
+  tags: []
+  variants:
+    short: Write a comprehensive set of unit tests for the selected code. The tests
+      should set up, run checks for correctness an...
+    detailed: Write a comprehensive set of unit tests for the selected code. The tests
+      should set up, run checks for correctness and edge cases, then tear down; include
+      mocking where appropriate and ensure tests are deterministic and maintainable.
+    template: '{code_snippet}
+
+      Write a comprehensive set of unit tests for the selected code. The tests should
+      set up, run checks for correctness and edge cases, then tear down; include mocking
+      where appropriate and ensure tests are deterministic and maintainable.'
+- id: prompt_006
+  title: Review this code and return a succinct list of top 5 critical fixes that
+    must be..
+  category: auto
+  tags: []
+  variants:
+    short: Review this code and return a succinct list of top 5 critical fixes that
+      must be applied immediately (security, corre...
+    detailed: Review this code and return a succinct list of top 5 critical fixes
+      that must be applied immediately (security, correctness, performance). Use bullet
+      points and include exact lines or examples if possible.
+    template: '{code_snippet}
+
+      Review this code and return a succinct list of top 5 critical fixes that must
+      be applied immediately (security, correctness, performance). Use bullet points
+      and include exact lines or examples if possible.'
+- id: prompt_007
+  title: Refactor the following function to improve readability and performance, keep
+    the..
+  category: auto
+  tags: []
+  variants:
+    short: Refactor the following function to improve readability and performance,
+      keep the same behavior, and add unit tests th...
+    detailed: Refactor the following function to improve readability and performance,
+      keep the same behavior, and add unit tests that cover edge cases. Return the
+      new code then the tests.
+    template: '{code_snippet}
+
+      Refactor the following function to improve readability and performance, keep
+      the same behavior, and add unit tests that cover edge cases. Return the new
+      code then the tests.'
+- id: prompt_008
+  title: Suggest 3-5 measurable, high-impact automated tests to add to a CI pipeline
+    for ..
+  category: auto
+  tags: []
+  variants:
+    short: Suggest 3-5 measurable, high-impact automated tests to add to a CI pipeline
+      for this module (with example assertions ...
+    detailed: Suggest 3-5 measurable, high-impact automated tests to add to a CI pipeline
+      for this module (with example assertions or scenarios).
+    template: '{input}
+
+      Suggest 3-5 measurable, high-impact automated tests to add to a CI pipeline
+      for this module (with example assertions or scenarios).'
+- id: prompt_009
+  title: 如何分析这两份问卷？给我一个可复现的步骤（数据清洗、关键变量提取、描述性统计、可视化、交叉表、显著性检验、结论与建议），并列出需要的代码/工具与可视化样例。
+  category: auto
+  tags: []
+  variants:
+    short: 如何分析这两份问卷？给我一个可复现的步骤（数据清洗、关键变量提取、描述性统计、可视化、交叉表、显著性检验、结论与建议），并列出需要的代码/工具与可视化样例。
+    detailed: 如何分析这两份问卷？给我一个可复现的步骤（数据清洗、关键变量提取、描述性统计、可视化、交叉表、显著性检验、结论与建议），并列出需要的代码/工具与可视化样例。
+    template: '{dataset1}
+
+      {dataset2}
+
+      如何分析这两份问卷？给我一个可复现的步骤（数据清洗、关键变量提取、描述性统计、可视化、交叉表、显著性检验、结论与建议），并列出需要的代码/工具与可视化样例。'
+- id: prompt_010
+  title: 'Compare the two survey datasets and summarize: (A) what changed, (B) statistical..'
+  category: auto
+  tags: []
+  variants:
+    short: 'Compare the two survey datasets and summarize: (A) what changed, (B) statistically
+      significant differences with p-val...'
+    detailed: 'Compare the two survey datasets and summarize: (A) what changed, (B)
+      statistically significant differences with p-values, (C) recommended next steps
+      for the product team in plain language.'
+    template: '{dataset1}
+
+      {dataset2}
+
+      Compare the two survey datasets and summarize: (A) what changed, (B) statistically
+      significant differences with p-values, (C) recommended next steps for the product
+      team in plain language.'
+- id: prompt_011
+  title: 'Produce a concise research summary from these questionnaire responses: top
+    5 the..'
+  category: auto
+  tags: []
+  variants:
+    short: 'Produce a concise research summary from these questionnaire responses:
+      top 5 themes, recommended experiment/hypothesi...'
+    detailed: 'Produce a concise research summary from these questionnaire responses:
+      top 5 themes, recommended experiment/hypothesis to validate, and a one-paragraph
+      executive summary.'
+    template: '{documents}
+
+      Produce a concise research summary from these questionnaire responses: top 5
+      themes, recommended experiment/hypothesis to validate, and a one-paragraph executive
+      summary.'
+- id: prompt_012
+  title: Create an exploratory data analysis (EDA) checklist and Python snippet to
+    genera..
+  category: auto
+  tags: []
+  variants:
+    short: 'Create an exploratory data analysis (EDA) checklist and Python snippet
+      to generate: distribution plots, missingness m...'
+    detailed: 'Create an exploratory data analysis (EDA) checklist and Python snippet
+      to generate: distribution plots, missingness matrix, correlation heatmap, and
+      a short paragraph about each insight.'
+    template: '{documents}
+
+      Create an exploratory data analysis (EDA) checklist and Python snippet to generate:
+      distribution plots, missingness matrix, correlation heatmap, and a short paragraph
+      about each insight.'
+- id: prompt_013
+  title: Given these retrieved documents, synthesize one short answer (2–3 lines),
+    then a..
+  category: auto
+  tags: []
+  variants:
+    short: Given these retrieved documents, synthesize one short answer (2–3 lines),
+      then a structured explanation with citation...
+    detailed: Given these retrieved documents, synthesize one short answer (2–3 lines),
+      then a structured explanation with citations (document:line or title) and a
+      single related next-step suggestion.
+    template: '{documents}
+
+      Given these retrieved documents, synthesize one short answer (2–3 lines), then
+      a structured explanation with citations (document:line or title) and a single
+      related next-step suggestion.'
+- id: prompt_014
+  title: 'You are a domain expert — combine the following retrieved passages and produce:
+    ..'
+  category: auto
+  tags: []
+  variants:
+    short: 'You are a domain expert — combine the following retrieved passages and
+      produce: a) short answer, b) three numbered bu...'
+    detailed: 'You are a domain expert — combine the following retrieved passages
+      and produce: a) short answer, b) three numbered bullet takeaways, c) suggested
+      follow-up queries to improve retrieval relevance.'
+    template: '{documents}
+
+      You are a domain expert — combine the following retrieved passages and produce:
+      a) short answer, b) three numbered bullet takeaways, c) suggested follow-up
+      queries to improve retrieval relevance.'
+- id: prompt_015
+  title: Summarize an engineering design from multiple docs into a 1-paragraph summary
+    pl..
+  category: auto
+  tags: []
+  variants:
+    short: Summarize an engineering design from multiple docs into a 1-paragraph summary
+      plus a 2-line CV bullet emphasizing the...
+    detailed: Summarize an engineering design from multiple docs into a 1-paragraph
+      summary plus a 2-line CV bullet emphasizing the candidate's role, tech stack,
+      and one measurable result.
+    template: '{documents}
+
+      Summarize an engineering design from multiple docs into a 1-paragraph summary
+      plus a 2-line CV bullet emphasizing the candidate''s role, tech stack, and one
+      measurable result.'
+- id: prompt_016
+  title: Generate a JSON object describing the key metadata from this project README
+    (nam..
+  category: auto
+  tags: []
+  variants:
+    short: Generate a JSON object describing the key metadata from this project README
+      (name, role, primary techs, 3 achievement...
+    detailed: 'Generate a JSON object describing the key metadata from this project
+      README (name, role, primary techs, 3 achievements). Use the schema: {title,
+      role, tech_stack[], achievements[]}'
+- id: prompt_017
+  title: 'Turn the following long conversation into a reusable prompt template: replace
+    pr..'
+  category: auto
+  tags: []
+  variants:
+    short: 'Turn the following long conversation into a reusable prompt template:
+      replace project-specific values with placeholde...'
+    detailed: 'Turn the following long conversation into a reusable prompt template:
+      replace project-specific values with placeholders and add a short instruction
+      describing each variable type (string, integer, docs_list).'
+    template: '{input}
+
+      Turn the following long conversation into a reusable prompt template: replace
+      project-specific values with placeholders and add a short instruction describing
+      each variable type (string, integer, docs_list).'
+- id: prompt_018
+  title: Given a prompt template and a parameter pack, output the fully rendered prompt
+    a..
