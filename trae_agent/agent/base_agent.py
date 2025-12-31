@@ -43,6 +43,9 @@ class BaseAgent(ABC):
             tools_registry[tool_name](model_provider=self._model_config.model_provider.provider)
             for tool_name in agent_config.tools
         ]
+        # Keep a copy of the base tools configuration
+        self._base_tools: list[Tool] = list(self._tools)
+
         self.docker_keep = docker_keep
         self.docker_manager: DockerManager | None = None
         original_tool_executor = ToolExecutor(self._tools)
@@ -281,6 +284,19 @@ class BaseAgent(ABC):
     async def cleanup_mcp_clients(self) -> None:
         """Clean up MCP clients. Override in subclasses that use MCP."""
         pass
+
+    async def reset(self) -> None:
+        """Reset the agent state."""
+        # Reset all tools
+        for tool in self._tools:
+            await tool.reset()
+
+        # Clear LLM history
+        self._llm_client.clear_history()
+
+        # Restart Docker shell if active to clear env vars and cwd
+        if self.docker_manager:
+            self.docker_manager.restart_shell()
 
     def _update_cli_console(
         self, step: AgentStep | None = None, agent_execution: AgentExecution | None = None

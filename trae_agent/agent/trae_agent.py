@@ -256,3 +256,18 @@ class TraeAgent(BaseAgent):
                 # Use a generic server name for cleanup since we don't track which server each client is for
                 await client.cleanup("cleanup")
         self.mcp_clients.clear()
+
+    @override
+    async def reset(self) -> None:
+        """Reset the TraeAgent state."""
+        # Clean up MCP clients
+        await self.cleanup_mcp_clients()
+
+        # Clear MCP tools list
+        self.mcp_tools = []
+
+        # Restore tools to base tools (this removes accumulated MCP tools)
+        self._tools = list(self._base_tools)
+
+        # Call base reset (resets tool states and LLM history)
+        await super().reset()

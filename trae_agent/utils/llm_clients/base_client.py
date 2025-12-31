@@ -29,6 +29,11 @@ class BaseLLMClient(ABC):
         pass
 
     @abstractmethod
+    def clear_history(self) -> None:
+        """Clear the chat history."""
+        pass
+
+    @abstractmethod
     def chat(
         self,
         messages: list[LLMMessage],

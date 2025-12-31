@@ -69,6 +69,10 @@ class LLMClient:
         """Set the chat history."""
         self.client.set_chat_history(messages)
 
+    def clear_history(self) -> None:
+        """Clear the chat history."""
+        self.client.clear_history()
+
     def chat(
         self,
         messages: list[LLMMessage],
