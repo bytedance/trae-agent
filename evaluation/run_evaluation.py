@@ -176,6 +176,7 @@ class BenchmarkEvaluation:
             "rm -rf /trae-workspace/trae-agent && mkdir /trae-workspace/trae-agent",
             "cp -r -t /trae-workspace/trae-agent/ /trae-src/trae_agent /trae-src/.python-version /trae-src/pyproject.toml /trae-src/uv.lock /trae-src/README.md",
             "cd /trae-workspace/trae-agent && source $HOME/.local/bin/env && uv sync",
+            "cd /trae-workspace/trae-agent && source $HOME/.local/bin/env && uv pip install docker pexpect",
         ]
 
         for command in tqdm(
