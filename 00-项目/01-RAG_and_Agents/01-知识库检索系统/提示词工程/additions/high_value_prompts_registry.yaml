@@ -1,0 +1,62 @@
+# High-value prompts registry (auto-generated)
+# Location: 提示词工程/additions/high_value_prompts_registry.yaml
+# Each entry provides: id, title, category, tags, variants (short/detailed/template)
+
+prompt_catalog:
+  - id: eval_assistant_pair_scoring
+    title: Assistant pair: score + rationale
+    category: evaluation
+    tags: [evaluation, scoring, meta-review]
+    variants:
+      short: |
+        Compare Assistant 1 and Assistant 2 for the user question above: give two numeric scores (1-10) and a concise rationale for each.
+      detailed: |
+        We would like feedback on the performance of two AI assistants. For the user question shown above, output a single line with two numeric scores (Assistant 1 and Assistant 2, 1-10) then a short paragraph explaining your evaluation covering helpfulness, relevance, accuracy and detail.
+      template: |
+        You are an unbiased evaluator. Given the user's question: "{user_question}", and two assistant responses: Assistant 1 -> "{assistant1_response}", Assistant 2 -> "{assistant2_response}", produce:
+        1) a single line with two numeric scores (1-10) separated by a space
+        2) a concise explanation (2-5 sentences) covering helpfulness, relevance, accuracy, and level of detail. 
+
+  - id: eval_code_pair_scoring
+    title: Code-review scoring for two assistants
+    category: evaluation
+    tags: [code-review, evaluation, scoring]
+    variants:
+      short: |
+        Evaluate the two code submissions and output two scores (1-10) on one line, then a brief strengths/weaknesses summary.
+      detailed: |
+        Your task is to evaluate coding solutions from two assistants. Check correctness, readability, performance, and comments. Output two numeric scores (1-10) on one line, then a paragraph with strengths, weaknesses and suggested fixes.
+      template: |
+        Input: problem_description: "{problem}", assistant1: "{assistant1_code}", assistant2: "{assistant2_code}".
+        Output: "<score1> <score2>\n<analysis>"
+
+  - id: eval_math_pair_scoring
+    title: Math answer comparison and scoring
+    category: evaluation
+    tags: [math, reasoning, evaluation]
+    variants:
+      short: |
+        Solve the math problem and compare the assistants' step-by-step solutions; give two scores and explain any errors.
+      detailed: |
+        Independently solve the math problem, then compare Assistant 1 and Assistant 2's step-by-step solutions for correctness. Output two numeric scores (1-10) and a short error analysis for each assistant.
+      template: |
+        Problem: "{math_problem}". Assistant solutions: A1="{a1}", A2="{a2}".
+        Provide: (1) your own solution, (2) "<score1> <score2>", (3) brief commentary highlighting incorrect steps.
+
+  - id: eval_image_pair_scoring
+    title: Image-analysis assistant scoring
+    category: evaluation
+    tags: [multimodal, image, evaluation]
+    variants:
+      short: |
+        Rate Assistant A and B for clarity and factual accuracy (1-10 each) for the image analysis task; then explain the verdict.
+      detailed: |
+        For the given image analysis prompt and two assistant responses, output two scores on a single line and then provide a reasoned explanation of which assistant performed better (consider accuracy, level of detail, and hallucination risk).
+      template: |
+        image_metadata: {image_description: "{image_desc}", bboxes: {bboxes}}
+        assistantA: "{assistantA_response}"; assistantB: "{assistantB_response}".
+        Output: "<scoreA> <scoreB>\n<rationale>"
+
+# (Only first 4 entries are shown here in the example file) — the real file contains all curated prompts
+# Additional entries (code/tests, survey analysis, RAG, prompt-engine templates, ops, transformations, etc.)
+# will follow the same structure: an ID, a title, category and three variants (short, detailed, template).
