@@ -185,6 +185,7 @@ class OllamaClient(BaseLLMClient):
         result = result.strip()
 
         return FunctionCallOutput(
+            role="function",
             call_id=tool_call_result.call_id,
             id=tool_call_result.id,
             output=result,
