@@ -69,6 +69,11 @@ class OpenAIClient(BaseLLMClient):
         """Send chat messages to OpenAI with optional tool support."""
         openai_messages: ResponseInputParam = self.parse_messages(messages)
 
+        if reuse_history:
+            self.message_history = self.message_history + openai_messages
+        else:
+            self.message_history = openai_messages
+
         tool_schemas = None
         if tools:
             tool_schemas = [
@@ -82,10 +87,7 @@ class OpenAIClient(BaseLLMClient):
                 for tool in tools
             ]
 
-        api_call_input: ResponseInputParam = []
-        if reuse_history:
-            api_call_input.extend(self.message_history)
-        api_call_input.extend(openai_messages)
+        api_call_input: ResponseInputParam = self.message_history
 
         # Apply retry decorator to the API call
         retry_decorator = retry_with(
