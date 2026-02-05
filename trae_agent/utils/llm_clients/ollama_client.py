@@ -43,6 +43,11 @@ class OllamaClient(BaseLLMClient):
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
         self.message_history = self.parse_messages(messages)
 
+    @override
+    def clear_history(self) -> None:
+        """Clear the chat history."""
+        self.message_history = []
+
     def _create_ollama_response(
         self,
         model_config: ModelConfig,

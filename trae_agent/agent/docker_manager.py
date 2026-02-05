@@ -157,6 +157,15 @@ class DockerManager:
 
         self.container = None
 
+    def restart_shell(self):
+        """Restarts the persistent shell to clear session state (env vars, cwd)."""
+        if self.shell and self.shell.isalive():
+            self.shell.close(force=True)
+            self.shell = None
+        # Only start if container is active
+        if self.container:
+            self._start_persistent_shell()
+
     # --- Private Helper Methods ---
 
     def _copy_tools_to_container(self):

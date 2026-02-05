@@ -244,3 +244,8 @@ class BashTool(Tool):
             ret = await self._session.stop()
             self._session = None
             return ret
+
+    @override
+    async def reset(self):
+        """Reset the tool state."""
+        await self.close()

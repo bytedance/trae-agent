@@ -178,6 +178,10 @@ class Tool(ABC):
         """Ensure proper tool resource deallocation before task completion."""
         return None  # Using "pass" will trigger a Ruff check error: B027
 
+    async def reset(self):
+        """Reset the tool state. Override this method if the tool maintains state across tasks."""
+        return None
+
 
 class ToolExecutor:
     """Tool executor that manages tool execution."""

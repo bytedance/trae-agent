@@ -38,6 +38,11 @@ class OpenAIClient(BaseLLMClient):
         """Set the chat history."""
         self.message_history = self.parse_messages(messages)
 
+    @override
+    def clear_history(self) -> None:
+        """Clear the chat history."""
+        self.message_history = []
+
     def _create_openai_response(
         self,
         api_call_input: ResponseInputParam,

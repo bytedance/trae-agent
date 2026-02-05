@@ -33,6 +33,12 @@ class AnthropicClient(BaseLLMClient):
         """Set the chat history."""
         self.message_history = self.parse_messages(messages)
 
+    @override
+    def clear_history(self) -> None:
+        """Clear the chat history."""
+        self.message_history = []
+        self.system_message = anthropic.NOT_GIVEN
+
     def _create_anthropic_response(
         self,
         model_config: ModelConfig,

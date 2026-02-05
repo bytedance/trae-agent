@@ -62,6 +62,7 @@ class Agent:
         extra_args: dict[str, str] | None = None,
         tool_names: list[str] | None = None,
     ):
+        await self.agent.reset()
         self.agent.new_task(task, extra_args, tool_names)
 
         if self.agent.allow_mcp_servers:

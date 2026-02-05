@@ -33,6 +33,12 @@ class GoogleClient(BaseLLMClient):
         """Set the chat history."""
         self.message_history, self.system_instruction = self.parse_messages(messages)
 
+    @override
+    def clear_history(self) -> None:
+        """Clear the chat history."""
+        self.message_history = []
+        self.system_instruction = None
+
     def _create_google_response(
         self,
         model_config: ModelConfig,

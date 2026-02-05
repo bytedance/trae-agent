@@ -317,3 +317,9 @@ You should:
                 error=f"Sequential thinking failed: {str(e)}\n\nDetails:\n{json.dumps(error_data, indent=2)}",
                 error_code=-1,
             )
+
+    @override
+    async def reset(self) -> None:
+        """Reset the tool state."""
+        self.thought_history = []
+        self.branches = {}
