@@ -343,23 +343,19 @@ class Config:
             provider=legacy_config.default_provider,
         )
 
+        provider_config = legacy_config.model_providers[legacy_config.default_provider]
+
         model_config = ModelConfig(
-            model=legacy_config.model_providers[legacy_config.default_provider].model,
+            model=provider_config.model,
             model_provider=model_provider,
-            max_tokens=legacy_config.model_providers[legacy_config.default_provider].max_tokens,
-            temperature=legacy_config.model_providers[legacy_config.default_provider].temperature,
-            top_p=legacy_config.model_providers[legacy_config.default_provider].top_p,
-            top_k=legacy_config.model_providers[legacy_config.default_provider].top_k,
-            parallel_tool_calls=legacy_config.model_providers[
-                legacy_config.default_provider
-            ].parallel_tool_calls,
-            max_retries=legacy_config.model_providers[legacy_config.default_provider].max_retries,
-            candidate_count=legacy_config.model_providers[
-                legacy_config.default_provider
-            ].candidate_count,
-            stop_sequences=legacy_config.model_providers[
-                legacy_config.default_provider
-            ].stop_sequences,
+            max_tokens=provider_config.max_tokens,
+            temperature=provider_config.temperature,
+            top_p=provider_config.top_p,
+            top_k=provider_config.top_k if provider_config.top_k is not None else 0,
+            parallel_tool_calls=provider_config.parallel_tool_calls,
+            max_retries=provider_config.max_retries,
+            candidate_count=provider_config.candidate_count,
+            stop_sequences=provider_config.stop_sequences,
         )
         mcp_servers_config = {
             k: MCPServerConfig(**vars(v)) for k, v in legacy_config.mcp_servers.items()
