@@ -39,7 +39,7 @@ def resolve_config_file(config_file: str) -> str:
         if yaml_path.exists():
             return str(yaml_path)
         elif json_path.exists():
-            console.print(f"[yellow]YAML config not found, using JSON config: {json_path}[/yellow]")
+            console.print(f"[yellow]YAML config not found, using JSON config: {json_path}[/yellow]", markup=False)
             return str(json_path)
         else:
             console.print(
@@ -256,7 +256,7 @@ def run(
         )
     elif docker_image:
         docker_config = {"image": docker_image}
-        console.print(f"[blue]Docker mode enabled. Using image: {docker_image}[/blue]")
+        console.print(f"[blue]Docker mode enabled. Using image: {docker_image}[/blue]", markup=False)
     # --- ADDED END ---
 
     # Apply backward compatibility for config file
@@ -283,7 +283,7 @@ def run(
         try:
             task = Path(file_path).read_text()
         except FileNotFoundError:
-            console.print(f"[red]Error: File not found: {file_path}[/red]")
+            console.print(f"[red]Error: File not found: {file_path}[/red]", markup=False)
             sys.exit(1)
     elif not task:
         console.print(
@@ -332,7 +332,7 @@ def run(
         try:
             Path(working_dir).mkdir(parents=True, exist_ok=True)
             # os.chdir(working_dir)
-            console.print(f"[blue]Changed working directory to: {working_dir}[/blue]")
+            console.print(f"[blue]Changed working directory to: {working_dir}[/blue]", markup=False)
             working_dir = os.path.abspath(working_dir)
         except Exception as e:
             error_text = Text(f"Error changing directory: {e}", style="red")
@@ -340,7 +340,7 @@ def run(
             sys.exit(1)
     else:
         working_dir = os.getcwd()
-        console.print(f"[blue]Using current directory as working directory: {working_dir}[/blue]")
+        console.print(f"[blue]Using current directory as working directory: {working_dir}[/blue]", markup=False)
 
     # Ensure working directory is an absolute path
     if not Path(working_dir).is_absolute():
@@ -381,11 +381,11 @@ def run(
         # Agent will handle starting the appropriate console
         _ = asyncio.run(agent.run(task, task_args))
 
-        console.print(f"\n[green]Trajectory saved to: {agent.trajectory_file}[/green]")
+        console.print(f"\n[green]Trajectory saved to: {agent.trajectory_file}[/green]", markup=False)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Task execution interrupted by user[/yellow]")
-        console.print(f"[blue]Partial trajectory saved to: {agent.trajectory_file}[/blue]")
+        console.print(f"[blue]Partial trajectory saved to: {agent.trajectory_file}[/blue]", markup=False)
         sys.exit(1)
     except Exception as e:
         try:
@@ -407,7 +407,7 @@ def run(
             error_text = Text(f"Unexpected error: {e}", style="red")
             console.print(error_text, markup=False)
             console.print(traceback.format_exc())
-        console.print(f"[blue]Trajectory saved to: {agent.trajectory_file}[/blue]")
+        console.print(f"[blue]Trajectory saved to: {agent.trajectory_file}[/blue]", markup=False)
         sys.exit(1)
 
 
@@ -564,7 +564,7 @@ async def _run_simple_interactive_loop(
                 continue
 
             # Set up trajectory recording for this task
-            console.print(f"[blue]Trajectory will be saved to: {trajectory_file}[/blue]")
+            console.print(f"[blue]Trajectory will be saved to: {trajectory_file}[/blue]", markup=False)
 
             task_args = {
                 "project_path": working_dir,
@@ -573,7 +573,7 @@ async def _run_simple_interactive_loop(
             }
 
             # Execute the task
-            console.print(f"\n[blue]Executing task: {task}[/blue]")
+            console.print(f"\n[blue]Executing task: {task}[/blue]", markup=False)
 
             # Start console and execute task
             console_task = asyncio.create_task(cli_console.start())
@@ -583,7 +583,7 @@ async def _run_simple_interactive_loop(
             _ = await execution_task
             _ = await console_task
 
-            console.print(f"\n[green]Trajectory saved to: {trajectory_file}[/green]")
+            console.print(f"\n[green]Trajectory saved to: {trajectory_file}[/green]", markup=False)
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Use 'exit' or 'quit' to end the session[/yellow]")

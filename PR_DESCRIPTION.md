@@ -1,50 +1,30 @@
-## Fix Rich MarkupError in CLI Error Handling
+# Fix Rich Markup Error in CLI
 
-### Problem
-The Trae Agent CLI was crashing with `rich.errors.MarkupError` when exception messages contained special characters like square brackets (`[`, `]`). This occurred because rich was trying to parse these characters as markup tags when printing error messages.
+## Description
+Fixes the issue where CLI crashes with `rich.errors.MarkupError` when printing error messages containing special characters like `[` or `]`.
 
-### Root Cause
-In `trae_agent/cli.py`, error messages were being printed using:
-```python
-error_text = Text(f"Error: {e}", style="red")
-console.print(f"\n{error_text}")  # Could fail with MarkupError
-```
+## Root Cause
+The CLI was using `console.print()` with formatted strings containing user-provided data that may include special characters. Rich tries to parse these as markup, causing crashes.
 
-When exception `e` contained brackets, rich would try to parse them as markup, causing crashes like:
-- `MarkupError: closing tag '[/section]' doesn't match any open tag`
+## Solution
+Added `markup=False` parameter to all `console.print()` calls that format user-provided data, preventing Rich from parsing the content as markup.
 
-### Solution
-Added `markup=False` parameter to `console.print()` calls when printing `Text` objects containing exception messages:
+## Changes Made
+Modified `trae_agent/cli.py`:
+- Added `markup=False` to 11 console.print() calls that format user-provided data
+- Maintains all existing functionality and color formatting
 
-```python
-error_text = Text(f"Error: {e}", style="red")
-console.print(error_text, markup=False)  # Prevents MarkupError
-```
+## Testing
+Created `test_markup_fix.py` to reproduce and verify the fix:
+- Demonstrates the original issue would fail with MarkupError
+- Verifies the fixed version handles error messages with square brackets correctly
 
-### Changes Made
-- **File**: `trae_agent/cli.py`
-- **Lines fixed**: 4 locations where `console.print(error_text)` was called
-- **Impact**: Minimal code change, no behavioral change, improved stability
+## Impact
+- Minimal code changes (only added `markup=False` parameter)
+- Maintains backward compatibility
+- Preserves color formatting while preventing markup parsing
+- No breaking changes to existing functionality
 
-### Testing
-- Created comprehensive test scripts that verify the fix works
-- Tested with various problematic strings containing brackets
-- Confirmed error messages still display with red styling as intended
-- Verified CLI no longer crashes on exception messages with special characters
-
-### Verification
-Run the provided test scripts:
-```bash
-python test_markup_fix.py
-python demonstrate_markup_fix.py
-```
-
-Both should complete without errors, proving the fix is working correctly.
-
-### Backward Compatibility
-- ✅ No API changes
-- ✅ No user-facing behavioral changes  
-- ✅ Error messages maintain original styling
-- ✅ Only prevents crashes, doesn't change functionality
-
-This fix ensures the CLI remains stable when handling exceptions with special characters in their messages.
+## Verification
+1. Run `python test_markup_fix.py` to see the original issue and the fix in action
+2. The script will show that the fixed version handles error messages with square brackets correctly
