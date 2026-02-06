@@ -212,14 +212,15 @@ def run(
     docker_keep: bool = True,
 ):
     """
-    Run is the main function of trae. it runs a task using Trae Agent.
-    Args:
-        tasks: the task that you want your agent to solve. This is required to be in the input
-        model: the model expected to be use
-        working_dir: the working directory of the agent. This should be set either in cli or in the config file
+    Run is the main function of trae. It runs a task using Trae Agent.
 
-    Return:
-        None (it is expected to be ended after calling the run function)
+    Args:
+        task: The task description you want your agent to solve
+        model: The model to use for execution
+        working_dir: The working directory for the agent. Set via CLI or config file
+
+    Returns:
+        None
     """
 
     docker_config: dict[str, str | None] | None = None
@@ -257,7 +258,7 @@ def run(
     elif docker_image:
         docker_config = {"image": docker_image}
         console.print(f"[blue]Docker mode enabled. Using image: {docker_image}[/blue]")
-    # --- ADDED END ---
+    # Docker mode configuration complete
 
     # Apply backward compatibility for config file
     config_file = resolve_config_file(config_file)
