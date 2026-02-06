@@ -78,6 +78,17 @@
       "temperature": 0.5,
       "top_p": 1,
       "max_retries": 20
+    },
+    "siliconflow": {
+      "api_key": "your_siliconflow_api_key",
+      "model": "deepseek-v3",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "max_tokens": 8192,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "parallel_tool_calls": false,
+      "max_retries": 10
     }
   },
   "lakeview_config": {
