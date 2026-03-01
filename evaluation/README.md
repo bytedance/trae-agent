@@ -27,7 +27,7 @@ Before running the evaluation, ensure you have:
 
 ## Setup Instructions
 
-Make sure installing extra dependencies for evaluation and running scripts in the `evaluation` directory.
+Make sure to install extra dependencies for evaluation and run scripts in the `evaluation` directory.
 
 ```bash
 uv sync --extra evaluation
