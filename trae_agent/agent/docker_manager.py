@@ -216,7 +216,7 @@ class DockerManager:
         self.shell.sendline(full_command)
         self.shell.sendline(marker_command)
         try:
-            self.shell.expect(marker + r"(\d+)", timeout=timeout)
+            self.shell.expect(marker + r"(-?\d+)", timeout=timeout)
         except pexpect.exceptions.TIMEOUT:
             return (
                 -1,
