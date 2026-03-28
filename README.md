@@ -253,10 +253,26 @@ echo $OPENAI_API_KEY
 trae-cli show-config
 ```
 
-**Command Not Found:**
+**`trae-cli: command not found`:**
+
+This happens when the virtual environment's `bin/` directory is not on your `PATH`. Fix it with one of these approaches:
+
 ```bash
+# Option 1: Activate the virtual environment (recommended)
+source .venv/bin/activate
+trae-cli run "your task"
+
+# Option 2: Use `uv run` (no activation needed)
 uv run trae-cli run "your task"
+
+# Option 3: Call the binary directly
+.venv/bin/trae-cli run "your task"
 ```
+
+> **Tip:** If the command disappears after opening a new terminal, make sure you activate the venv first (`source .venv/bin/activate`). You can add this to your shell profile for convenience:
+> ```bash
+> echo 'source /path/to/trae-agent/.venv/bin/activate' >> ~/.bashrc
+> ```
 
 **Permission Errors:**
 ```bash
