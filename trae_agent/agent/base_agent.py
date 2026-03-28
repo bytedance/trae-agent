@@ -311,6 +311,31 @@ class BaseAgent(ABC):
                 error=step.error,
             )
 
+    @staticmethod
+    def _deduplicate_tool_calls(tool_calls: list[ToolCall]) -> list[ToolCall]:
+        """Remove duplicate tool calls based on tool name and arguments.
+
+        Two tool calls are considered duplicates if they have the same
+        normalised name and the same serialised arguments.  When duplicates
+        are found the *first* occurrence is kept and later ones are dropped,
+        preserving execution order.
+        """
+        import json
+
+        seen: set[tuple[str, str]] = set()
+        unique: list[ToolCall] = []
+
+        for tc in tool_calls:
+            key = (
+                tc.name.lower().replace("_", ""),
+                json.dumps(tc.arguments, sort_keys=True, default=str),
+            )
+            if key not in seen:
+                seen.add(key)
+                unique.append(tc)
+
+        return unique
+
     async def _tool_call_handler(
         self, tool_calls: list[ToolCall] | None, step: AgentStep
     ) -> list[LLMMessage]:
@@ -323,6 +348,9 @@ class BaseAgent(ABC):
                 )
             ]
             return messages
+
+        # Deduplicate tool calls before execution
+        tool_calls = self._deduplicate_tool_calls(tool_calls)
 
         step.state = AgentStepState.CALLING_TOOL
         step.tool_calls = tool_calls
