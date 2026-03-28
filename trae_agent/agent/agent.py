@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import os
 from enum import Enum
 
 from trae_agent.utils.cli.cli_console import CLIConsole
@@ -33,6 +34,24 @@ class Agent:
             # Auto-generate trajectory file path
             self.trajectory_recorder = TrajectoryRecorder()
             self.trajectory_file = self.trajectory_recorder.get_trajectory_path()
+
+        # Set up OpenTelemetry tracing (optional, enabled via env var or OTEL config)
+        self._otel_recorder = None
+        try:
+            from trae_agent.utils.otel_recorder import (
+                OTelTrajectoryRecorder,
+                is_otel_available,
+                setup_otel_tracing,
+            )
+
+            otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+            if is_otel_available() and otel_endpoint:
+                tracer = setup_otel_tracing(service_name="trae-agent", endpoint=otel_endpoint)
+                if tracer:
+                    self._otel_recorder = OTelTrajectoryRecorder(tracer=tracer)
+        except Exception:
+            # OpenTelemetry is optional – silently skip if unavailable
+            pass
 
         match self.agent_type:
             case AgentType.TraeAgent:
@@ -83,6 +102,15 @@ class Agent:
                     task_details[key.capitalize()] = value
             self.agent.cli_console.print_task_details(task_details)
 
+        # Start OpenTelemetry trace if available
+        if self._otel_recorder:
+            self._otel_recorder.start_recording(
+                task=task,
+                provider=self.agent_config.model.model_provider.provider,
+                model=self.agent_config.model.model,
+                max_steps=self.agent_config.max_steps,
+            )
+
         cli_console_task = (
             asyncio.create_task(self.agent.cli_console.start()) if self.agent.cli_console else None
         )
@@ -96,5 +124,12 @@ class Agent:
 
         if cli_console_task:
             await cli_console_task
+
+        # Finalize OpenTelemetry trace
+        if self._otel_recorder:
+            self._otel_recorder.finalize_recording(
+                success=execution.success,
+                final_result=execution.final_result,
+            )
 
         return execution
