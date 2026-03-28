@@ -159,7 +159,32 @@ Notes for using the `str_replace` command:
                     "The `view_range` parameter is not allowed when `path` points to a directory."
                 )
 
-            return_code, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
+            # Use subprocess with list arguments to prevent shell injection
+            # from directory names containing shell metacharacters.
+            import asyncio as _asyncio
+
+            try:
+                proc = await _asyncio.create_subprocess_exec(
+                    "find",
+                    str(path),
+                    "-maxdepth",
+                    "2",
+                    "-not",
+                    "-path",
+                    "*/.*",
+                    stdout=_asyncio.subprocess.PIPE,
+                    stderr=_asyncio.subprocess.PIPE,
+                )
+                stdout_bytes, stderr_bytes = await proc.communicate()
+                return_code = proc.returncode or 0
+                stdout = stdout_bytes.decode()
+                stderr = stderr_bytes.decode()
+            except Exception as e:
+                return ToolExecResult(
+                    error=f"Error listing directory: {e}",
+                    error_code=-1,
+                )
+
             if not stderr:
                 stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
             return ToolExecResult(error_code=return_code, output=stdout, error=stderr)
