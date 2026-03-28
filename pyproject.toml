@@ -40,6 +40,11 @@ evaluation = [
     "pexpect>=4.9.0",
     "unidiff>=0.7.5",
 ]
+otel = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
+]
 
 [project.scripts]
 trae-cli = "trae_agent.cli:main"
