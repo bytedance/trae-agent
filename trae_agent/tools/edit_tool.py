@@ -9,6 +9,7 @@
 #
 # This modified file is released under the same license.
 
+import json
 from pathlib import Path
 from typing import override
 
@@ -43,6 +44,7 @@ class TextEditorTool(Tool):
         return """Custom editing tool for viewing, creating and editing files
 * State is persistent across command calls and discussions with the user
 * If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep
+* If `path` is a Jupyter notebook (.ipynb), `view` displays the notebook cells with their types and source content, and `str_replace` edits cell source
 * The `create` command cannot be used if the specified `path` already exists as a file !!! If you know that the `path` already exists, please remove it first and then perform the `create` operation!
 * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
 
@@ -151,6 +153,154 @@ Notes for using the `str_replace` command:
                 f"The path {path} is a directory and only the `view` command can be used on directories"
             )
 
+    def _is_notebook(self, path: Path) -> bool:
+        """Check if the file is a Jupyter notebook."""
+        return path.suffix == ".ipynb"
+
+    def _read_notebook(self, path: Path) -> dict:
+        """Read and parse a Jupyter notebook file."""
+        try:
+            content = path.read_text()
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            raise ToolError(f"Invalid JSON in notebook file {path}: {e}") from None
+        except Exception as e:
+            raise ToolError(f"Error reading notebook {path}: {e}") from None
+
+    def _write_notebook(self, path: Path, notebook: dict) -> None:
+        """Write a Jupyter notebook to file."""
+        try:
+            path.write_text(json.dumps(notebook, indent=1, ensure_ascii=False) + "\n")
+        except Exception as e:
+            raise ToolError(f"Error writing notebook {path}: {e}") from None
+
+    def _notebook_cells_to_text(self, notebook: dict) -> str:
+        """Convert notebook cells to a readable text representation.
+
+        Each cell is shown with a header indicating its type and index,
+        followed by the cell source joined into lines.
+        """
+        lines: list[str] = []
+        for i, cell in enumerate(notebook.get("cells", [])):
+            cell_type = cell.get("cell_type", "unknown")
+            source = cell.get("source", [])
+            if isinstance(source, list):
+                source_text = "".join(source)
+            else:
+                source_text = str(source)
+
+            lines.append(f"{'─' * 40}")
+            lines.append(f"Cell [{i + 1}] ({cell_type}):")
+            lines.append(f"{'─' * 40}")
+            lines.append(source_text)
+
+        # Add execution count info for code cells
+        lines.append(f"{'─' * 40}")
+        lines.append(
+            f"Total cells: {len(notebook.get('cells', []))}"
+        )
+        return "\n".join(lines)
+
+    def _notebook_to_source_text(self, notebook: dict) -> str:
+        """Convert notebook cells to a flat text representation for editing.
+
+        Each cell's source is concatenated with a cell marker comment
+        that identifies the cell type and index.  This allows the agent
+        to use str_replace on the textual representation.
+        """
+        lines: list[str] = []
+        for i, cell in enumerate(notebook.get("cells", [])):
+            cell_type = cell.get("cell_type", "unknown")
+            source = cell.get("source", [])
+            if isinstance(source, list):
+                source_lines = source
+            else:
+                source_lines = str(source).splitlines(keepends=True)
+
+            lines.append(f"# %% Cell {i + 1} ({cell_type})\n")
+            lines.extend(source_lines)
+            if source_lines and not source_lines[-1].endswith("\n"):
+                lines[-1] += "\n"
+        return "".join(lines)
+
+    def _apply_str_replace_to_notebook(
+        self, path: Path, old_str: str, new_str: str | None
+    ) -> ToolExecResult:
+        """Apply str_replace on the concatenated source of all cells in a notebook."""
+        notebook = self._read_notebook(path)
+        full_text = self._notebook_to_source_text(notebook)
+
+        occurrences = full_text.count(old_str)
+        if occurrences == 0:
+            raise ToolError(
+                f"No replacement was performed, old_str `{old_str}` did not appear verbatim in notebook {path}."
+            )
+        elif occurrences > 1:
+            full_text_lines = full_text.split("\n")
+            matching_lines = [
+                idx + 1 for idx, line in enumerate(full_text_lines) if old_str in line
+            ]
+            raise ToolError(
+                f"No replacement was performed. Multiple occurrences of old_str `{old_str}` in lines {matching_lines}. Please ensure it is unique"
+            )
+
+        replacement = new_str if new_str is not None else ""
+        new_full_text = full_text.replace(old_str, replacement)
+
+        # Reconstruct notebook cells from the modified text
+        self._reconstruct_notebook_from_text(notebook, new_full_text)
+        self._write_notebook(path, notebook)
+
+        # Build a snippet around the replacement
+        replacement_line = full_text.split(old_str)[0].count("\n")
+        start_line = max(0, replacement_line - SNIPPET_LINES)
+        end_line = replacement_line + SNIPPET_LINES + replacement.count("\n")
+        snippet = "\n".join(new_full_text.split("\n")[start_line : end_line + 1])
+
+        success_msg = f"The notebook {path} has been edited. "
+        success_msg += self._make_output(snippet, f"a snippet of {path}", start_line + 1)
+        success_msg += "Review the changes and make sure they are as expected. Edit the file again if necessary."
+
+        return ToolExecResult(output=success_msg)
+
+    def _reconstruct_notebook_from_text(self, notebook: dict, text: str) -> None:
+        """Reconstruct notebook cell sources from flat text with cell markers."""
+        cells = notebook.get("cells", [])
+        sections: list[tuple[int, list[str]]] = []
+
+        current_cell_idx = -1
+        current_lines: list[str] = []
+
+        for line in text.split("\n"):
+            # Check for cell marker: "# %% Cell N (type)"
+            if line.startswith("# %% Cell "):
+                if current_cell_idx >= 0 and current_cell_idx < len(cells):
+                    sections.append((current_cell_idx, current_lines))
+                try:
+                    # Parse "# %% Cell N (type)"
+                    rest = line[len("# %% Cell "):]
+                    paren_idx = rest.index("(")
+                    cell_num = int(rest[:paren_idx].strip())
+                    current_cell_idx = cell_num - 1  # Convert to 0-indexed
+                except (ValueError, IndexError):
+                    current_cell_idx = -1
+                current_lines = []
+            else:
+                current_lines.append(line)
+
+        # Don't forget the last section
+        if current_cell_idx >= 0 and current_cell_idx < len(cells):
+            sections.append((current_cell_idx, current_lines))
+
+        # Apply reconstructed source back to cells
+        for cell_idx, source_lines in sections:
+            if cell_idx < len(cells):
+                # Re-add newlines that were stripped by split("\n")
+                rebuilt = [ln + "\n" for ln in source_lines]
+                if rebuilt:
+                    rebuilt[-1] = rebuilt[-1].rstrip("\n")
+                cells[cell_idx]["source"] = rebuilt
+
     async def _view(self, path: Path, view_range: list[int] | None = None) -> ToolExecResult:
         """Implement the view command"""
         if path.is_dir():
@@ -163,6 +313,14 @@ Notes for using the `str_replace` command:
             if not stderr:
                 stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
             return ToolExecResult(error_code=return_code, output=stdout, error=stderr)
+
+        # Handle Jupyter notebooks specially
+        if self._is_notebook(path):
+            notebook = self._read_notebook(path)
+            content = self._notebook_cells_to_text(notebook)
+            return ToolExecResult(
+                output=f"Here's the content of the Jupyter notebook {path}:\n{content}\n"
+            )
 
         file_content = self.read_file(path)
         init_line = 1
@@ -342,6 +500,9 @@ Notes for using the `str_replace` command:
                 error="Parameter `new_str` should be a string or null for command: str_replace",
                 error_code=-1,
             )
+        # Handle Jupyter notebooks specially
+        if self._is_notebook(_path):
+            return self._apply_str_replace_to_notebook(_path, old_str, new_str)
         return self.str_replace(_path, old_str, new_str)
 
     def _insert_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
