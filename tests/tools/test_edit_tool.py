@@ -142,6 +142,53 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
         self.assertIn(str(test_dir), result.output)
         self.assertIn(str(child), result.output)
 
+    async def test_view_directory_respects_two_level_depth_limit(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            level1 = root / "level1"
+            level2 = level1 / "level2"
+            level3 = level2 / "level3"
+            level1.mkdir()
+            level2.mkdir()
+            level3.mkdir()
+            visible_file = level1 / "visible.txt"
+            hidden_deep_file = level3 / "too_deep.txt"
+            visible_file.write_text("visible")
+            hidden_deep_file.write_text("hidden")
+
+            result = await self.tool.execute(
+                ToolCallArguments({"command": "view", "path": str(root)})
+            )
+
+        self.assertIn(str(level1), result.output)
+        self.assertIn(str(level2), result.output)
+        self.assertIn(str(visible_file), result.output)
+        self.assertNotIn(str(level3), result.output)
+        self.assertNotIn(str(hidden_deep_file), result.output)
+
+    async def test_view_directory_lists_but_does_not_traverse_symlinked_directories(self):
+        with TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            root = base / "root"
+            outside = base / "outside"
+            root.mkdir()
+            outside.mkdir()
+            outside_file = outside / "secret.txt"
+            outside_file.write_text("secret")
+            linked_dir = root / "linked_outside"
+
+            try:
+                linked_dir.symlink_to(outside, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink creation is unavailable: {exc}")
+
+            result = await self.tool.execute(
+                ToolCallArguments({"command": "view", "path": str(root)})
+            )
+
+        self.assertIn(str(linked_dir), result.output)
+        self.assertNotIn(str(linked_dir / "secret.txt"), result.output)
+
     async def test_view_file(self):
         self.mock_file_system(exists=True, is_dir=False, content="line1\nline2\nline3")
         result = await self.tool.execute(

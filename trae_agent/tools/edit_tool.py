@@ -9,6 +9,7 @@
 #
 # This modified file is released under the same license.
 
+import os
 from pathlib import Path
 from typing import override
 
@@ -22,6 +23,7 @@ EditToolSubCommands = [
     "insert",
 ]
 SNIPPET_LINES: int = 4
+MAX_DIRECTORY_VIEW_DEPTH: int = 2
 
 
 class TextEditorTool(Tool):
@@ -151,7 +153,7 @@ Notes for using the `str_replace` command:
                 f"The path {path} is a directory and only the `view` command can be used on directories"
             )
 
-    def _list_directory(self, path: Path, max_depth: int = 2) -> str:
+    def _list_directory(self, path: Path, max_depth: int = MAX_DIRECTORY_VIEW_DEPTH) -> str:
         """Safely list non-hidden files and directories up to the requested depth."""
         lines = [str(path)]
         self._walk_directory(path, lines, current_depth=0, max_depth=max_depth)
@@ -165,18 +167,20 @@ Notes for using the `str_replace` command:
             return
 
         try:
-            entries = sorted(
-                (entry for entry in directory.iterdir() if not entry.name.startswith(".")),
-                key=lambda entry: entry.name,
-            )
+            with os.scandir(directory) as iterator:
+                entries = sorted(
+                    (entry for entry in iterator if not entry.name.startswith(".")),
+                    key=lambda entry: entry.name,
+                )
         except OSError as exc:
             raise ToolError(f"Failed to list directory {directory}: {exc}") from exc
 
         for entry in entries:
-            lines.append(str(entry))
-            if entry.is_dir():
+            entry_path = Path(entry.path)
+            lines.append(str(entry_path))
+            if entry.is_dir(follow_symlinks=False):
                 self._walk_directory(
-                    entry, lines, current_depth=current_depth + 1, max_depth=max_depth
+                    entry_path, lines, current_depth=current_depth + 1, max_depth=max_depth
                 )
 
     async def _view(self, path: Path, view_range: list[int] | None = None) -> ToolExecResult:
@@ -188,7 +192,7 @@ Notes for using the `str_replace` command:
                 )
 
             stdout = self._list_directory(path)
-            stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
+            stdout = f"Here's the files and directories up to {MAX_DIRECTORY_VIEW_DEPTH} levels deep in {path}, excluding hidden items:\n{stdout}\n"
             return ToolExecResult(error_code=0, output=stdout, error="")
 
         file_content = self.read_file(path)
