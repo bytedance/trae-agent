@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -48,24 +49,7 @@ def maybe_truncate(output: str, max_chars: int = 20000) -> str:
 
 EditToolSubCommands = ["view", "create", "str_replace", "insert"]
 SNIPPET_LINES = 5
-
-
-async def run(command: str, timeout: int = 300) -> tuple[int, str, str]:
-    """Run a shell command asynchronously."""
-    proc = await asyncio.create_subprocess_shell(
-        command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        stdout = stdout_bytes.decode("utf-8", errors="ignore")
-        stderr = stderr_bytes.decode("utf-8", errors="ignore")
-        return proc.returncode if proc.returncode is not None else -1, stdout, stderr
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
-        return -1, "", f"Command timed out after {timeout} seconds."
+MAX_DIRECTORY_VIEW_DEPTH = 2
 
 
 class TextEditorTool(Tool):
@@ -195,6 +179,36 @@ Notes for using the `str_replace` command:
                 f"The path {path} is a directory and only the `view` command can be used on directories"
             )
 
+    def _list_directory(self, path: Path, max_depth: int = MAX_DIRECTORY_VIEW_DEPTH) -> str:
+        """Safely list non-hidden files and directories up to the requested depth."""
+        lines = [str(path)]
+        self._walk_directory(path, lines, current_depth=0, max_depth=max_depth)
+        return "\n".join(lines)
+
+    def _walk_directory(
+        self, directory: Path, lines: list[str], current_depth: int, max_depth: int
+    ) -> None:
+        """Recursively enumerate directory contents without invoking a shell."""
+        if current_depth >= max_depth:
+            return
+
+        try:
+            with os.scandir(directory) as iterator:
+                entries = sorted(
+                    (entry for entry in iterator if not entry.name.startswith(".")),
+                    key=lambda entry: entry.name,
+                )
+        except OSError as exc:
+            raise ToolError(f"Failed to list directory {directory}: {exc}") from exc
+
+        for entry in entries:
+            entry_path = Path(entry.path)
+            lines.append(str(entry_path))
+            if entry.is_dir(follow_symlinks=False):
+                self._walk_directory(
+                    entry_path, lines, current_depth=current_depth + 1, max_depth=max_depth
+                )
+
     async def _view(self, path: Path, view_range: list[int] | None = None) -> ToolExecResult:
         """Implement the view command"""
         if path.is_dir():
@@ -203,10 +217,9 @@ Notes for using the `str_replace` command:
                     "The `view_range` parameter is not allowed when `path` points to a directory."
                 )
 
-            return_code, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
-            if not stderr:
-                stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
-            return ToolExecResult(error_code=return_code, output=stdout, error=stderr)
+            stdout = self._list_directory(path)
+            stdout = f"Here's the files and directories up to {MAX_DIRECTORY_VIEW_DEPTH} levels deep in {path}, excluding hidden items:\n{stdout}\n"
+            return ToolExecResult(error_code=0, output=stdout, error="")
 
         file_content = self.read_file(path)
         init_line = 1
