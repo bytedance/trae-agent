@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal, get_args
 
 from base import CLIResult, ToolError, ToolResult
-from run import maybe_truncate, run
+from run import maybe_truncate
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 Command = Literal[
@@ -94,6 +94,32 @@ class EditTool:
                 f"The path {path} is a directory and only the `view` command can be used on directories"
             )
 
+    def _list_directory(self, path: Path, max_depth: int = 2) -> str:
+        lines = [str(path)]
+        self._walk_directory(path, lines, current_depth=0, max_depth=max_depth)
+        return "\n".join(lines)
+
+    def _walk_directory(
+        self, directory: Path, lines: list[str], current_depth: int, max_depth: int
+    ) -> None:
+        if current_depth >= max_depth:
+            return
+
+        try:
+            entries = sorted(
+                (entry for entry in directory.iterdir() if not entry.name.startswith(".")),
+                key=lambda entry: entry.name,
+            )
+        except OSError as exc:
+            raise ToolError(f"Failed to list directory {directory}: {exc}") from exc
+
+        for entry in entries:
+            lines.append(str(entry))
+            if entry.is_dir():
+                self._walk_directory(
+                    entry, lines, current_depth=current_depth + 1, max_depth=max_depth
+                )
+
     async def view(self, path: Path, view_range: list[int] | None = None):
         if path.is_dir():
             if view_range:
@@ -101,10 +127,9 @@ class EditTool:
                     "The `view_range` parameter is not allowed when `path` points to a directory."
                 )
 
-            _, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
-            if not stderr:
-                stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
-            return CLIResult(output=stdout, error=stderr)
+            stdout = self._list_directory(path)
+            stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
+            return CLIResult(output=stdout, error="")
 
         file_content = self.read_file(path)
         init_line = 1

@@ -3,7 +3,8 @@
 
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from trae_agent.tools.base import ToolCallArguments
 from trae_agent.tools.edit_tool import TextEditorTool
@@ -101,13 +102,45 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
         self.assertIn("edited", result.output)
 
     async def test_view_directory(self):
-        self.mock_file_system(exists=True, is_dir=True)
-        with patch("trae_agent.tools.edit_tool.run", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = (0, "file1\nfile2", "")
+        with TemporaryDirectory() as temp_dir:
+            test_dir = Path(temp_dir)
+            child = test_dir / "file1.txt"
+            nested_dir = test_dir / "nested"
+            hidden_child = test_dir / ".hidden.txt"
+            child.write_text("hello")
+            nested_dir.mkdir()
+            (nested_dir / "file2.txt").write_text("world")
+            hidden_child.write_text("ignore me")
             result = await self.tool.execute(
-                ToolCallArguments({"command": "view", "path": str(self.test_dir)})
+                ToolCallArguments({"command": "view", "path": str(test_dir)})
             )
         self.assertIn("files and directories", result.output)
+        self.assertIn(str(test_dir), result.output)
+        self.assertIn(str(child), result.output)
+        self.assertIn(str(nested_dir / "file2.txt"), result.output)
+        self.assertNotIn(str(hidden_child), result.output)
+
+    async def test_view_directory_with_shell_metacharacters_does_not_execute(self):
+        marker = Path.cwd() / "edit_tool_shell_injection_marker"
+        if marker.exists():
+            marker.unlink()
+
+        try:
+            with TemporaryDirectory(prefix="edit;touch edit_tool_shell_injection_marker;#") as temp_dir:
+                test_dir = Path(temp_dir)
+                child = test_dir / "file1.txt"
+                child.write_text("hello")
+                result = await self.tool.execute(
+                    ToolCallArguments({"command": "view", "path": str(test_dir)})
+                )
+        finally:
+            if marker.exists():
+                marker.unlink()
+
+        self.assertEqual(result.error_code, 0)
+        self.assertFalse(marker.exists())
+        self.assertIn(str(test_dir), result.output)
+        self.assertIn(str(child), result.output)
 
     async def test_view_file(self):
         self.mock_file_system(exists=True, is_dir=False, content="line1\nline2\nline3")
