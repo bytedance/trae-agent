@@ -342,13 +342,6 @@ def run(
         working_dir = os.getcwd()
         console.print(f"[blue]Using current directory as working directory: {working_dir}[/blue]")
 
-    # Ensure working directory is an absolute path
-    if not Path(working_dir).is_absolute():
-        console.print(
-            f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
-        )
-        sys.exit(1)
-
     agent = Agent(
         agent_type,
         config,
