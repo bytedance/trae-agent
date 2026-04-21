@@ -68,8 +68,8 @@ class MCPClient:
             for tool in mcp_tools.tools:
                 mcp_tool = MCPTool(self, tool, model_provider)
                 mcp_tools_container.append(mcp_tool)
-        except Exception as e:
-            raise e
+        except Exception:
+            raise
 
     async def connect_to_server(self, mcp_server_name, transport):
         """Connect to an MCP server
