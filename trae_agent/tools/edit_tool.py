@@ -9,6 +9,7 @@
 #
 # This modified file is released under the same license.
 
+import shlex
 from pathlib import Path
 from typing import override
 
@@ -159,7 +160,9 @@ Notes for using the `str_replace` command:
                     "The `view_range` parameter is not allowed when `path` points to a directory."
                 )
 
-            return_code, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
+            return_code, stdout, stderr = await run(
+                rf"find {shlex.quote(str(path))} -maxdepth 2 -not -path '*/\.*'"
+            )
             if not stderr:
                 stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
             return ToolExecResult(error_code=return_code, output=stdout, error=stderr)
