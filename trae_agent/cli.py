@@ -87,7 +87,9 @@ def check_docker(timeout=3):
 
 
 def build_with_pyinstaller():
-    os.system("rm -rf trae_agent/dist")
+    dist_dir = os.path.join("trae_agent", "dist")
+    if os.path.exists(dist_dir):
+        shutil.rmtree(dist_dir)
     print("--- Building edit_tool ---")
     subprocess.run(
         [
@@ -109,11 +111,14 @@ def build_with_pyinstaller():
         ],
         check=True,
     )
-    os.system("mkdir trae_agent/dist")
-    os.system("cp dist/edit_tool/edit_tool trae_agent/dist")
-    os.system("cp -r dist/json_edit_tool/_internal trae_agent/dist")
-    os.system("cp dist/json_edit_tool/json_edit_tool trae_agent/dist")
-    os.system("rm -rf dist")
+    os.makedirs(dist_dir, exist_ok=True)
+    shutil.copy(os.path.join("dist", "edit_tool", "edit_tool"), dist_dir)
+    shutil.copytree(
+        os.path.join("dist", "json_edit_tool", "_internal"),
+        os.path.join(dist_dir, "_internal"),
+    )
+    shutil.copy(os.path.join("dist", "json_edit_tool", "json_edit_tool"), dist_dir)
+    shutil.rmtree("dist")
 
 
 @click.group()
