@@ -9,7 +9,7 @@ Extends trae-agent sandbox with 62-dimensional neural perception space:
 - Real data validation (reads .memory/ directory)
 
 Design principles:
-- Core algorithms (vector field/pulse/hot needle) call local GraphEngine API
+- Uses local in-process adapters only; no API server, network call, or credential is required
 - Only interfaces exposed externally, not algorithm internals
 - All operations in shadow space, zero pollution to main environment
 """
@@ -473,11 +473,9 @@ class ShadowBox62D:
         self,
         project_dir: str | Path = ".",
         memory_path: str | Path | None = None,
-        checkpoint_uri: str = "http://127.0.0.1:18900/dashboard/ai_checkpoint",
     ):
         self._project_dir = Path(project_dir).resolve()
         self._memory_path = Path(memory_path) if memory_path else self._project_dir / ".memory"
-        self._checkpoint_uri = checkpoint_uri
 
         self._shadow_root: Path | None = None
         self._is_active = False
@@ -490,6 +488,7 @@ class ShadowBox62D:
         self._created_at: float = 0.0
         self._exec_count = 0
         self._rollback_count = 0
+        self._local_checkpoints: list[dict[str, Any]] = []
 
     # ══════════════════════════════════════════════════════
     #  Feature 1: 62-Dim Zero-Trace Sandbox
@@ -868,22 +867,12 @@ class ShadowBox62D:
         return True
 
     def _report_checkpoint(self, signal_type: str, data: dict) -> None:
-        """Report signal to IDE checkpoint."""
-        try:
-            import urllib.request
-            payload = json.dumps({
-                "summary": f"[{signal_type}] {json.dumps(data, ensure_ascii=False)[:500]}",
-                "timeout": 5,
-            }, ensure_ascii=False).encode("utf-8")
-            req = urllib.request.Request(
-                self._checkpoint_uri,
-                data=payload,
-                headers={"Content-Type": "application/json; charset=utf-8"},
-                method="POST",
-            )
-            urllib.request.urlopen(req, timeout=5)
-        except Exception:
-            pass
+        """Record validation signal locally; no network/API call is made."""
+        self._local_checkpoints.append({
+            "signal_type": signal_type,
+            "summary": json.dumps(data, ensure_ascii=False)[:500],
+            "timestamp": time.time(),
+        })
 
     # ══════════════════════════════════════════════════════
     #  Full Cycle
@@ -948,6 +937,7 @@ class ShadowBox62D:
             "rollback_count": self._rollback_count,
             "changes": len(self._changes),
             "hot_needle_detects": self._neuron_layer.hot_needle_detect_count,
+            "local_checkpoints": len(self._local_checkpoints),
             "lifetime": round(time.time() - self._created_at, 2) if self._created_at else 0,
         }
 
