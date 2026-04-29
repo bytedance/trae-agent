@@ -1,8 +1,8 @@
 """
-shadow_box_tool.py — 62D Shadow Box Tool (Trae Agent integration layer)
+shadow_box_tool.py — Local Sandbox Validation Tool (Trae Agent integration layer)
 
-Registered as a trae-agent Tool, LLM can directly invoke shadow box's 5 core features.
-Core algorithms called via local API, implementation details not exposed.
+Registered as a trae-agent Tool for local pre-run validation.
+All execution stays in-process; no external API server, network service, or credential is required.
 """
 
 from __future__ import annotations
@@ -13,13 +13,13 @@ import json
 
 
 class ShadowBoxTool(Tool):
-    """62-Dimensional Shadow Box Tool — full-dimension sandbox beyond ShadowWorkspace.
+    """Local sandbox validation tool — isolated pre-run checks for agent-generated changes.
 
     Supported operations:
-    - create_sandbox:   Create 62-dim isolated sandbox
+    - create_sandbox:   Create isolated local sandbox
     - destroy_sandbox:  Destroy sandbox (zero residue)
-    - hot_needle_scan:  Hot needle precision diagnosis (quantization/dimension/expert errors)
-    - analyze_structure: 62-dim code structure analysis
+    - hot_needle_scan:  Focused diagnostic scan for runtime, shape, and configuration issues
+    - analyze_structure: Code structure analysis
     - zero_pollution_exec: Zero-pollution pre-execution
     - validate:         Real data full validation
     - full_cycle:       Full cycle (create->analyze->diagnose->exec->validate->destroy)
@@ -41,9 +41,9 @@ class ShadowBoxTool(Tool):
 
     def get_description(self) -> str:
         return (
-            "62-dimensional Shadow Box — isolated sandbox with neural pulse diagnosis. "
-            "Provides: 62D code structure analysis, hot needle scanning for reshape/dims/expert errors, "
-            "zero-pollution code pre-execution with auto-fix, and real data validation from .memory/. "
+            "Plug-and-play local sandbox validation for trae-agent. "
+            "Runs pre-checks in an isolated temp workspace, reports concise diagnostics, "
+            "and requires no external API server, network service, or credentials. "
             "Operations: create_sandbox, destroy_sandbox, hot_needle_scan, analyze_structure, "
             "zero_pollution_exec, validate, full_cycle, status."
         )
