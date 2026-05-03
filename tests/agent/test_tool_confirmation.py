@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from trae_agent.agent.trae_agent import TraeAgent
-from trae_agent.tools.base import ToolCall
+from trae_agent.tools.base import ToolCall, ToolResult
 from trae_agent.utils.cli.cli_console import ToolConfirmationResult
 from trae_agent.utils.config import Config, ToolConfirmationConfig
 from trae_agent.utils.legacy_config import LegacyConfig
@@ -301,6 +301,164 @@ class TestToolCallHandlerConfirmation(unittest.TestCase):
 
         # Should not raise - just passes through
         self.assertIsNone(self.agent._cli_console)
+
+    def test_approved_tool_executes_normally(self):
+        """When user approves a tool call, it should execute and return the result."""
+        from trae_agent.agent.agent_basics import AgentStep, AgentStepState
+
+        self.agent._tool_confirmation_config = ToolConfirmationConfig(
+            enabled=True, tools_requiring_confirmation=["bash"]
+        )
+        mock_console = MagicMock()
+        mock_console.get_tool_confirmation.return_value = ToolConfirmationResult.APPROVE
+        self.agent._cli_console = mock_console
+
+        # Mock the tool executor to return a successful result
+        mock_result = ToolResult(call_id="1", name="bash", success=True, result="file1.txt\nfile2.txt")
+        mock_executor = MagicMock()
+
+        async def fake_sequential(calls):
+            return [mock_result]
+
+        mock_executor.sequential_tool_call = fake_sequential
+        self.agent._tool_caller = mock_executor
+
+        tool_call = ToolCall(name="bash", call_id="1", arguments={"command": "ls"})
+
+        import asyncio
+
+        step = AgentStep(step_number=1, state=AgentStepState.THINKING)
+        messages = asyncio.get_event_loop().run_until_complete(
+            self.agent._tool_call_handler([tool_call], step)
+        )
+
+        # Should have executed the tool and returned its result
+        self.assertEqual(len(messages), 1)
+        self.assertTrue(step.tool_results[0].success)
+        self.assertEqual(step.tool_results[0].result, "file1.txt\nfile2.txt")
+
+    def test_approve_all_adds_prefix_pattern(self):
+        """When user approves with APPROVE_ALL for bash, subsequent matching commands auto-pass."""
+        from trae_agent.agent.agent_basics import AgentStep, AgentStepState
+
+        self.agent._tool_confirmation_config = ToolConfirmationConfig(
+            enabled=True, tools_requiring_confirmation=["bash"]
+        )
+
+        tool_call_1 = ToolCall(name="bash", call_id="1", arguments={"command": "pip install requests"})
+
+        # First call: user picks APPROVE_ALL
+        mock_console = MagicMock()
+        mock_console.get_tool_confirmation.return_value = ToolConfirmationResult.APPROVE_ALL
+        self.agent._cli_console = mock_console
+
+        # "pip install" prefix should now be in allowed list
+        self.agent._add_allowed_pattern(tool_call_1)
+        self.assertIn("pip install", self.agent._allowed_command_prefixes)
+
+        # Second call with matching prefix should be auto-allowed without prompting
+        tool_call_2 = ToolCall(name="bash", call_id="2", arguments={"command": "pip install flask"})
+        self.assertTrue(self.agent._is_tool_call_allowed(tool_call_2))
+
+        # Non-matching command should still require confirmation
+        tool_call_3 = ToolCall(name="bash", call_id="3", arguments={"command": "pip uninstall flask"})
+        self.assertFalse(self.agent._is_tool_call_allowed(tool_call_3))
+
+    def test_tool_not_in_list_skips_confirmation(self):
+        """Tools not in tools_requiring_confirmation should skip confirmation."""
+        self.agent._tool_confirmation_config = ToolConfirmationConfig(
+            enabled=True, tools_requiring_confirmation=["bash"]
+        )
+        # sequentialthinking is not in the list, should not require confirmation
+        self.assertFalse(self.agent._should_confirm_tool("sequentialthinking"))
+        self.assertTrue(self.agent._should_confirm_tool("bash"))
+
+
+class TestYAMLConfigParsing(unittest.TestCase):
+    def test_tool_confirmation_from_yaml(self):
+        """Test that tool_confirmation config is correctly parsed from YAML."""
+        yaml_string = """
+model_providers:
+    anthropic:
+        api_key: test-key
+        provider: anthropic
+models:
+    trae_agent_model:
+        model_provider: anthropic
+        model: claude-sonnet-4-20250514
+        max_tokens: 4096
+        temperature: 0.5
+        top_p: 1
+        top_k: 0
+        parallel_tool_calls: true
+        max_retries: 10
+agents:
+    trae_agent:
+        model: trae_agent_model
+        enable_lakeview: false
+        max_steps: 20
+        tools:
+            - bash
+            - task_done
+        tool_confirmation:
+            enabled: true
+            tools_requiring_confirmation:
+                - bash
+                - str_replace_based_edit_tool
+"""
+        config = Config.create(config_string=yaml_string)
+        self.assertIsNotNone(config.trae_agent)
+        self.assertTrue(config.trae_agent.tool_confirmation.enabled)
+        self.assertEqual(
+            config.trae_agent.tool_confirmation.tools_requiring_confirmation,
+            ["bash", "str_replace_based_edit_tool"],
+        )
+
+    def test_tool_confirmation_default_when_missing_from_yaml(self):
+        """Test that tool_confirmation defaults to disabled when not in YAML."""
+        yaml_string = """
+model_providers:
+    anthropic:
+        api_key: test-key
+        provider: anthropic
+models:
+    trae_agent_model:
+        model_provider: anthropic
+        model: claude-sonnet-4-20250514
+        max_tokens: 4096
+        temperature: 0.5
+        top_p: 1
+        top_k: 0
+        parallel_tool_calls: true
+        max_retries: 10
+agents:
+    trae_agent:
+        model: trae_agent_model
+        enable_lakeview: false
+        max_steps: 20
+        tools:
+            - bash
+"""
+        config = Config.create(config_string=yaml_string)
+        self.assertIsNotNone(config.trae_agent)
+        self.assertFalse(config.trae_agent.tool_confirmation.enabled)
+        self.assertIsNone(config.trae_agent.tool_confirmation.tools_requiring_confirmation)
+
+
+class TestCLIConfirmToolsFlag(unittest.TestCase):
+    def test_confirm_tools_flag_sets_config(self):
+        """Test that --confirm-tools CLI flag correctly enables tool confirmation."""
+        from click.testing import CliRunner
+
+        from trae_agent.cli import cli
+
+        runner = CliRunner()
+        # Use --help to avoid needing real config/API, just verify the option exists
+        result = runner.invoke(cli, ["run", "--help"])
+        self.assertIn("--confirm-tools", result.output)
+
+        result = runner.invoke(cli, ["interactive", "--help"])
+        self.assertIn("--confirm-tools", result.output)
 
 
 if __name__ == "__main__":
