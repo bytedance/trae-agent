@@ -143,6 +143,17 @@ class MCPServerConfig:
 
 
 @dataclass
+class ToolConfirmationConfig:
+    """Configuration for tool confirmation behavior."""
+
+    enabled: bool = False
+    # List of tool names that require confirmation.
+    # If None, ALL tools require confirmation when enabled.
+    # If a non-empty list, only those named tools require confirmation.
+    tools_requiring_confirmation: list[str] | None = None
+
+
+@dataclass
 class AgentConfig:
     """
     Base class for agent configurations.
@@ -153,6 +164,7 @@ class AgentConfig:
     max_steps: int
     model: ModelConfig
     tools: list[str]
+    tool_confirmation: ToolConfirmationConfig = field(default_factory=ToolConfirmationConfig)
 
 
 @dataclass
@@ -284,8 +296,15 @@ class Config:
                     raise ConfigError(f"Model {agent_model_name} not found") from e
                 match agent_name:
                     case "trae_agent":
+                        # Extract tool_confirmation config before **agent_config
+                        # because nested dicts are not auto-converted to dataclasses
+                        tc_config = agent_config.pop("tool_confirmation", {})
+                        tool_confirmation = (
+                            ToolConfirmationConfig(**tc_config) if tc_config else ToolConfirmationConfig()
+                        )
                         trae_agent_config = TraeAgentConfig(
                             **agent_config,
+                            tool_confirmation=tool_confirmation,
                             mcp_servers_config=mcp_servers_config,
                             allow_mcp_servers=allow_mcp_servers,
                         )
