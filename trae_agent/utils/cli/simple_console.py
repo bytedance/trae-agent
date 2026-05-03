@@ -17,6 +17,7 @@ from trae_agent.utils.cli.cli_console import (
     CLIConsole,
     ConsoleMode,
     ConsoleStep,
+    ToolConfirmationResult,
     generate_agent_step_table,
 )
 from trae_agent.utils.config import LakeviewConfig
@@ -212,6 +213,42 @@ class SimpleCLIConsole(CLIConsole):
             return input()
         except (EOFError, KeyboardInterrupt):
             return ""
+
+    @override
+    def get_tool_confirmation(self, tool_call) -> ToolConfirmationResult:
+        """Ask the user for confirmation before executing a tool call."""
+        tool_name = tool_call.name
+        # Show command for bash, arguments summary for others
+        if tool_name == "bash":
+            command = tool_call.arguments.get("command", "")
+            detail = f"[bold]Command:[/bold] {command}"
+        else:
+            detail = f"[bold]Arguments:[/bold] {tool_call.arguments}"
+
+        self.console.print(
+            Panel(
+                f"[bold]Tool:[/bold] {tool_name}\n{detail}",
+                title="Tool Confirmation Required",
+                border_style="yellow",
+            )
+        )
+        self.console.print(
+            "[bold]Options:[/bold] (y)es / (n)o / (a)lways approve this pattern"
+        )
+
+        while True:
+            try:
+                response = input("[y/n/a]: ").strip().lower()
+                if response in ("y", "yes"):
+                    return ToolConfirmationResult.APPROVE
+                elif response in ("n", "no"):
+                    return ToolConfirmationResult.REJECT
+                elif response in ("a", "always", "all"):
+                    return ToolConfirmationResult.APPROVE_ALL
+                else:
+                    self.console.print("[yellow]Please enter y, n, or a[/yellow]")
+            except (EOFError, KeyboardInterrupt):
+                return ToolConfirmationResult.REJECT
 
     @override
     def stop(self):

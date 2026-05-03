@@ -8,6 +8,12 @@ agents:
             - str_replace_based_edit_tool
             - sequentialthinking
             - task_done
+        # tool_confirmation:
+        #     enabled: true
+        #     tools_requiring_confirmation:
+        #         - bash
+        #         - str_replace_based_edit_tool
+        #         - json_edit_tool
 allow_mcp_servers:
     - playwright
 mcp_servers:

@@ -189,6 +189,12 @@ def cli():
     help="Type of agent to use (trae_agent)",
     default="trae_agent",
 )
+@click.option(
+    "--confirm-tools",
+    is_flag=True,
+    default=False,
+    help="Require user confirmation before executing tool calls",
+)
 def run(
     task: str | None,
     file_path: str | None,
@@ -204,6 +210,7 @@ def run(
     trajectory_file: str | None = None,
     console_type: str | None = "simple",
     agent_type: str | None = "trae_agent",
+    confirm_tools: bool = False,
     # --- Add Docker Mode ---
     docker_image: str | None = None,
     docker_container_id: str | None = None,
@@ -304,6 +311,15 @@ def run(
     if not agent_type:
         console.print("[red]Error: agent_type is required.[/red]")
         sys.exit(1)
+
+    # Apply --confirm-tools flag to config
+    if confirm_tools and config.trae_agent:
+        from trae_agent.utils.config import ToolConfirmationConfig
+
+        config.trae_agent.tool_confirmation = ToolConfirmationConfig(
+            enabled=True,
+            tools_requiring_confirmation=["bash", "str_replace_based_edit_tool", "json_edit_tool"],
+        )
 
     # Create CLI Console
     console_mode = ConsoleMode.RUN
@@ -437,6 +453,12 @@ def run(
     help="Type of agent to use (trae_agent)",
     default="trae_agent",
 )
+@click.option(
+    "--confirm-tools",
+    is_flag=True,
+    default=False,
+    help="Require user confirmation before executing tool calls",
+)
 def interactive(
     provider: str | None = None,
     model: str | None = None,
@@ -447,6 +469,7 @@ def interactive(
     trajectory_file: str | None = None,
     console_type: str | None = "simple",
     agent_type: str | None = "trae_agent",
+    confirm_tools: bool = False,
 ):
     """
     This function starts an interactive session with Trae Agent.
@@ -471,6 +494,15 @@ def interactive(
     else:
         console.print("[red]Error: trae_agent configuration is required in the config file.[/red]")
         sys.exit(1)
+
+    # Apply --confirm-tools flag to config
+    if confirm_tools and config.trae_agent:
+        from trae_agent.utils.config import ToolConfirmationConfig
+
+        config.trae_agent.tool_confirmation = ToolConfirmationConfig(
+            enabled=True,
+            tools_requiring_confirmation=["bash", "str_replace_based_edit_tool", "json_edit_tool"],
+        )
 
     # Create CLI Console for interactive mode
     console_mode = ConsoleMode.INTERACTIVE

@@ -3,7 +3,7 @@
 
 """CLI console module for Trae Agent."""
 
-from .cli_console import CLIConsole, ConsoleMode, ConsoleType
+from .cli_console import CLIConsole, ConsoleMode, ConsoleType, ToolConfirmationResult
 from .console_factory import ConsoleFactory
 from .rich_console import RichCLIConsole
 from .simple_console import SimpleCLIConsole
@@ -12,6 +12,7 @@ __all__ = [
     "CLIConsole",
     "ConsoleMode",
     "ConsoleType",
+    "ToolConfirmationResult",
     "SimpleCLIConsole",
     "RichCLIConsole",
     "ConsoleFactory",

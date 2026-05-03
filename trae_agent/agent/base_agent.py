@@ -15,7 +15,8 @@ from trae_agent.tools.base import Tool, ToolCall, ToolExecutor, ToolResult
 from trae_agent.tools.ckg.ckg_database import clear_older_ckg
 from trae_agent.tools.docker_tool_executor import DockerToolExecutor
 from trae_agent.utils.cli import CLIConsole
-from trae_agent.utils.config import AgentConfig, ModelConfig
+from trae_agent.utils.cli.cli_console import ToolConfirmationResult
+from trae_agent.utils.config import AgentConfig, ModelConfig, ToolConfirmationConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 from trae_agent.utils.llm_clients.llm_client import LLMClient
 from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
@@ -73,6 +74,12 @@ class BaseAgent(ABC):
             self._tool_caller = original_tool_executor
 
         self._cli_console: CLIConsole | None = None
+
+        # Tool confirmation state
+        self._tool_confirmation_config: ToolConfirmationConfig = agent_config.tool_confirmation
+        self._tool_confirmation_approved_all: bool = False
+        self._allowed_command_prefixes: list[str] = []  # For bash prefix matching
+        self._allowed_tool_names: set[str] = set()  # For non-bash tool name matching
 
         # Trajectory recorder
         self._trajectory_recorder: TrajectoryRecorder | None = None
@@ -328,18 +335,58 @@ class BaseAgent(ABC):
         step.tool_calls = tool_calls
         self._update_cli_console(step)
 
-        if self._model_config.parallel_tool_calls:
-            tool_results = await self._tool_caller.parallel_tool_call(tool_calls)
+        # Tool confirmation logic
+        approved_calls: list[ToolCall] = []
+        rejected_results: list[ToolResult] = []
+
+        if (
+            self._tool_confirmation_config.enabled
+            and not self._tool_confirmation_approved_all
+            and self._cli_console is not None
+        ):
+            for tool_call in tool_calls:
+                if self._is_tool_call_allowed(tool_call):
+                    approved_calls.append(tool_call)
+                elif self._should_confirm_tool(tool_call.name):
+                    confirmation = self._cli_console.get_tool_confirmation(tool_call)
+                    if confirmation == ToolConfirmationResult.APPROVE:
+                        approved_calls.append(tool_call)
+                    elif confirmation == ToolConfirmationResult.APPROVE_ALL:
+                        self._add_allowed_pattern(tool_call)
+                        approved_calls.append(tool_call)
+                    else:  # REJECT
+                        rejected_results.append(
+                            ToolResult(
+                                call_id=tool_call.call_id,
+                                name=tool_call.name,
+                                success=False,
+                                error=f"Tool call '{tool_call.name}' was rejected by the user.",
+                                id=tool_call.id,
+                            )
+                        )
+                else:
+                    approved_calls.append(tool_call)
         else:
-            tool_results = await self._tool_caller.sequential_tool_call(tool_calls)
-        step.tool_results = tool_results
+            approved_calls = list(tool_calls)
+
+        # Execute approved tool calls
+        if approved_calls:
+            if self._model_config.parallel_tool_calls:
+                tool_results = await self._tool_caller.parallel_tool_call(approved_calls)
+            else:
+                tool_results = await self._tool_caller.sequential_tool_call(approved_calls)
+        else:
+            tool_results = []
+
+        all_results = tool_results + rejected_results
+        step.tool_results = all_results
         self._update_cli_console(step)
-        for tool_result in tool_results:
-            # Add tool result to conversation
+
+        for tool_result in all_results:
             message = LLMMessage(role="user", tool_result=tool_result)
             messages.append(message)
 
-        reflection = self.reflect_on_result(tool_results)
+        reflection = self.reflect_on_result(all_results)
         if reflection:
             step.state = AgentStepState.REFLECTING
             step.reflection = reflection
@@ -350,3 +397,53 @@ class BaseAgent(ABC):
             messages.append(LLMMessage(role="assistant", content=reflection))
 
         return messages
+
+    def _should_confirm_tool(self, tool_name: str) -> bool:
+        """Check whether a tool with the given name requires user confirmation."""
+        config = self._tool_confirmation_config
+        if not config.enabled:
+            return False
+        required_list = config.tools_requiring_confirmation
+        if required_list is None:
+            return True
+        normalized_name = tool_name.lower().replace("_", "")
+        return any(
+            normalized_name == required.lower().replace("_", "") for required in required_list
+        )
+
+    def _is_tool_call_allowed(self, tool_call: ToolCall) -> bool:
+        """Check if a tool call matches a previously approved pattern."""
+        if self._tool_confirmation_approved_all:
+            return True
+
+        tool_name = tool_call.name.lower().replace("_", "")
+
+        # For bash: check command prefix matching
+        if tool_name == "bash":
+            command = str(tool_call.arguments.get("command", ""))
+            for prefix in self._allowed_command_prefixes:
+                if command.startswith(prefix):
+                    return True
+
+        # For non-bash tools: check tool name matching
+        return tool_name in self._allowed_tool_names
+
+    def _add_allowed_pattern(self, tool_call: ToolCall) -> None:
+        """Add an allowed pattern based on the tool call (APPROVE_ALL result)."""
+        tool_name = tool_call.name.lower().replace("_", "")
+
+        # For bash: add command prefix (first two tokens)
+        if tool_name == "bash":
+            command = str(tool_call.arguments.get("command", ""))
+            tokens = command.split()
+            prefix = " ".join(tokens[:2]) if len(tokens) >= 2 else command
+            self._allowed_command_prefixes.append(prefix)
+        else:
+            # For non-bash tools: allow by tool name
+            self._allowed_tool_names.add(tool_name)
+
+    def reset_tool_confirmation_state(self) -> None:
+        """Reset the tool confirmation state for a new task."""
+        self._tool_confirmation_approved_all = False
+        self._allowed_command_prefixes.clear()
+        self._allowed_tool_names.clear()

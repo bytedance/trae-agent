@@ -107,6 +107,7 @@ class TraeAgent(BaseAgent):
         tool_names: list[str] | None = None,
     ):
         """Create a new task."""
+        self.reset_tool_confirmation_state()
         self._task: str = task
 
         if tool_names is None and len(self._tools) == 0:

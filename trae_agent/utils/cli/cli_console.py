@@ -12,8 +12,17 @@ from rich.panel import Panel
 from rich.table import Table
 
 from trae_agent.agent.agent_basics import AgentExecution, AgentStep, AgentStepState
+from trae_agent.tools.base import ToolCall
 from trae_agent.utils.config import LakeviewConfig
 from trae_agent.utils.lake_view import LakeView
+
+
+class ToolConfirmationResult(Enum):
+    """Result of a tool confirmation request."""
+
+    APPROVE = "approve"
+    REJECT = "reject"
+    APPROVE_ALL = "approve_all"  # Approve this and all matching future tool calls
 
 
 class ConsoleMode(Enum):
@@ -113,6 +122,18 @@ class CLIConsole(ABC):
     @abstractmethod
     def stop(self):
         """Stop the console and cleanup resources."""
+        pass
+
+    @abstractmethod
+    def get_tool_confirmation(self, tool_call: ToolCall) -> ToolConfirmationResult:
+        """Ask the user for confirmation before executing a tool call.
+
+        Args:
+            tool_call: The tool call that is about to be executed.
+
+        Returns:
+            ToolConfirmationResult indicating user's decision.
+        """
         pass
 
     def set_lakeview(self, lakeview_config: LakeviewConfig | None = None):
