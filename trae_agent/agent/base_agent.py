@@ -18,6 +18,8 @@ from trae_agent.utils.cli import CLIConsole
 from trae_agent.utils.config import AgentConfig, ModelConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 from trae_agent.utils.llm_clients.llm_client import LLMClient
+from trae_agent.utils.long_term_memory import LongTermMemory
+from trae_agent.utils.memory_trigger import MemoryTrigger
 from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 
 
@@ -77,6 +79,11 @@ class BaseAgent(ABC):
         # Trajectory recorder
         self._trajectory_recorder: TrajectoryRecorder | None = None
 
+        # Long-term memory
+        self._long_term_memory: LongTermMemory | None = None
+        self._memory_trigger: MemoryTrigger | None = None
+        self._current_execution: AgentExecution | None = None
+
         # CKG tool-specific: clear the older CKG databases
         clear_older_ckg()
 
@@ -94,6 +101,23 @@ class BaseAgent(ABC):
         self._trajectory_recorder = recorder
         # Also set it on the LLM client
         self._llm_client.set_trajectory_recorder(recorder)
+
+    @property
+    def long_term_memory(self) -> LongTermMemory | None:
+        """Get the long-term memory system for this agent."""
+        return self._long_term_memory
+
+    def set_long_term_memory(self, ltm: LongTermMemory | None) -> None:
+        """Set the long-term memory system and its trigger."""
+        from trae_agent.utils.memory_trigger import create_memory_trigger
+
+        self._long_term_memory = ltm
+        if ltm is not None:
+            self._memory_trigger = create_memory_trigger(
+                ltm._config.trigger_type, ltm._config.periodic_interval
+            )
+        else:
+            self._memory_trigger = None
 
     @property
     def cli_console(self) -> CLIConsole | None:
@@ -153,6 +177,7 @@ class BaseAgent(ABC):
 
         start_time = time.time()
         execution = AgentExecution(task=self._task, steps=[])
+        self._current_execution = execution
         step: AgentStep | None = None
 
         try:
@@ -167,6 +192,16 @@ class BaseAgent(ABC):
                     await self._finalize_step(
                         step, messages, execution
                     )  # record trajectory for this step and update the CLI console
+                    # Check memory trigger
+                    if self._memory_trigger and self._long_term_memory and self._memory_trigger.should_trigger(step, len(execution.steps)):
+                        memory_path = await self._long_term_memory.extract_and_save(
+                            execution.steps
+                        )
+                        if memory_path and self._cli_console:
+                            self._cli_console.print(
+                                f"[Long-term Memory] Extracted and saved to: {memory_path}",
+                                color="cyan",
+                            )
                     if execution.agent_state == AgentState.COMPLETED:
                         break
                     step_number += 1
@@ -213,7 +248,11 @@ class BaseAgent(ABC):
         step.state = AgentStepState.THINKING
         self._update_cli_console(step, execution)
         # Get LLM response
-        llm_response = self._llm_client.chat(messages, self._model_config, self._tools)
+        # Optional memory-based context compression
+        effective_messages = messages
+        if self._long_term_memory and len(messages) > 20:
+            effective_messages = self.inject_memory_into_messages(messages)
+        llm_response = self._llm_client.chat(effective_messages, self._model_config, self._tools)
         step.llm_response = llm_response
 
         # Display step with LLM response
@@ -350,3 +389,38 @@ class BaseAgent(ABC):
             messages.append(LLMMessage(role="assistant", content=reflection))
 
         return messages
+
+    def inject_memory_into_messages(
+        self, messages: list[LLMMessage], keep_recent: int = 4
+    ) -> list[LLMMessage]:
+        """Replace older messages with a compressed memory summary.
+
+        Keeps the system message, the memory summary message, and the last
+        `keep_recent` messages.
+        """
+        if not self._long_term_memory:
+            return messages
+
+        memory_msg = self._long_term_memory.build_memory_message()
+        if memory_msg is None:
+            return messages
+
+        # Always keep system message (index 0)
+        result = [messages[0]]
+
+        # Add memory summary
+        result.append(memory_msg)
+
+        # Keep the most recent messages
+        if len(messages) > keep_recent:
+            result.extend(messages[-keep_recent:])
+        else:
+            result.extend(messages[1:])
+
+        return result
+
+    async def extract_memory_now(self) -> str | None:
+        """Manually trigger memory extraction. Returns the path to the saved Markdown file."""
+        if not self._long_term_memory or not self._current_execution:
+            return None
+        return await self._long_term_memory.extract_and_save(self._current_execution.steps)

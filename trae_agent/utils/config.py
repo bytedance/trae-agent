@@ -156,12 +156,24 @@ class AgentConfig:
 
 
 @dataclass
+class LongTermMemoryConfig:
+    """Long-term memory configuration."""
+
+    enabled: bool = False
+    trigger_type: str = "manual"  # "manual" | "periodic"
+    periodic_interval: int = 10  # steps between auto-extractions
+    output_dir: str = "memory/"  # directory for Markdown files
+    model: ModelConfig | None = None  # optional separate model; falls back to agent model
+
+
+@dataclass
 class TraeAgentConfig(AgentConfig):
     """
     Trae agent configuration.
     """
 
     enable_lakeview: bool = True
+    long_term_memory: LongTermMemoryConfig | None = None
     tools: list[str] = field(
         default_factory=lambda: [
             "bash",
@@ -271,6 +283,20 @@ class Config:
         }
         allow_mcp_servers = yaml_config.get("allow_mcp_servers", [])
 
+        # Parse long_term_memory config
+        ltm_yaml = yaml_config.get("long_term_memory", None)
+        ltm_config: LongTermMemoryConfig | None = None
+        if ltm_yaml is not None:
+            ltm_model_name = ltm_yaml.get("model", None)
+            ltm_model = config_models.get(ltm_model_name) if ltm_model_name else None
+            ltm_config = LongTermMemoryConfig(
+                enabled=ltm_yaml.get("enabled", False),
+                trigger_type=ltm_yaml.get("trigger_type", "manual"),
+                periodic_interval=ltm_yaml.get("periodic_interval", 10),
+                output_dir=ltm_yaml.get("output_dir", "memory/"),
+                model=ltm_model,
+            )
+
         # Parse agents
         agents = yaml_config.get("agents", None)
         if agents is not None and len(agents.keys()) > 0:
@@ -286,6 +312,7 @@ class Config:
                     case "trae_agent":
                         trae_agent_config = TraeAgentConfig(
                             **agent_config,
+                            long_term_memory=ltm_config,
                             mcp_servers_config=mcp_servers_config,
                             allow_mcp_servers=allow_mcp_servers,
                         )

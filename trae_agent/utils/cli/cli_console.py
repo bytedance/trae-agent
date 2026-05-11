@@ -122,6 +122,10 @@ class CLIConsole(ABC):
         else:
             self.lake_view = None
 
+    def set_memory_doc(self, doc: object | None):  # noqa: B027
+        """Set the memory document for visualization. Subclasses can override for custom display."""
+        pass
+
 
 def generate_agent_step_table(agent_step: AgentStep) -> Table:
     """Log an agent step to the console."""

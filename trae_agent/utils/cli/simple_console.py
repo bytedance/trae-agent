@@ -20,6 +20,7 @@ from trae_agent.utils.cli.cli_console import (
     generate_agent_step_table,
 )
 from trae_agent.utils.config import LakeviewConfig
+from trae_agent.utils.long_term_memory import MemoryDocument
 
 
 class SimpleCLIConsole(CLIConsole):
@@ -82,6 +83,10 @@ class SimpleCLIConsole(CLIConsole):
         if self.lake_view and self.agent_execution:
             await self._print_lakeview_summary()
 
+        # Print memory summary if available
+        if hasattr(self, "_memory_doc") and self._memory_doc:
+            self._print_memory_summary()
+
         # Print execution summary
         if self.agent_execution:
             self._print_execution_summary()
@@ -106,6 +111,30 @@ class SimpleCLIConsole(CLIConsole):
             )
 
         self.console.print(table)
+
+    def set_memory_doc(self, doc: MemoryDocument | None):
+        """Set the memory document for visualization."""
+        self._memory_doc = doc
+
+    def _print_memory_summary(self):
+        """Print long-term memory summary."""
+        doc = getattr(self, "_memory_doc", None)
+        if not doc:
+            return
+
+        self.console.print("\n" + "=" * 60)
+        self.console.print("[bold cyan]Long-term Memory[/bold cyan]")
+        self.console.print("=" * 60)
+
+        for section in doc.sections:
+            self.console.print(
+                Panel(
+                    f"[bold]Problem:[/bold] {section.problem}\n[bold]Conclusion:[/bold] {section.conclusion}",
+                    title=section.heading(),
+                    border_style="cyan",
+                    width=80,
+                )
+            )
 
     async def _print_lakeview_summary(self):
         """Print lakeview summary of all completed steps."""

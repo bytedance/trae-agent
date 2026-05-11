@@ -20,6 +20,8 @@ class Agent:
         cli_console: CLIConsole | None = None,
         docker_config: dict | None = None,
         docker_keep: bool = True,
+        session_id: str | None = None,
+        memory_path: str | None = None,
     ):
         if isinstance(agent_type, str):
             agent_type = AgentType(agent_type)
@@ -56,6 +58,23 @@ class Agent:
 
         self.agent.set_trajectory_recorder(self.trajectory_recorder)
 
+        # Set up long-term memory
+        if config.trae_agent and config.trae_agent.long_term_memory and config.trae_agent.long_term_memory.enabled:
+            from trae_agent.utils.long_term_memory import LongTermMemory
+
+            ltm = LongTermMemory(
+                config=config.trae_agent.long_term_memory,
+                fallback_model=config.trae_agent.model,
+            )
+            self.agent.set_long_term_memory(ltm)
+
+        # Set session ID and preload memory if provided
+        if self.agent.long_term_memory:
+            if session_id:
+                self.agent.long_term_memory.set_session_id(session_id)
+            if memory_path:
+                self.agent.long_term_memory.load_memory(memory_path)
+
     async def run(
         self,
         task: str,
@@ -63,6 +82,10 @@ class Agent:
         tool_names: list[str] | None = None,
     ):
         self.agent.new_task(task, extra_args, tool_names)
+
+        if self.agent.long_term_memory:
+            self.agent.long_term_memory.set_task(task)
+            self.agent.long_term_memory.set_trajectory_file(self.trajectory_file)
 
         if self.agent.allow_mcp_servers:
             if self.agent.cli_console:

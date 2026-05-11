@@ -18,6 +18,13 @@ mcp_servers:
 lakeview:
     model: lakeview_model
 
+# long_term_memory:
+#     enabled: true
+#     trigger_type: periodic   # "manual" or "periodic"
+#     periodic_interval: 10   # steps between auto-extractions (for periodic trigger)
+#     output_dir: memory/     # directory for Markdown memory files
+#     # model: ltm_model      # optional separate model; falls back to agent model
+
 model_providers:
     anthropic:
         api_key: your_anthropic_api_key
