@@ -186,3 +186,4 @@ trae_config.yaml
 
 # Patch selection python binary
 py312/
+/review/

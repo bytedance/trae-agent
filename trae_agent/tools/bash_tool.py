@@ -11,16 +11,46 @@
 
 import asyncio
 import os
+import re
+import signal
+from contextlib import suppress
 from typing import override
 
 from trae_agent.tools.base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
+
+# Regular expression patterns for detecting terminal interactive prompts.
+# These match common patterns that cause commands to block waiting for user input.
+INTERACTIVE_PROMPT_PATTERN_STRINGS: list[str] = [
+    r"\[Y/n\]",
+    r"\[y/N\]",
+    r"\[Y/N\]",
+    r"\(Y/n\)",
+    r"\(y/N\)",
+    r"\[yes/no\]",
+    r"\[confirm\]",
+    r"[Pp]assword\s*[:：]",
+    r"[Pp]assphrase\s*[:：]",
+    r"[Cc]ontinue\s*\?",
+    r"[Pp]roceed\s*\?",
+    r"[Pp]ress\s+any\s+key",
+    r"[Ee]nter\s+to\s+continue",
+    r"[Yy]es\s*/?\s*[Nn]o",
+    r"[Aa]re\s+you\s+sure",
+]
+
+INTERACTIVE_PROMPT_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(p, re.IGNORECASE) for p in INTERACTIVE_PROMPT_PATTERN_STRINGS
+]
+
+# After this many consecutive empty polls (each at _output_delay), stall detection triggers.
+# At 0.2s per poll, 5 polls ≈ 1 second of stall.
+_STALL_POLL_LIMIT = 5
 
 
 class _BashSession:
     """A session of a bash shell."""
 
     _started: bool
-    _timed_out: bool
 
     command: str = "/bin/bash"
     _output_delay: float = 0.2  # seconds
@@ -29,14 +59,11 @@ class _BashSession:
 
     def __init__(self) -> None:
         self._started = False
-        self._timed_out = False
         self._process: asyncio.subprocess.Process | None = None
 
     async def start(self) -> None:
         if self._started:
             return
-
-        # Windows compatibility: os.setsid not available
 
         if os.name != "nt":  # Unix-like systems
             self._process = await asyncio.create_subprocess_shell(
@@ -84,19 +111,97 @@ class _BashSession:
         except Exception:
             return None
 
+    async def _read_stdout_available(self) -> bytearray:
+        """Safely read all currently available data from stdout without blocking.
+
+        Uses a short timeout to return immediately when no data is available,
+        instead of blocking on the internal StreamReader buffer indefinitely.
+        """
+        data = bytearray()
+        try:
+            while self._process and self._process.stdout and not self._process.stdout.at_eof():
+                chunk = await asyncio.wait_for(self._process.stdout.read(4096), timeout=0.005)
+                if not chunk:
+                    break
+                data.extend(chunk)
+        except asyncio.TimeoutError:
+            pass
+        except Exception:
+            pass
+        return data
+
+    async def _read_stderr_available(self) -> bytearray:
+        """Safely read all currently available data from stderr without blocking."""
+        data = bytearray()
+        try:
+            while self._process and self._process.stderr and not self._process.stderr.at_eof():
+                chunk = await asyncio.wait_for(self._process.stderr.read(4096), timeout=0.005)
+                if not chunk:
+                    break
+                data.extend(chunk)
+        except asyncio.TimeoutError:
+            pass
+        except Exception:
+            pass
+        return data
+
+    async def _restart_session(self) -> None:
+        """Forcefully kill the current session process and start a new one."""
+        if self._process and self._process.pid is not None:
+            try:
+                if os.name != "nt":
+                    os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
+                else:
+                    self._process.kill()
+            except (OSError, ProcessLookupError):
+                pass
+            with suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(self._process.wait(), timeout=5.0)
+
+        self._process = None
+        self._started = False
+        await self.start()
+
+    def _check_interactive_prompt(self, output: str) -> str | None:
+        """Check tail of output for interactive prompt patterns.
+
+        Returns the matched pattern string, or None if no match.
+        Only examines the last 200 characters for efficiency.
+        """
+        tail = output[-200:] if len(output) > 200 else output
+        for pattern in INTERACTIVE_PROMPT_PATTERNS:
+            match = pattern.search(tail)
+            if match:
+                return match.group()
+        return None
+
+    async def _restart_with_output(
+        self, partial_stdout: str, partial_stderr: str, reason: str
+    ) -> ToolExecResult:
+        """Kill the stuck session and restart, returning partial output.
+
+        This is used when a command blocks on an interactive prompt or times out.
+        The session is transparently restarted so subsequent commands can proceed.
+        """
+        await self._restart_session()
+        error_msg = f"Command blocked by interactive prompt ({reason}). Session restarted."
+        if partial_stderr:
+            error_msg += f"\nPartial stderr: {partial_stderr}"
+        return ToolExecResult(
+            output=partial_stdout,
+            error=error_msg,
+            error_code=-1,
+            partial=True,
+        )
+
     async def run(self, command: str) -> ToolExecResult:
         """Execute a command in the bash shell."""
         if not self._started or self._process is None:
             raise ToolError("Session has not started.")
         if self._process.returncode is not None:
-            return ToolExecResult(
-                error=f"bash has exited with returncode {self._process.returncode}. tool must be restarted.",
-                error_code=-1,
-            )
-        if self._timed_out:
-            raise ToolError(
-                f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
-            )
+            # Process has died — restart transparently and retry
+            await self._restart_session()
+            return await self.run(command)
 
         # we know these are not None because we created the process with PIPEs
         assert self._process.stdin
@@ -119,14 +224,31 @@ class _BashSession:
         )
         await self._process.stdin.drain()
 
-        # read output from the process, until the sentinel is found
+        # use bytearray accumulators instead of directly accessing internal _buffer
+        stdout_buffer = bytearray()
+        stderr_buffer = bytearray()
+        empty_polls = 0
+
         try:
             async with asyncio.timeout(self._timeout):
                 while True:
                     await asyncio.sleep(self._output_delay)
-                    # if we read directly from stdout/stderr, it will wait forever for
-                    # EOF. use the StreamReader buffer directly instead.
-                    output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+
+                    # safely read available stdout data
+                    new_stdout = await self._read_stdout_available()
+                    if new_stdout:
+                        stdout_buffer.extend(new_stdout)
+                        empty_polls = 0
+                    else:
+                        empty_polls += 1
+
+                    # also read stderr to avoid buffer blow-up
+                    new_stderr = await self._read_stderr_available()
+                    if new_stderr:
+                        stderr_buffer.extend(new_stderr)
+
+                    output = stdout_buffer.decode(errors="replace")
+
                     if sentinel_before in output:
                         # strip the sentinel from output
                         output, pivot, exit_banner = output.rpartition(sentinel_before)
@@ -139,24 +261,32 @@ class _BashSession:
 
                         error_code = int(error_code_str)
                         break
+
+                    # Stall detection: if output hasn't grown for several polls,
+                    # check whether the command is blocked on an interactive prompt.
+                    if empty_polls >= _STALL_POLL_LIMIT:
+                        matched = self._check_interactive_prompt(output)
+                        if matched:
+                            return await self._restart_with_output(
+                                partial_stdout=output.rstrip("\n"),
+                                partial_stderr=stderr_buffer.decode(errors="replace").rstrip("\n"),
+                                reason=matched,
+                            )
         except asyncio.TimeoutError:
-            self._timed_out = True
-            raise ToolError(
-                f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
-            ) from None
+            return await self._restart_with_output(
+                partial_stdout=stdout_buffer.decode(errors="replace").rstrip("\n"),
+                partial_stderr=stderr_buffer.decode(errors="replace").rstrip("\n"),
+                reason=f"timeout after {self._timeout}s",
+            )
 
-        if output.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
-            output = output[:-1]  # pyright: ignore[reportUnknownVariableType]
+        if output.endswith("\n"):
+            output = output[:-1]
 
-        error: str = self._process.stderr._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
-        if error.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
-            error = error[:-1]  # pyright: ignore[reportUnknownVariableType]
+        stderr_output = stderr_buffer.decode(errors="replace")
+        if stderr_output.endswith("\n"):
+            stderr_output = stderr_output[:-1]
 
-        # clear the buffers so that the next output can be read correctly
-        self._process.stdout._buffer.clear()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-        self._process.stderr._buffer.clear()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-
-        return ToolExecResult(output=output, error=error, error_code=error_code)  # pyright: ignore[reportUnknownArgumentType]
+        return ToolExecResult(output=output, error=stderr_output, error_code=error_code)
 
 
 class BashTool(Tool):
@@ -234,8 +364,14 @@ class BashTool(Tool):
             )
         try:
             return await self._session.run(command)
-        except Exception as e:
-            return ToolExecResult(error=f"Error running bash command: {e}", error_code=-1)
+        except Exception:
+            # Implicit session restart and single retry
+            try:
+                self._session = _BashSession()
+                await self._session.start()
+                return await self._session.run(command)
+            except Exception as e2:
+                return ToolExecResult(error=f"Error running bash command: {e2}", error_code=-1)
 
     @override
     async def close(self):

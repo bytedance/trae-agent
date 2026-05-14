@@ -24,6 +24,11 @@ class AgentStepState(Enum):
     REFLECTING = "reflecting"
     COMPLETED = "completed"
     ERROR = "error"
+    PLANNING = "planning"
+    CODING = "coding"
+    REVIEWING = "reviewing"
+    WAITING = "waiting"
+    RETRYING = "retrying"
 
 
 class AgentState(Enum):

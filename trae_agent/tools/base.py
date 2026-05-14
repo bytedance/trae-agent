@@ -28,6 +28,7 @@ class ToolExecResult:
     output: str | None = None
     error: str | None = None
     error_code: int = 0
+    partial: bool = False
 
 
 @dataclass

@@ -66,6 +66,9 @@ class AnthropicClient(BaseLLMClient):
             self.message_history + anthropic_messages if reuse_history else anthropic_messages
         )
 
+        # Enforce strict User/Assistant alternation before sending
+        self.message_history = self._normalize_alternation(self.message_history)
+
         # Add tools if provided
         tool_schemas: list[anthropic.types.ToolUnionParam] | anthropic.NotGiven = (
             anthropic.NOT_GIVEN
@@ -157,6 +160,8 @@ class AnthropicClient(BaseLLMClient):
         anthropic_messages: list[anthropic.types.MessageParam] = []
         for msg in messages:
             if msg.role == "system":
+                # Anthropic requires system prompt as a separate parameter,
+                # not inside the messages array. Keep the *last* system message.
                 self.system_message = msg.content if msg.content else anthropic.NOT_GIVEN
             elif msg.tool_result:
                 anthropic_messages.append(
@@ -186,6 +191,57 @@ class AnthropicClient(BaseLLMClient):
                     anthropic.types.MessageParam(role=role, content=msg.content)
                 )
         return anthropic_messages
+
+    def _normalize_alternation(
+        self, messages: list[anthropic.types.MessageParam]
+    ) -> list[anthropic.types.MessageParam]:
+        """Enforce strict User/Assistant desultation required by the Anthropic API.
+
+        Anthropic mandates alternating ``user``/``assistant`` roles and does
+        not allow consecutive messages of the same role.  Adjacent messages
+        with the same role are merged by appending their text content.
+        """
+        if not messages:
+            return messages
+
+        normalized: list[anthropic.types.MessageParam] = [messages[0]]
+        for msg in messages[1:]:
+            if msg["role"] == normalized[-1]["role"]:
+                # Merge text content into the previous message
+                prev = normalized[-1]
+                cur_content = msg.get("content", "")
+                prev_content = prev.get("content", "")
+
+                # Both are simple text strings — concatenate
+                if isinstance(cur_content, str) and isinstance(prev_content, str):
+                    normalized[-1] = anthropic.types.MessageParam(
+                        role=prev["role"],
+                        content=prev_content + "\n" + cur_content,
+                    )
+                    continue
+                # At least one side is a content-block list — append the list item
+                if isinstance(cur_content, str) and isinstance(prev_content, list):
+                    normalized[-1] = anthropic.types.MessageParam(
+                        role=prev["role"],
+                        content=prev_content + [{"type": "text", "text": cur_content}],
+                    )
+                    continue
+                if isinstance(cur_content, list) and isinstance(prev_content, str):
+                    normalized[-1] = anthropic.types.MessageParam(
+                        role=prev["role"],
+                        content=[{"type": "text", "text": prev_content}] + cur_content,
+                    )
+                    continue
+                if isinstance(cur_content, list) and isinstance(prev_content, list):
+                    normalized[-1] = anthropic.types.MessageParam(
+                        role=prev["role"],
+                        content=prev_content + cur_content,
+                    )
+                    continue
+
+            normalized.append(msg)
+
+        return normalized
 
     def parse_tool_call(self, tool_call: ToolCall) -> anthropic.types.ToolUseBlockParam:
         """Parse the tool call from the LLM response."""

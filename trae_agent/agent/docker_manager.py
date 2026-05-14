@@ -2,9 +2,21 @@ import os
 import subprocess
 import uuid
 
-import docker
-import pexpect
-from docker.errors import DockerException, ImageNotFound, NotFound
+try:
+    import docker
+    from docker.errors import DockerException, ImageNotFound, NotFound
+except ImportError:
+    docker = None  # type: ignore[assignment]
+    DockerException = Exception
+    ImageNotFound = Exception
+    NotFound = Exception
+
+try:
+    import pexpect
+except ImportError:
+    pexpect = None  # type: ignore[assignment]
+
+from trae_agent.tools.bash_tool import INTERACTIVE_PROMPT_PATTERN_STRINGS
 
 
 class DockerManager:
@@ -25,6 +37,10 @@ class DockerManager:
         tools_dir: str | None = None,
         interactive: bool = False,
     ):
+        if docker is None:
+            raise ImportError(
+                "The 'docker' package is required for DockerManager. Install it via 'pip install docker'."
+            )
         if not image and not container_id and not dockerfile_path and not docker_image_file:
             raise ValueError(
                 "Either a Docker image or a container ID or a dockerfile path or a docker image file (tar) must be provided."
@@ -180,6 +196,8 @@ class DockerManager:
 
     def _start_persistent_shell(self):
         """Spawns a persistent bash shell inside the container using pexpect."""
+        if pexpect is None:
+            raise ImportError("The 'pexpect' package is required for the interactive Docker shell.")
         if not self.container:
             return
         # print("Starting persistent shell for interactive mode...")
@@ -215,28 +233,61 @@ class DockerManager:
         marker_command = f"echo {marker}$?"
         self.shell.sendline(full_command)
         self.shell.sendline(marker_command)
+
+        # Build expect patterns: first is the completion marker,
+        # followed by interactive prompt patterns for early detection.
+        expect_patterns: list[str] = [
+            marker + r"(\d+)",  # index 0: normal command completion
+        ]
+        expect_patterns.extend(INTERACTIVE_PROMPT_PATTERN_STRINGS)
+
         try:
-            self.shell.expect(marker + r"(\d+)", timeout=timeout)
+            index = self.shell.expect(expect_patterns, timeout=timeout)
         except pexpect.exceptions.TIMEOUT:
             return (
                 -1,
                 f"Error: Command '{command}' timed out after {timeout} seconds. Partial output:\n{self.shell.before}",
             )
-        exit_code = int(self.shell.match.group(1))
+        except pexpect.exceptions.EOF:
+            return (
+                -1,
+                f"Error: Shell closed unexpectedly for command '{command}'. Partial output:\n{self.shell.before}",
+            )
 
-        output_before_marker = self.shell.before
+        # index 0 = marker pattern (normal completion)
+        if index == 0:
+            exit_code = int(self.shell.match.group(1))
 
-        # 1. Split the raw output into lines
-        all_lines = output_before_marker.splitlines()
-        # 2. Filter out the lines that are just echoes of our commands
-        clean_lines = []
-        for line in all_lines:
-            stripped_line = line.strip()
-            # Ignore the line if it's an echo of the original command OR our marker command
-            if stripped_line != full_command and marker_command not in stripped_line:
-                clean_lines.append(line)
-        # 3. Join the clean lines back together
-        cleaned_output = "\n".join(clean_lines)
-        # Wait for the next shell prompt to ensure the shell is ready
-        self.shell.expect([r"\$", r"#"])
-        return exit_code, cleaned_output.strip()
+            output_before_marker = self.shell.before
+
+            # 1. Split the raw output into lines
+            all_lines = output_before_marker.splitlines()
+            # 2. Filter out the lines that are just echoes of our commands
+            clean_lines = []
+            for line in all_lines:
+                stripped_line = line.strip()
+                # Ignore the line if it's an echo of the original command OR our marker command
+                if stripped_line != full_command and marker_command not in stripped_line:
+                    clean_lines.append(line)
+            # 3. Join the clean lines back together
+            cleaned_output = "\n".join(clean_lines)
+            # Wait for the next shell prompt to ensure the shell is ready
+            self.shell.expect([r"\$", r"#"])
+            return exit_code, cleaned_output.strip()
+
+        # An interactive prompt pattern was matched before completion
+        matched_pattern = expect_patterns[index]
+        partial_before = self.shell.before or ""
+
+        # Send Ctrl+C to cancel the blocked command, then wait for shell prompt
+        try:
+            self.shell.sendline("\x03")
+            self.shell.expect([r"\$", r"#"], timeout=10)
+        except (pexpect.exceptions.TIMEOUT, pexpect.exceptions.EOF):
+            # Shell might be in bad state, restart it
+            self._start_persistent_shell()
+
+        return (
+            -1,
+            f"Command blocked by interactive prompt ({matched_pattern}). Partial output:\n{partial_before.strip()}",
+        )

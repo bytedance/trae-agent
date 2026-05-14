@@ -24,6 +24,7 @@ TraeAgentToolNames = [
     "json_edit_tool",
     "task_done",
     "bash",
+    "resolve_lazy_ref",
 ]
 
 
@@ -175,7 +176,35 @@ class TraeAgent(BaseAgent):
 
     @override
     def reflect_on_result(self, tool_results: list[ToolResult]) -> str | None:
-        return None
+        """Reflect on tool execution results with error-specific recovery guidance."""
+        failed_tool_results = [r for r in tool_results if not r.success]
+        if not failed_tool_results:
+            return None
+
+        reflections: list[str] = []
+        for r in failed_tool_results:
+            error_lower = (r.error or "").lower()
+            if "timeout" in error_lower:
+                reflections.append(
+                    f"The tool `{r.name}` timed out. Consider simplifying the operation, "
+                    "using a more specific command, or splitting it into smaller steps."
+                )
+            elif "not found" in error_lower or "no such file" in error_lower:
+                reflections.append(
+                    f"The file or path was not found for `{r.name}`. "
+                    "Verify the absolute path with `view` or `ls` before retrying."
+                )
+            elif "permission denied" in error_lower:
+                reflections.append(
+                    f"Permission denied for `{r.name}`. Try an alternative approach or use different path."
+                )
+            else:
+                reflections.append(
+                    f"Tool `{r.name}` failed: {r.error}. "
+                    "Consider adjusting the parameters or trying a different approach."
+                )
+
+        return "\n".join(reflections)
 
     def get_git_diff(self) -> str:
         """Get the git diff of the project."""

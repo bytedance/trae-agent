@@ -1,6 +1,7 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -12,9 +13,16 @@ from trae_agent.tools.edit_tool import TextEditorTool
 class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tool = TextEditorTool()
-        # Use current working directory for test paths
-        self.test_dir = Path.cwd() / "test_dir"
+        # Use a real temporary directory so tempfile.mkstemp works in write_file
+        self._tmpdir = Path(tempfile.mkdtemp())
+        self.test_dir = self._tmpdir / "test_dir"
+        self.test_dir.mkdir(parents=True, exist_ok=True)  # ensure parent exists
         self.test_file = self.test_dir / "test_file.txt"
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def mock_file_system(self, exists=True, is_dir=False, content=""):
         """Helper to mock file system operations"""
@@ -30,8 +38,9 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
         self.mock_read = patcher.start()
         self.addCleanup(patcher.stop)
 
-        patcher = patch("pathlib.Path.write_text")
-        self.mock_write = patcher.start()
+        # Atomic write uses os.replace; mock it to avoid side effects
+        patcher = patch("os.replace")
+        self.mock_os_replace = patcher.start()
         self.addCleanup(patcher.stop)
 
     async def test_create_file(self):
@@ -45,7 +54,7 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
                 }
             )
         )
-        self.mock_write.assert_called_once_with("new content")
+        self.mock_os_replace.assert_called_once()
         self.assertIn("created successfully", result.output)
 
     async def test_insert_line(self):
@@ -60,7 +69,7 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
                 }
             )
         )
-        self.mock_write.assert_called_once()
+        self.mock_os_replace.assert_called_once()
         self.assertIn("edited", result.output)
 
     async def test_invalid_command(self):
@@ -97,7 +106,7 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
                 }
             )
         )
-        self.mock_write.assert_called_once()
+        self.mock_os_replace.assert_called_once()
         self.assertIn("edited", result.output)
 
     async def test_view_directory(self):
@@ -125,6 +134,68 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
     async def test_missing_parameters(self):
         result = await self.tool.execute(ToolCallArguments({"command": "create"}))
         self.assertIn("No path provided", result.error)
+
+    async def test_search_replace_exact(self):
+        """search_replace with exact match should work."""
+        self.mock_file_system(content="def foo():\n    return 1\n\ndef bar():\n    return 2\n")
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "command": "search_replace",
+                    "path": str(self.test_file),
+                    "search_block": "def foo():\n    return 1",
+                    "replace_block": "def foo():\n    return 42",
+                    "match_mode": "auto",
+                }
+            )
+        )
+        self.mock_os_replace.assert_called_once()
+        self.assertIn("edited", result.output)
+
+    async def test_search_replace_no_match(self):
+        """search_replace with no match should fail gracefully."""
+        self.mock_file_system(content="def foo():\n    return 1\n")
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "command": "search_replace",
+                    "path": str(self.test_file),
+                    "search_block": "nonexistent_code_xyz",
+                    "replace_block": "replacement",
+                }
+            )
+        )
+        self.assertEqual(result.error_code, -1)
+        self.assertIn("No matching regions", result.error)
+
+    async def test_write_command(self):
+        """write command should overwrite file."""
+        self.mock_file_system(exists=True, content="old content")
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "command": "write",
+                    "path": str(self.test_file),
+                    "file_text": "brand new content",
+                }
+            )
+        )
+        self.mock_os_replace.assert_called_once()
+        self.assertIn("File written successfully", result.output)
+
+    async def test_search_replace_missing_params(self):
+        """search_replace with missing params should error."""
+        self.mock_file_system(content="some content")
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "command": "search_replace",
+                    "path": str(self.test_file),
+                }
+            )
+        )
+        self.assertEqual(result.error_code, -1)
+        self.assertIn("search_block", result.error)
 
 
 if __name__ == "__main__":

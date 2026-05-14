@@ -9,10 +9,14 @@
 #
 # This modified file is released under the same license.
 
+import os
+import tempfile
+from contextlib import suppress
 from pathlib import Path
 from typing import override
 
 from trae_agent.tools.base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
+from trae_agent.tools.edit_utils import fuzzy_match_and_replace
 from trae_agent.tools.run import maybe_truncate, run
 
 EditToolSubCommands = [
@@ -20,15 +24,21 @@ EditToolSubCommands = [
     "create",
     "str_replace",
     "insert",
+    "search_replace",
+    "write",
 ]
 SNIPPET_LINES: int = 4
 
 
 class TextEditorTool(Tool):
-    """Tool to replace a string in a file."""
+    """Tool to view, create and edit files."""
 
     def __init__(self, model_provider: str | None = None) -> None:
         super().__init__(model_provider)
+        # Tracks line-count changes per file path so that LLM-provided line
+        # numbers (from a previous *view*) can be mapped to the current state.
+        #   path -> list of (edit_start_line_1based, delta)
+        self._line_offset_tracker: dict[str, list[tuple[int, int]]] = {}
 
     @override
     def get_model_provider(self) -> str | None:
@@ -46,10 +56,16 @@ class TextEditorTool(Tool):
 * The `create` command cannot be used if the specified `path` already exists as a file !!! If you know that the `path` already exists, please remove it first and then perform the `create` operation!
 * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
 
-Notes for using the `str_replace` command:
+Notes for using the `str_replace` command (deprecated, use `search_replace` instead):
 * The `old_str` parameter should match EXACTLY one or more consecutive lines from the original file. Be mindful of whitespaces!
 * If the `old_str` parameter is not unique in the file, the replacement will not be performed. Make sure to include enough context in `old_str` to make it unique
 * The `new_str` parameter should contain the edited lines that should replace the `old_str`
+
+Notes for using the `search_replace` command (recommended):
+* The `search_block` parameter is matched fuzzily against the file content, meaning minor whitespace differences (indentation, trailing spaces, blank-line count) are tolerated
+* By default the engine tries an exact normalised match first, then falls back to fuzzy similarity (SequenceMatcher, threshold >= 85 %)
+* If `match_mode` is set to ``"exact"``, only exact normalised matches are accepted; ``"fuzzy"`` skips the exact attempt and goes straight to fuzzy
+* When multiple similar regions exist, the one whose surrounding context best matches the boundaries of `search_block` is selected automatically
 """
 
     @override
@@ -66,7 +82,7 @@ Notes for using the `str_replace` command:
             ToolParameter(
                 name="file_text",
                 type="string",
-                description="Required parameter of `create` command, with the content of the file to be created.",
+                description="Required parameter of `create` and `write` commands, with the content of the file to be created / written.",
             ),
             ToolParameter(
                 name="insert_line",
@@ -81,7 +97,7 @@ Notes for using the `str_replace` command:
             ToolParameter(
                 name="old_str",
                 type="string",
-                description="Required parameter of `str_replace` command containing the string in `path` to replace.",
+                description="(Deprecated) Required parameter of `str_replace` command containing the string in `path` to replace.",
             ),
             ToolParameter(
                 name="path",
@@ -94,6 +110,23 @@ Notes for using the `str_replace` command:
                 type="array",
                 description="Optional parameter of `view` command when `path` points to a file. If none is given, the full file is shown. If provided, the file will be shown in the indicated line number range, e.g. [11, 12] will show lines 11 and 12. Indexing at 1 to start. Setting `[start_line, -1]` shows all lines from `start_line` to the end of the file.",
                 items={"type": "integer"},
+            ),
+            # --- search_replace parameters ---
+            ToolParameter(
+                name="search_block",
+                type="string",
+                description="Required parameter of `search_replace` command. The block of text to search for (fuzzy-matched).",
+            ),
+            ToolParameter(
+                name="replace_block",
+                type="string",
+                description="Required parameter of `search_replace` command. The replacement text.",
+            ),
+            ToolParameter(
+                name="match_mode",
+                type="string",
+                description="Optional parameter of `search_replace` command. One of `auto` (default), `exact`, or `fuzzy`.",
+                enum=["auto", "exact", "fuzzy"],
             ),
         ]
 
@@ -123,6 +156,10 @@ Notes for using the `str_replace` command:
                     return self._str_replace_handler(arguments, _path)
                 case "insert":
                     return self._insert_handler(arguments, _path)
+                case "search_replace":
+                    return self._search_replace_handler(arguments, _path)
+                case "write":
+                    return self._write_handler(arguments, _path)
                 case _:
                     return ToolExecResult(
                         error=f"Unrecognized command {command}. The allowed commands for the {self.name} tool are: {', '.join(EditToolSubCommands)}",
@@ -139,20 +176,56 @@ Notes for using the `str_replace` command:
                 f"The path {path} is not an absolute path, it should start with `/`. Maybe you meant {suggested_path}?"
             )
         # Check if path exists
-        if not path.exists() and command != "create":
+        if not path.exists() and command not in ("create", "write"):
             raise ToolError(f"The path {path} does not exist. Please provide a valid path.")
         if path.exists() and command == "create":
             raise ToolError(
-                f"File already exists at: {path}. Cannot overwrite files using command `create`."
+                f"File already exists at: {path}. Cannot overwrite files using command `create`. Use `write` instead."
             )
         # Check if the path points to a directory
-        if path.is_dir() and command != "view":
+        if path.is_dir() and command not in ("view", "write"):
             raise ToolError(
                 f"The path {path} is a directory and only the `view` command can be used on directories"
             )
 
+    # ── Line offset tracking ────────────────────────────────────────────
+
+    def _record_line_change(self, path: str, start_line: int, delta: int) -> None:
+        """Record a line-count change starting at *start_line* (1-based).
+
+        *delta* is positive for insertions, negative for deletions.
+        """
+        if path not in self._line_offset_tracker:
+            self._line_offset_tracker[path] = []
+        self._line_offset_tracker[path].append((start_line, delta))
+
+    def _adjust_line_number(self, path: str, original_line: int) -> int:
+        """Map an LLM-provided (1-based) line number to the current file state.
+
+        Applies all tracked offsets whose edit-start line is <= the target line.
+        """
+        for edit_line, delta in self._line_offset_tracker.get(path, []):
+            if edit_line <= original_line:
+                original_line += delta
+        return max(1, original_line)
+
+    def _adjust_view_range(self, path: str, view_range: list[int]) -> list[int]:
+        """Adjust both bounds of a view range for tracked line offsets.
+
+        A ``final_line`` of -1 (view to end of file) is preserved unchanged.
+        """
+        adjusted_start = self._adjust_line_number(path, view_range[0])
+        adjusted_end = (
+            view_range[1] if view_range[1] == -1 else self._adjust_line_number(path, view_range[1])
+        )
+        return [adjusted_start, adjusted_end]
+
+    # ── View ────────────────────────────────────────────────────────────
+
     async def _view(self, path: Path, view_range: list[int] | None = None) -> ToolExecResult:
-        """Implement the view command"""
+        """Implement the view command."""
+        path_str = str(path)
+
         if path.is_dir():
             if view_range:
                 raise ToolError(
@@ -167,36 +240,46 @@ Notes for using the `str_replace` command:
         file_content = self.read_file(path)
         init_line = 1
         if view_range:
-            if len(view_range) != 2 or not all(isinstance(i, int) for i in view_range):  # pyright: ignore[reportUnnecessaryIsInstance]
+            if len(view_range) != 2 or not all(isinstance(i, int) for i in view_range):
                 raise ToolError("Invalid `view_range`. It should be a list of two integers.")
+
+            # Adjust line numbers from LLM reference frame to current state
+            adjusted_range = self._adjust_view_range(path_str, view_range)
+            adjusted_start, adjusted_end = adjusted_range
+
             file_lines = file_content.split("\n")
             n_lines_file = len(file_lines)
-            init_line, final_line = view_range
-            if init_line < 1 or init_line > n_lines_file:
+
+            if adjusted_start < 1 or adjusted_start > n_lines_file:
                 raise ToolError(
-                    f"Invalid `view_range`: {view_range}. Its first element `{init_line}` should be within the range of lines of the file: {[1, n_lines_file]}"
-                )
-            if final_line > n_lines_file:
-                raise ToolError(
-                    f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be smaller than the number of lines in the file: `{n_lines_file}`"
-                )
-            if final_line != -1 and final_line < init_line:
-                raise ToolError(
-                    f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be larger or equal than its first `{init_line}`"
+                    f"Invalid `view_range`: {view_range}. Its first element `{view_range[0]}` should be within the range of lines of the file: {[1, n_lines_file]}"
                 )
 
-            if final_line == -1:
-                file_content = "\n".join(file_lines[init_line - 1 :])
+            init_line = adjusted_start
+
+            if adjusted_end == -1:
+                # Show from start to end of file
+                file_content = "\n".join(file_lines[adjusted_start - 1 :])
             else:
-                file_content = "\n".join(file_lines[init_line - 1 : final_line])
+                if adjusted_end > n_lines_file:
+                    raise ToolError(
+                        f"Invalid `view_range`: {view_range}. Its second element `{view_range[1]}` should be smaller than the number of lines in the file: `{n_lines_file}`"
+                    )
+                if adjusted_end < adjusted_start:
+                    raise ToolError(
+                        f"Invalid `view_range`: {view_range}. Its second element `{view_range[1]}` should be larger or equal than its first `{view_range[0]}`"
+                    )
+                file_content = "\n".join(file_lines[adjusted_start - 1 : adjusted_end])
 
         return ToolExecResult(
             output=self._make_output(file_content, str(path), init_line=init_line)
         )
 
+    # ── str_replace (deprecated) ────────────────────────────────────────
+
+    # TODO(): Remove once all callers migrate to search_replace
     def str_replace(self, path: Path, old_str: str, new_str: str | None) -> ToolExecResult:
-        """Implement the str_replace command, which replaces old_str with new_str in the file content"""
-        # Read the file content
+        """Implement the str_replace command (deprecated, use search_replace instead)."""
         file_content = self.read_file(path).expandtabs()
         old_str = old_str.expandtabs()
         new_str = new_str.expandtabs() if new_str is not None else ""
@@ -217,48 +300,132 @@ Notes for using the `str_replace` command:
         # Replace old_str with new_str
         new_file_content = file_content.replace(old_str, new_str)
 
-        # Write the new content to the file
+        # Track offset: find the first line where the replacement happens
+        replacement_line_0based = file_content.split(old_str)[0].count("\n")
+        old_line_count = old_str.count("\n") + 1
+        new_line_count = new_str.count("\n") + 1
+        delta = new_line_count - old_line_count
+        if delta != 0:
+            self._record_line_change(str(path), replacement_line_0based + 1, delta)
+
         self.write_file(path, new_file_content)
 
         # Create a snippet of the edited section
-        replacement_line = file_content.split(old_str)[0].count("\n")
-        start_line = max(0, replacement_line - SNIPPET_LINES)
-        end_line = replacement_line + SNIPPET_LINES + new_str.count("\n")
+        start_line = max(0, replacement_line_0based - SNIPPET_LINES)
+        end_line = replacement_line_0based + SNIPPET_LINES + new_str.count("\n")
         snippet = "\n".join(new_file_content.split("\n")[start_line : end_line + 1])
 
-        # Prepare the success message
         success_msg = f"The file {path} has been edited. "
         success_msg += self._make_output(snippet, f"a snippet of {path}", start_line + 1)
         success_msg += "Review the changes and make sure they are as expected. Edit the file again if necessary."
 
-        return ToolExecResult(
-            output=success_msg,
+        return ToolExecResult(output=success_msg)
+
+    # ── search_replace (new) ────────────────────────────────────────────
+
+    def _search_replace_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
+        search_block = arguments.get("search_block")
+        replace_block = arguments.get("replace_block")
+
+        if not isinstance(search_block, str):
+            return ToolExecResult(
+                error="Parameter `search_block` is required and must be a string for command: search_replace",
+                error_code=-1,
+            )
+        if not isinstance(replace_block, str):
+            return ToolExecResult(
+                error="Parameter `replace_block` is required and must be a string for command: search_replace",
+                error_code=-1,
+            )
+
+        match_mode = arguments.get("match_mode", "auto")
+        if match_mode not in ("auto", "exact", "fuzzy"):
+            match_mode = "auto"
+
+        file_content = self.read_file(_path)
+        new_content, success, msg, removed, added = fuzzy_match_and_replace(
+            file_content,
+            search_block,
+            replace_block,
+            match_mode,  # type: ignore[arg-type]
         )
 
+        if not success:
+            return ToolExecResult(error=msg, error_code=-1)
+
+        # Track line offset for the replacement
+        delta = added - removed
+        if delta != 0:
+            # Estimate the start line from the diff between original and new content
+            # Find the first differing line between old and new content at the
+            # replacement site
+            old_lines = file_content.split("\n")
+            new_lines = new_content.split("\n")
+            for i, (o, n) in enumerate(zip(old_lines, new_lines, strict=False)):
+                if o != n:
+                    self._record_line_change(str(_path), i + 1, delta)
+                    break
+
+        self.write_file(_path, new_content)
+
+        success_msg = f"The file {_path} has been edited. {msg}\n"
+        snippet_lines = new_content.split("\n")
+        snippet_len = min(SNIPPET_LINES * 2 + added, len(snippet_lines))
+        snippet = "\n".join(snippet_lines[:snippet_len])
+        success_msg += self._make_output(snippet, f"a snippet of {_path}", init_line=1)
+        success_msg += "Review the changes and make sure they are as expected. Edit the file again if necessary."
+        return ToolExecResult(output=success_msg)
+
+    # ── write (new, full-file overwrite) ────────────────────────────────
+
+    def _write_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
+        file_text = arguments.get("file_text")
+        if not isinstance(file_text, str):
+            return ToolExecResult(
+                error="Parameter `file_text` is required and must be a string for command: write",
+                error_code=-1,
+            )
+        # Full overwrite invalidates any previous line tracking
+        self._line_offset_tracker.pop(str(_path), None)
+        self.write_file(_path, file_text)
+        return ToolExecResult(output=f"File written successfully at: {_path}")
+
+    # ── insert ──────────────────────────────────────────────────────────
+
     def _insert(self, path: Path, insert_line: int, new_str: str) -> ToolExecResult:
-        """Implement the insert command, which inserts new_str at the specified line in the file content."""
+        """Implement the insert command."""
+        path_str = str(path)
+
+        # Adjust the LLM-provided line number for previous edits
+        adjusted_line = self._adjust_line_number(path_str, insert_line)
+
         file_text = self.read_file(path).expandtabs()
         new_str = new_str.expandtabs()
         file_text_lines = file_text.split("\n")
         n_lines_file = len(file_text_lines)
 
-        if insert_line < 0 or insert_line > n_lines_file:
+        if adjusted_line < 0 or adjusted_line > n_lines_file:
             raise ToolError(
-                f"Invalid `insert_line` parameter: {insert_line}. It should be within the range of lines of the file: {[0, n_lines_file]}"
+                f"Invalid `insert_line` parameter: {insert_line} (adjusted to {adjusted_line}). It should be within the range of lines of the file: {[0, n_lines_file]}"
             )
 
         new_str_lines = new_str.split("\n")
         new_file_text_lines = (
-            file_text_lines[:insert_line] + new_str_lines + file_text_lines[insert_line:]
+            file_text_lines[:adjusted_line] + new_str_lines + file_text_lines[adjusted_line:]
         )
         snippet_lines = (
-            file_text_lines[max(0, insert_line - SNIPPET_LINES) : insert_line]
+            file_text_lines[max(0, adjusted_line - SNIPPET_LINES) : adjusted_line]
             + new_str_lines
-            + file_text_lines[insert_line : insert_line + SNIPPET_LINES]
+            + file_text_lines[adjusted_line : adjusted_line + SNIPPET_LINES]
         )
 
         new_file_text = "\n".join(new_file_text_lines)
         snippet = "\n".join(snippet_lines)
+
+        # Track offset
+        delta = len(new_str_lines)
+        if delta != 0:
+            self._record_line_change(path_str, adjusted_line + 1, delta)
 
         self.write_file(path, new_file_text)
 
@@ -266,27 +433,35 @@ Notes for using the `str_replace` command:
         success_msg += self._make_output(
             snippet,
             "a snippet of the edited file",
-            max(1, insert_line - SNIPPET_LINES + 1),
+            max(1, adjusted_line - SNIPPET_LINES + 1),
         )
         success_msg += "Review the changes and make sure they are as expected (correct indentation, no duplicate lines, etc). Edit the file again if necessary."
-        return ToolExecResult(
-            output=success_msg,
-        )
+        return ToolExecResult(output=success_msg)
 
     # Note: undo_edit method is not implemented in this version as it was removed
 
-    def read_file(self, path: Path):
+    def read_file(self, path: Path) -> str:
         """Read the content of a file from a given path; raise a ToolError if an error occurs."""
         try:
             return path.read_text()
         except Exception as e:
             raise ToolError(f"Ran into {e} while trying to read {path}") from None
 
-    def write_file(self, path: Path, file: str):
-        """Write the content of a file to a given path; raise a ToolError if an error occurs."""
+    def write_file(self, path: Path, file: str) -> None:
+        """Atomically write content to a file using a temporary file + os.replace().
+
+        This prevents partial writes from corrupting the file in case of an
+        interruption during the write.
+        """
+        fd, tmp_path_str = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.")
+        os.close(fd)
+        tmp_path = Path(tmp_path_str)
         try:
-            _ = path.write_text(file)
+            tmp_path.write_text(file)
+            os.replace(str(tmp_path), str(path))
         except Exception as e:
+            with suppress(Exception):
+                tmp_path.unlink()
             raise ToolError(f"Ran into {e} while trying to write to {path}") from None
 
     def _make_output(
@@ -329,6 +504,7 @@ Notes for using the `str_replace` command:
         self.write_file(_path, file_text)
         return ToolExecResult(output=f"File created successfully at: {_path}")
 
+    # TODO(): Remove once all callers migrate to search_replace
     def _str_replace_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
         old_str = arguments.get("old_str") if "old_str" in arguments else None
         if not isinstance(old_str, str):

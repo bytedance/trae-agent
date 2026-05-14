@@ -23,7 +23,9 @@ dependencies = [
     "asyncclick>=8.0.0",
     "pyyaml>=6.0.2",
     "textual>=0.50.0",
-    "pyinstaller==6.15.0"
+    "pyinstaller==6.15.0",
+    "docker>=7.1.0",
+    "pexpect>=4.9.0",
 ]
 
 [project.optional-dependencies]

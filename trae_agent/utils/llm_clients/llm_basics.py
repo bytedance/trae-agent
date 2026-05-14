@@ -9,12 +9,18 @@ from trae_agent.tools.base import ToolCall, ToolResult
 
 @dataclass
 class LLMMessage:
-    """Standard message format."""
+    """Standard message format.
+
+    ``reasoning_content`` captures chain-of-thought from reasoning models
+    (DeepSeek R1/V4, OpenAI o1/o3) and must be round-tripped when building
+    the assistant message payload for subsequent requests.
+    """
 
     role: str
     content: str | None = None
     tool_call: ToolCall | None = None
     tool_result: ToolResult | None = None
+    reasoning_content: str | None = None
 
 
 @dataclass

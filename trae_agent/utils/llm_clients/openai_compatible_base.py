@@ -10,7 +10,6 @@ from typing import override
 import openai
 from openai.types.chat import (
     ChatCompletion,
-    ChatCompletionAssistantMessageParam,
     ChatCompletionFunctionMessageParam,
     ChatCompletionMessageParam,
     ChatCompletionMessageToolCallParam,
@@ -62,6 +61,15 @@ class ProviderConfig(ABC):
         pass
 
 
+REASONING_MODEL_PATTERNS = ("o1", "o3", "o4-mini", "gpt-5")
+
+
+def _is_reasoning_model(model: str) -> bool:
+    """Check whether *model* is a reasoning model that rejects certain parameters."""
+    lower = model.lower()
+    return any(pattern in lower for pattern in REASONING_MODEL_PATTERNS)
+
+
 class OpenAICompatibleClient(BaseLLMClient):
     """Base class for OpenAI-compatible clients with shared logic."""
 
@@ -85,25 +93,32 @@ class OpenAICompatibleClient(BaseLLMClient):
         """Create a response using the provider's API. This method will be decorated with retry logic."""
         """Select the correct token parameter based on model configuration.
         If max_completion_tokens is set, use it. Otherwise, use max_tokens."""
+        model_name = model_config.model
+        is_reasoning = _is_reasoning_model(model_name)
+
         token_params = {}
-        if model_config.should_use_max_completion_tokens():
+        if is_reasoning:
+            # Reasoning models use max_completion_tokens, not max_tokens
+            token_params["max_completion_tokens"] = model_config.get_max_tokens_param()
+        elif model_config.should_use_max_completion_tokens():
             token_params["max_completion_tokens"] = model_config.get_max_tokens_param()
         else:
             token_params["max_tokens"] = model_config.get_max_tokens_param()
 
+        # Reasoning models (o1/o3/o4-mini/gpt-5) reject temperature and top_p
+        kwargs: dict = {}
+        if not is_reasoning:
+            kwargs["temperature"] = model_config.temperature
+            kwargs["top_p"] = model_config.top_p
+
         return self.client.chat.completions.create(
-            model=model_config.model,
+            model=model_name,
             messages=self.message_history,
             tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
-            temperature=model_config.temperature
-            if "o3" not in model_config.model
-            and "o4-mini" not in model_config.model
-            and "gpt-5" not in model_config.model
-            else openai.NOT_GIVEN,
-            top_p=model_config.top_p,
             extra_headers=extra_headers if extra_headers else None,
             n=1,
             **token_params,
+            **kwargs,
         )
 
     @override
@@ -148,10 +163,16 @@ class OpenAICompatibleClient(BaseLLMClient):
 
         choice = response.choices[0]
 
+        # ── Capture reasoning_content from response ────────────────────
+        # DeepSeek R1/V4 sends reasoning_content in the response.
+        # We must preserve it and round-trip it in subsequent requests.
+        raw_message = choice.message
+        reasoning_content: str | None = getattr(raw_message, "reasoning_content", None)
+
         tool_calls: list[ToolCall] | None = None
-        if choice.message.tool_calls:
+        if raw_message.tool_calls:
             tool_calls = []
-            for tool_call in choice.message.tool_calls:
+            for tool_call in raw_message.tool_calls:
                 tool_calls.append(
                     ToolCall(
                         name=tool_call.function.name,
@@ -165,7 +186,7 @@ class OpenAICompatibleClient(BaseLLMClient):
                 )
 
         llm_response = LLMResponse(
-            content=choice.message.content or "",
+            content=raw_message.content or "",
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             model=response.model,
@@ -179,29 +200,36 @@ class OpenAICompatibleClient(BaseLLMClient):
             ),
         )
 
-        # Update message history
-        if llm_response.tool_calls:
-            self.message_history.append(
-                ChatCompletionAssistantMessageParam(
-                    role="assistant",
-                    content=llm_response.content,
-                    tool_calls=[
-                        ChatCompletionMessageToolCallParam(
-                            id=tool_call.call_id,
-                            function=Function(
-                                name=tool_call.name,
-                                arguments=json.dumps(tool_call.arguments),
-                            ),
-                            type="function",
-                        )
-                        for tool_call in llm_response.tool_calls
-                    ],
-                )
-            )
+        # ── Update message history with reasoning_content ──────────────
+        if tool_calls:
+            assistant_msg: dict = {
+                "role": "assistant",
+                "content": llm_response.content,
+                "tool_calls": [
+                    ChatCompletionMessageToolCallParam(
+                        id=tool_call.call_id,
+                        function=Function(
+                            name=tool_call.name,
+                            arguments=json.dumps(tool_call.arguments),
+                        ),
+                        type="function",
+                    )
+                    for tool_call in tool_calls
+                ],
+            }
+            if reasoning_content:
+                assistant_msg["reasoning_content"] = reasoning_content
+            # Use a cast — the dict is structurally correct for the TypedDict
+            self.message_history.append(assistant_msg)  # type: ignore[arg-type]
+
         elif llm_response.content:
-            self.message_history.append(
-                ChatCompletionAssistantMessageParam(content=llm_response.content, role="assistant")
-            )
+            assistant_msg = {
+                "role": "assistant",
+                "content": llm_response.content,
+            }
+            if reasoning_content:
+                assistant_msg["reasoning_content"] = reasoning_content
+            self.message_history.append(assistant_msg)  # type: ignore[arg-type]
 
         if self.trajectory_recorder:
             self.trajectory_recorder.record_llm_interaction(
@@ -277,10 +305,9 @@ def _msg_role_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessag
                     raise ValueError("User message content is required")
                 messages.append(ChatCompletionUserMessageParam(content=msg.content, role="user"))
             case "assistant":
-                if not msg.content:
-                    raise ValueError("Assistant message content is required")
-                messages.append(
-                    ChatCompletionAssistantMessageParam(content=msg.content, role="assistant")
-                )
+                assistant_args: dict = {"content": msg.content, "role": "assistant"}
+                if msg.reasoning_content:
+                    assistant_args["reasoning_content"] = msg.reasoning_content
+                messages.append(assistant_args)  # type: ignore[arg-type]
             case _:
                 raise ValueError(f"Invalid message role: {msg.role}")

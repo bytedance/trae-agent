@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 from enum import Enum
 
+from trae_agent.agent.base_agent import BaseAgent
 from trae_agent.utils.cli.cli_console import CLIConsole
 from trae_agent.utils.config import AgentConfig, Config
 from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
@@ -9,6 +10,7 @@ from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
 
 class AgentType(Enum):
     TraeAgent = "trae_agent"
+    OrchestratorAgent = "orchestrator_agent"
 
 
 class Agent:
@@ -42,7 +44,20 @@ class Agent:
 
                 self.agent_config: AgentConfig = config.trae_agent
 
-                self.agent: TraeAgent = TraeAgent(
+                self.agent: BaseAgent = TraeAgent(
+                    self.agent_config, docker_config=docker_config, docker_keep=docker_keep
+                )
+
+                self.agent.set_cli_console(cli_console)
+
+            case AgentType.OrchestratorAgent:
+                if config.trae_agent is None:
+                    raise ValueError("trae_agent_config is required for OrchestratorAgent")
+                from .orchestrator_agent import OrchestratorAgent
+
+                self.agent_config = config.trae_agent
+
+                self.agent = OrchestratorAgent(
                     self.agent_config, docker_config=docker_config, docker_keep=docker_keep
                 )
 
