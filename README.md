@@ -160,6 +160,9 @@ trae-cli run "Refactor the database module" --provider doubao --model doubao-see
 
 # Ollama (local models)
 trae-cli run "Comment this code" --provider ollama --model qwen3
+
+# Atomic Chat (local OpenAI-compatible API, default http://127.0.0.1:1337/v1)
+trae-cli run "Comment this code" --provider atomic_chat --model gemma-4-E4B-it-IQ4_XS
 ```
 
 ### Advanced Options

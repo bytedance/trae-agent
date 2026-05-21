@@ -19,6 +19,7 @@ class LLMProvider(Enum):
     ANTHROPIC = "anthropic"
     AZURE = "azure"
     OLLAMA = "ollama"
+    ATOMIC_CHAT = "atomic_chat"
     OPENROUTER = "openrouter"
     DOUBAO = "doubao"
     GOOGLE = "google"
@@ -56,6 +57,10 @@ class LLMClient:
                 from .ollama_client import OllamaClient
 
                 self.client = OllamaClient(model_config)
+            case LLMProvider.ATOMIC_CHAT:
+                from .atomic_chat_client import AtomicChatClient
+
+                self.client = AtomicChatClient(model_config)
             case LLMProvider.GOOGLE:
                 from .google_client import GoogleClient
 

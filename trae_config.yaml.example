@@ -22,6 +22,10 @@ model_providers:
     anthropic:
         api_key: your_anthropic_api_key
         provider: anthropic
+    atomic_chat:
+        api_key: noop
+        provider: atomic_chat
+        base_url: http://127.0.0.1:1337/v1
 
 models:
     trae_agent_model:
@@ -37,6 +41,15 @@ models:
         model_provider: anthropic
         model: claude-3.5-sonnet
         max_tokens: 4096
+        temperature: 0.5
+        top_p: 1
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    atomic_chat_model:
+        model_provider: atomic_chat
+        model: gemma-4-E4B-it-IQ4_XS
+        max_tokens: 8192
         temperature: 0.5
         top_p: 1
         top_k: 0
