@@ -60,6 +60,16 @@
       "top_k": 0,
       "max_retries": 10
     },
+    "atomic_chat": {
+      "api_key": "noop",
+      "base_url": "http://127.0.0.1:1337/v1",
+      "model": "gemma-4-E4B-it-IQ4_XS",
+      "max_tokens": 8192,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
+    },
     "openrouter": {
       "api_key": "your_openrouter_api_key",
       "base_url": "https://openrouter.ai/api/v1",
