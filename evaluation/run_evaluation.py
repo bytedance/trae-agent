@@ -6,6 +6,7 @@ import io
 import json
 import shutil
 import subprocess
+import sys
 import tarfile
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,7 +18,12 @@ from docker.errors import ImageNotFound
 from docker.models.containers import Container
 from tqdm import tqdm
 
-from .utils import BENCHMARK_CONFIG, docker_exec
+if __package__ in (None, ""):
+    # Allow the README's direct script invocation from the evaluation directory.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from evaluation.utils import BENCHMARK_CONFIG, docker_exec
+else:
+    from .utils import BENCHMARK_CONFIG, docker_exec
 
 
 class BenchmarkEvaluation:
