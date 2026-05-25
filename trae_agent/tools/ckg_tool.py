@@ -1,6 +1,7 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import subprocess
 from pathlib import Path
 from typing import override
 
@@ -60,7 +61,7 @@ class CKGTool(Tool):
             ToolParameter(
                 name="path",
                 type="string",
-                description="The path to the codebase.",
+                description="The path to the codebase root or to a file inside the codebase.",
                 required=True,
             ),
             ToolParameter(
@@ -105,7 +106,9 @@ class CKGTool(Tool):
                 error=f"Codebase path {path} does not exist",
                 error_code=-1,
             )
-        if not codebase_path.is_dir():
+        if codebase_path.is_file():
+            codebase_path = self._resolve_codebase_path_from_file(codebase_path)
+        elif not codebase_path.is_dir():
             return ToolExecResult(
                 error=f"Codebase path {path} is not a directory",
                 error_code=-1,
@@ -131,6 +134,23 @@ class CKGTool(Tool):
                 )
             case _:
                 return ToolExecResult(error=f"Invalid command: {command}", error_code=-1)
+
+    def _resolve_codebase_path_from_file(self, file_path: Path) -> Path:
+        parent = file_path.parent
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=parent,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return Path(result.stdout.strip())
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        return parent
 
     def _search_function(
         self, ckg_database: CKGDatabase, identifier: str, print_body: bool = True
