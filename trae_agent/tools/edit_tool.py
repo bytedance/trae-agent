@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import override
 
 from trae_agent.tools.base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
-from trae_agent.tools.run import maybe_truncate, run
+from trae_agent.tools.run import maybe_truncate
 
 EditToolSubCommands = [
     "view",
@@ -159,10 +159,16 @@ Notes for using the `str_replace` command:
                     "The `view_range` parameter is not allowed when `path` points to a directory."
                 )
 
-            return_code, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
-            if not stderr:
-                stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
-            return ToolExecResult(error_code=return_code, output=stdout, error=stderr)
+            try:
+                stdout = "\n".join(str(file_path) for file_path in self._iter_visible_paths(path))
+            except OSError as exc:
+                return ToolExecResult(error_code=1, error=str(exc))
+
+            stdout = (
+                f"Here's the files and directories up to 2 levels deep in {path}, "
+                f"excluding hidden items:\n{stdout}\n"
+            )
+            return ToolExecResult(error_code=0, output=stdout)
 
         file_content = self.read_file(path)
         init_line = 1
@@ -306,6 +312,20 @@ Notes for using the `str_replace` command:
         return (
             f"Here's the result of running `cat -n` on {file_descriptor}:\n" + file_content + "\n"
         )
+
+    @staticmethod
+    def _iter_visible_paths(path: Path):
+        yield path
+        for child in path.iterdir():
+            if child.name.startswith("."):
+                continue
+            yield child
+            if not child.is_dir():
+                continue
+            for grandchild in child.iterdir():
+                if grandchild.name.startswith("."):
+                    continue
+                yield grandchild
 
     async def _view_handler(self, arguments: ToolCallArguments, _path: Path) -> ToolExecResult:
         view_range = arguments.get("view_range", None)

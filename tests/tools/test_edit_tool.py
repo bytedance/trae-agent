@@ -3,7 +3,8 @@
 
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from trae_agent.tools.base import ToolCallArguments
 from trae_agent.tools.edit_tool import TextEditorTool
@@ -102,12 +103,35 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
 
     async def test_view_directory(self):
         self.mock_file_system(exists=True, is_dir=True)
-        with patch("trae_agent.tools.edit_tool.run", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = (0, "file1\nfile2", "")
+        with patch.object(
+            self.tool,
+            "_iter_visible_paths",
+            return_value=[self.test_dir, self.test_dir / "file1", self.test_dir / "file2"],
+        ):
             result = await self.tool.execute(
                 ToolCallArguments({"command": "view", "path": str(self.test_dir)})
             )
         self.assertIn("files and directories", result.output)
+
+    async def test_view_directory_handles_shell_metacharacters(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "workspace; touch injected"
+            root.mkdir()
+            (root / "file.txt").write_text("content")
+            (root / ".hidden").write_text("hidden")
+            child_dir = root / "child"
+            child_dir.mkdir()
+            (child_dir / "nested.txt").write_text("nested")
+
+            result = await self.tool.execute(
+                ToolCallArguments({"command": "view", "path": str(root)})
+            )
+
+            self.assertEqual(result.error_code, 0)
+            self.assertIn(str(root / "file.txt"), result.output)
+            self.assertIn(str(child_dir / "nested.txt"), result.output)
+            self.assertNotIn(".hidden", result.output)
+            self.assertFalse((Path(temp_dir) / "injected").exists())
 
     async def test_view_file(self):
         self.mock_file_system(exists=True, is_dir=False, content="line1\nline2\nline3")
