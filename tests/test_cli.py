@@ -142,6 +142,34 @@ class TestCli(unittest.TestCase):
     @patch("trae_agent.cli.asyncio.run")
     @patch("trae_agent.cli.Config.create")
     @patch("trae_agent.cli.ConsoleFactory.create_console")
+    def test_interactive_defaults_to_recommended_console(
+        self,
+        mock_create_console,
+        mock_config_create,
+        mock_asyncio_run,
+        mock_agent_class,
+        mock_resolve_config_file,
+    ):
+        mock_config = MagicMock()
+        mock_config.trae_agent = MagicMock()
+        mock_config.lakeview = None
+        mock_config_create.return_value.resolve_config_values.return_value = mock_config
+        mock_agent = MagicMock()
+        mock_agent_class.return_value = mock_agent
+        mock_console = MagicMock()
+        mock_create_console.return_value = mock_console
+
+        result = self.runner.invoke(cli, ["interactive"])
+        self.assertEqual(result.exit_code, 0)
+        _, kwargs = mock_create_console.call_args
+        self.assertEqual(kwargs["mode"].value, "interactive")
+        self.assertEqual(kwargs["console_type"].value, "rich")
+
+    @patch("trae_agent.cli.resolve_config_file", return_value="test_config.yaml")
+    @patch("trae_agent.cli.Agent")
+    @patch("trae_agent.cli.asyncio.run")
+    @patch("trae_agent.cli.Config.create")
+    @patch("trae_agent.cli.ConsoleFactory.create_console")
     def test_run_with_string_that_is_also_a_filename(
         self,
         mock_create_console,

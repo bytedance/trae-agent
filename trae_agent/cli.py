@@ -445,7 +445,7 @@ def interactive(
     config_file: str = "trae_config.yaml",
     max_steps: int | None = None,
     trajectory_file: str | None = None,
-    console_type: str | None = "simple",
+    console_type: str | None = None,
     agent_type: str | None = "trae_agent",
 ):
     """
