@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
+from rich.errors import MarkupError
 
 from trae_agent.cli import cli
 
@@ -175,6 +176,38 @@ class TestCli(unittest.TestCase):
             mock_agent.run.assert_called_once()
             args, _ = mock_agent.run.call_args
             self.assertEqual(args[0], "task.txt")
+
+    @patch("trae_agent.cli.resolve_config_file", return_value="test_config.yaml")
+    @patch("trae_agent.cli.Agent")
+    @patch("trae_agent.cli.asyncio.run")
+    @patch("trae_agent.cli.Config.create")
+    @patch("trae_agent.cli.ConsoleFactory.create_console")
+    def test_run_prints_markup_like_errors_without_rich_crash(
+        self,
+        mock_create_console,
+        mock_config_create,
+        mock_asyncio_run,
+        mock_agent_class,
+        mock_resolve_config_file,
+    ):
+        """Test that markup-like exception text does not crash Rich error rendering."""
+        mock_config = MagicMock()
+        mock_config.trae_agent = MagicMock()
+        mock_config_create.return_value.resolve_config_values.return_value = mock_config
+        mock_agent = MagicMock()
+        mock_agent.trajectory_file = "trajectory.json"
+        mock_agent_class.return_value = mock_agent
+        mock_console = MagicMock()
+        mock_console.set_initial_task = MagicMock()
+        mock_console.set_agent_context = MagicMock()
+        mock_create_console.return_value = mock_console
+        mock_asyncio_run.side_effect = RuntimeError("[/'A', 1, /'B']")
+
+        result = self.runner.invoke(cli, ["run", "some task", "--working-dir", "/tmp"])
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertNotIsInstance(result.exception, MarkupError)
+        self.assertIn("Unexpected error: [/'A', 1, /'B']", result.output)
 
 
 if __name__ == "__main__":
