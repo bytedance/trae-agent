@@ -393,7 +393,7 @@ def run(
 
             if isinstance(e, DockerException):
                 error_text = Text(f"Docker Error: {e}", style="red")
-                console.print(f"\n{error_text}")
+                console.print(f"\n{error_text}", markup=False)
                 console.print(
                     "[yellow]Please ensure the Docker daemon is running and you have the necessary permissions.[/yellow]"
                 )
@@ -401,12 +401,12 @@ def run(
                 raise e
         except ImportError:
             error_text = Text(f"Unexpected error: {e}", style="red")
-            console.print(f"\n{error_text}")
-            console.print(traceback.format_exc())
+            console.print(f"\n{error_text}", markup=False)
+            console.print(traceback.format_exc(), markup=False)
         except Exception:
             error_text = Text(f"Unexpected error: {e}", style="red")
-            console.print(f"\n{error_text}")
-            console.print(traceback.format_exc())
+            console.print(f"\n{error_text}", markup=False)
+            console.print(traceback.format_exc(), markup=False)
         console.print(f"[blue]Trajectory saved to: {agent.trajectory_file}[/blue]")
         sys.exit(1)
 
