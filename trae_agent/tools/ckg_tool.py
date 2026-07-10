@@ -60,7 +60,7 @@ class CKGTool(Tool):
             ToolParameter(
                 name="path",
                 type="string",
-                description="The path to the codebase.",
+                description="The path to the codebase. This must be a directory (the root of the codebase to index), not a single file. If a file path is provided, its parent directory is used.",
                 required=True,
             ),
             ToolParameter(
@@ -105,11 +105,17 @@ class CKGTool(Tool):
                 error=f"Codebase path {path} does not exist",
                 error_code=-1,
             )
+        # If the path is a file, use the parent directory as the codebase root.
+        # LLMs sometimes misinterpret the parameter and pass a file path; the CKG
+        # requires a directory to build the index (see #354).
         if not codebase_path.is_dir():
-            return ToolExecResult(
-                error=f"Codebase path {path} is not a directory",
-                error_code=-1,
-            )
+            if codebase_path.is_file():
+                codebase_path = codebase_path.parent
+            else:
+                return ToolExecResult(
+                    error=f"Codebase path {path} is not a directory",
+                    error_code=-1,
+                )
 
         ckg_database = self._ckg_databases.get(codebase_path)
         if ckg_database is None:
