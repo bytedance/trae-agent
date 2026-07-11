@@ -1,4 +1,4 @@
-# Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+﻿# Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
 """
@@ -12,6 +12,7 @@ from typing import override
 import openai
 from ollama import chat as ollama_chat  # pyright: ignore[reportUnknownVariableType]
 from openai.types.responses import (
+    EasyInputMessageParam,
     FunctionToolParam,
     ResponseFunctionToolCallParam,
     ResponseInputParam,
@@ -120,9 +121,28 @@ class OllamaClient(BaseLLMClient):
                         id=self._id_generator(),
                     )
                 )
+            # Persist assistant tool call response in message history
+            for tc in tool_calls:
+                self.message_history.append(
+                    ResponseFunctionToolCallParam(
+                        call_id=tc.call_id,
+                        name=tc.name,
+                        arguments=json.dumps(tc.arguments),
+                        type="function_call",
+                    )
+                )
         else:
             # consider response is not a tool call
             content = str(response.message.content)
+            # Persist assistant text response in message history
+            if content:
+                self.message_history.append(
+                    EasyInputMessageParam(
+                        content=content,
+                        role="assistant",
+                        type="message",
+                    )
+                )
 
         llm_response = LLMResponse(
             content=content,
@@ -194,3 +214,4 @@ class OllamaClient(BaseLLMClient):
     def _id_generator(self) -> str:
         """Generate a random ID string"""
         return str(uuid.uuid4())
+
