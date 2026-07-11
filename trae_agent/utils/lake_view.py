@@ -166,6 +166,11 @@ class LakeView:
             content = "<tags>" + llm_response.content.lstrip()
 
             matched_tags: list[str] = tags_re.findall(content)
+            if not matched_tags:
+                # The model did not return a well-formed <tags>...</tags> block.
+                # Retry instead of crashing with an IndexError.
+                retry += 1
+                continue
             tags: list[str] = [tag.strip() for tag in matched_tags[0].split(",")]
             if all(tag in KNOWN_TAGS for tag in tags):
                 return tags
