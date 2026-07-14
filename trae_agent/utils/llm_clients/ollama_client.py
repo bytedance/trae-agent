@@ -12,7 +12,6 @@ from typing import override
 import openai
 from ollama import chat as ollama_chat  # pyright: ignore[reportUnknownVariableType]
 from openai.types.responses import (
-    EasyInputMessageParam,
     FunctionToolParam,
     ResponseFunctionToolCallParam,
     ResponseInputParam,
@@ -121,27 +120,35 @@ class OllamaClient(BaseLLMClient):
                         id=self._id_generator(),
                     )
                 )
-            # Persist assistant tool call response in message history
-            for tc in tool_calls:
-                self.message_history.append(
-                    ResponseFunctionToolCallParam(
-                        call_id=tc.call_id,
-                        name=tc.name,
-                        arguments=json.dumps(tc.arguments),
-                        type="function_call",
-                    )
-                )
+            # Persist assistant tool call response in message history using
+            # the Ollama-native message shape (role/tool_calls). The OpenAI
+            # `function_call` items used previously are rejected by ollama.chat
+            # and caused multi-turn tool calling to fail (see PR #427).
+            self.message_history.append(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": tc.name,
+                                "arguments": dict(tc.arguments),
+                            }
+                        }
+                        for tc in tool_calls
+                    ],
+                }
+            )
         else:
             # consider response is not a tool call
             content = str(response.message.content)
             # Persist assistant text response in message history
             if content:
                 self.message_history.append(
-                    EasyInputMessageParam(
-                        content=content,
-                        role="assistant",
-                        type="message",
-                    )
+                    {
+                        "role": "assistant",
+                        "content": content,
+                    }
                 )
 
         llm_response = LLMResponse(
@@ -214,4 +221,3 @@ class OllamaClient(BaseLLMClient):
     def _id_generator(self) -> str:
         """Generate a random ID string"""
         return str(uuid.uuid4())
-
