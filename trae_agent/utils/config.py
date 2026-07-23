@@ -146,6 +146,14 @@ class MCPServerConfig:
 class AgentConfig:
     """
     Base class for agent configurations.
+
+    Attributes:
+        max_steps: Maximum number of agent steps before the task is forcibly
+            terminated.
+        max_error_retries: Maximum number of consecutive retries when a step
+            raises an unexpected exception.  On each retry the error is
+            formatted as a user message so the LLM can attempt a different
+            approach.  Defaults to 2.
     """
 
     allow_mcp_servers: list[str]
@@ -153,6 +161,7 @@ class AgentConfig:
     max_steps: int
     model: ModelConfig
     tools: list[str]
+    max_error_retries: int = 2
 
 
 @dataclass
