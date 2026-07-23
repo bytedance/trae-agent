@@ -3,6 +3,7 @@ agents:
         enable_lakeview: true
         model: trae_agent_model
         max_steps: 200
+        max_error_retries: 2
         tools:
             - bash
             - str_replace_based_edit_tool

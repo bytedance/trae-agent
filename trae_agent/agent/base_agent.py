@@ -37,6 +37,7 @@ class BaseAgent(ABC):
         self._llm_client = LLMClient(agent_config.model)
         self._model_config = agent_config.model
         self._max_steps = agent_config.max_steps
+        self._max_error_retries = agent_config.max_error_retries
         self._initial_messages: list[LLMMessage] = []
         self._task: str = ""
         self._tools: list[Tool] = [
@@ -144,6 +145,29 @@ class BaseAgent(ABC):
         """Create a new task."""
         pass
 
+    def _format_error_recovery_message(self, error: Exception, attempt: int) -> LLMMessage:
+        """Format an error as a user message so the LLM can attempt recovery.
+
+        The message includes the exception type and message, the current retry
+        count, and hints to help the LLM choose a different strategy.
+        """
+        return LLMMessage(
+            role="user",
+            content=(
+                f"The previous step failed with an unexpected error:\n"
+                f"{type(error).__name__}: {error}\n\n"
+                f"This is recovery attempt {attempt}/{self._max_error_retries}. "
+                f"Please analyse the error and try a different approach. "
+                f"For example: check file paths, verify prerequisites, "
+                f"or use alternative tools to achieve the same goal."
+            ),
+        )
+
+    @property
+    def max_error_retries(self) -> int:
+        """Get the maximum number of consecutive error retries."""
+        return self._max_error_retries
+
     async def execute_task(self) -> AgentExecution:
         """Execute a task using the agent."""
         import time
@@ -158,6 +182,7 @@ class BaseAgent(ABC):
         try:
             messages = self._initial_messages
             step_number = 1
+            consecutive_errors = 0
             execution.agent_state = AgentState.RUNNING
 
             while step_number <= self._max_steps:
@@ -169,13 +194,28 @@ class BaseAgent(ABC):
                     )  # record trajectory for this step and update the CLI console
                     if execution.agent_state == AgentState.COMPLETED:
                         break
+                    consecutive_errors = 0  # reset on successful step
                     step_number += 1
                 except Exception as error:
-                    execution.agent_state = AgentState.ERROR
+                    consecutive_errors += 1
                     step.state = AgentStepState.ERROR
                     step.error = str(error)
                     await self._finalize_step(step, messages, execution)
-                    break
+
+                    if consecutive_errors <= self._max_error_retries:
+                        # Give the LLM a chance to recover by feeding the
+                        # error back as a user message with recovery hints.
+                        messages.append(
+                            self._format_error_recovery_message(error, consecutive_errors)
+                        )
+                        step_number += 1
+                    else:
+                        execution.agent_state = AgentState.ERROR
+                        execution.final_result = (
+                            f"Task failed after {consecutive_errors} consecutive errors. "
+                            f"Last error: {type(error).__name__}: {error}"
+                        )
+                        break
             if step_number > self._max_steps and not execution.success:
                 execution.final_result = "Task execution exceeded maximum steps without completion."
                 execution.agent_state = AgentState.ERROR
@@ -238,7 +278,9 @@ class BaseAgent(ABC):
     async def _finalize_step(
         self, step: "AgentStep", messages: list["LLMMessage"], execution: "AgentExecution"
     ) -> None:
-        step.state = AgentStepState.COMPLETED
+        # Preserve the ERROR state when an exception was already recorded.
+        if step.state != AgentStepState.ERROR:
+            step.state = AgentStepState.COMPLETED
         self._record_handler(step, messages)
         self._update_cli_console(step, execution)
         execution.steps.append(step)
