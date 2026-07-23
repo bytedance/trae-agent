@@ -22,6 +22,7 @@ class LLMProvider(Enum):
     OPENROUTER = "openrouter"
     DOUBAO = "doubao"
     GOOGLE = "google"
+    DEEPSEEK = "deepseek"
 
 
 class LLMClient:
@@ -52,6 +53,10 @@ class LLMClient:
                 from .doubao_client import DoubaoClient
 
                 self.client = DoubaoClient(model_config)
+            case LLMProvider.DEEPSEEK:
+                from .deepseek_client import DeepSeekClient
+
+                self.client = DeepSeekClient(model_config)
             case LLMProvider.OLLAMA:
                 from .ollama_client import OllamaClient
 
