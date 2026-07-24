@@ -8,12 +8,15 @@ from bash import BashTool
 async def execute_command(**kwargs):
     tool = BashTool()
 
-    if kwargs.get("restart") is None:
+    restart_val = kwargs.get("restart")
+    if restart_val is None:
         kwargs["restart"] = False
-    elif kwargs.get("restart").lower() == "true":
-        kwargs["restart"] = True
+    elif isinstance(restart_val, bool):
+        kwargs["restart"] = restart_val
+    elif isinstance(restart_val, str):
+        kwargs["restart"] = restart_val.lower() == "true"
     else:
-        kwargs["restart"] = False
+        kwargs["restart"] = bool(restart_val)
 
     try:
         result = await tool(command=kwargs.get("command"), restart=kwargs.get("restart"))

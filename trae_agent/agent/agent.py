@@ -98,3 +98,30 @@ class Agent:
             await cli_console_task
 
         return execution
+
+    def resume_from_messages(
+        self,
+        messages: list,
+        completed_steps: list | None = None,
+    ) -> None:
+        """Forward resume state to the underlying TraeAgent.
+
+        Must be called *before* `run()` so the agent picks up the recovered
+        message history instead of starting from a fresh system prompt.
+        """
+        self.agent.resume_from_messages(
+            messages=messages, completed_steps=completed_steps
+        )
+
+    def set_trajectory_file(self, path: str) -> None:
+        """Point the trajectory recorder at a new output file.
+
+        Used by `trae-cli resume` so the resumed run writes to a fresh file
+        (e.g. ``<original>_resumed_<ts>.json``) instead of clobbering the
+        trajectory that was loaded.
+        """
+        self.trajectory_file = path
+        if self.trajectory_recorder is not None:
+            self.trajectory_recorder.trajectory_path = type(
+                self.trajectory_recorder.trajectory_path
+            )(path)

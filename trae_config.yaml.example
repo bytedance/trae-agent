@@ -19,26 +19,73 @@ lakeview:
     model: lakeview_model
 
 model_providers:
-    anthropic:
-        api_key: your_anthropic_api_key
-        provider: anthropic
+    # MiMo 本地隐私网关 (OpenAI 兼容协议, 转发到远端 mimo-v2.5-pro)
+    # 本地小模型 Qwen2.5-0.5B 用于 PII 脱敏, 真实请求经网关转发到 mimo-v2.5-pro
+    openai:
+        api_key: mimo-gateway
+        provider: openai
+        base_url: http://localhost:8080/v1
+    # 本地 Ollama 模型 (纯本地推理, 不出本机)
+    ollama:
+        api_key: ollama
+        provider: ollama
+        base_url: http://localhost:11434/v1
 
 models:
     trae_agent_model:
-        model_provider: anthropic
-        model: claude-4-sonnet
-        max_tokens: 4096
+        model_provider: openai
+        model: mimo-v2.5-pro
+        max_tokens: 8192
         temperature: 0.5
         top_p: 1
         top_k: 0
         max_retries: 10
         parallel_tool_calls: true
     lakeview_model:
-        model_provider: anthropic
-        model: claude-3.5-sonnet
-        max_tokens: 4096
+        model_provider: openai
+        model: mimo-v2.5-pro
+        max_tokens: 8192
         temperature: 0.5
         top_p: 1
         top_k: 0
         max_retries: 10
         parallel_tool_calls: true
+    # 本地 Ollama 模型 (纯本地推理, 不出本机; 通过 --provider ollama --model <model> 切换)
+    deepseek_r1_1_5b:
+        model_provider: ollama
+        model: deepseek-r1:1.5b
+        max_tokens: 4096
+        temperature: 0.6
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: false
+    qwen2_5_coder_7b:
+        model_provider: ollama
+        model: qwen2.5-coder:7b
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    qwen2_5_coder_0_5b:
+        model_provider: ollama
+        model: qwen2.5-coder:0.5b
+        max_tokens: 4096
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: false
+    # Kimi-VL-A3B-Instruct (Moonshot 多模态 MoE; 已下载 GGUF 到 /workspace/models/kimi-vl-a3b-instruct/)
+    # 纯文本任务可只加载主模型; 视觉任务需同时加载 mmproj 投影器
+    kimi_vl_a3b_instruct:
+        model_provider: ollama
+        model: kimi-vl-a3b
+        max_tokens: 8192
+        temperature: 0.6
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: false

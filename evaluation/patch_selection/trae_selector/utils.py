@@ -80,14 +80,14 @@ def save_patches(instance_id, patches_path, patches, group_id=1):
     dir_path = Path(patches_path) / f"group_{group_id}"
     dir_path.mkdir(parents=True, exist_ok=True)
 
-    def get_unique_filename(patches_path, trial_index):
+    def get_unique_filename(trial_index):
         filename = f"{instance_id}_{trial_index}.patch"
         while os.path.exists(dir_path / filename):
             trial_index += 1
             filename = f"{instance_id}_{trial_index}.patch"
         return filename
 
-    patch_file = get_unique_filename(patches_path, trial_index)
+    patch_file = get_unique_filename(trial_index)
 
     clean_patch = patches
     with open(dir_path / patch_file, "w") as file:
