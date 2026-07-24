@@ -186,3 +186,12 @@ trae_config.yaml
 
 # Patch selection python binary
 py312/
+
+# Downloaded model weights (large binaries, not for VCS)
+*.gguf
+*.safetensors
+*.bin
+models/**/.cache/
+# Keep Modelfile and other text configs
+!models/**/Modelfile
+!models/**/*.md
