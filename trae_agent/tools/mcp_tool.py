@@ -1,4 +1,4 @@
-from typing import override
+from typing_extensions import override
 
 import mcp
 
@@ -35,9 +35,9 @@ class MCPTool(Tool):
             for name, prop in properties.items():
                 tool_para = ToolParameter(
                     name=name,
-                    type=prop["type"],
+                    type=prop.get("type", "string"),
                     items=prop.get("items", None),
-                    description=prop["description"],
+                    description=prop.get("description", ""),
                     required=name in required,
                 )
                 parameters.append(tool_para)

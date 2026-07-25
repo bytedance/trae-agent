@@ -4,6 +4,7 @@
 """Command Line Interface for Trae Agent."""
 
 import asyncio
+import json
 import os
 import shutil
 import subprocess
@@ -87,7 +88,13 @@ def check_docker(timeout=3):
 
 
 def build_with_pyinstaller():
-    os.system("rm -rf trae_agent/dist")
+    import shutil
+
+    # P1 修复:原实现用 os.system("rm -rf ...") / mkdir / cp,在 Windows 上
+    # 直接不可用,且跨平台行为不一致。改用 shutil,且用 Path 处理目录。
+    dist_dir = Path("trae_agent/dist")
+    if dist_dir.exists():
+        shutil.rmtree(dist_dir)
     print("--- Building edit_tool ---")
     subprocess.run(
         [
@@ -109,11 +116,14 @@ def build_with_pyinstaller():
         ],
         check=True,
     )
-    os.system("mkdir trae_agent/dist")
-    os.system("cp dist/edit_tool/edit_tool trae_agent/dist")
-    os.system("cp -r dist/json_edit_tool/_internal trae_agent/dist")
-    os.system("cp dist/json_edit_tool/json_edit_tool trae_agent/dist")
-    os.system("rm -rf dist")
+    dist_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy("dist/edit_tool/edit_tool", dist_dir / "edit_tool")
+    internal_src = Path("dist/json_edit_tool/_internal")
+    if internal_src.exists():
+        shutil.copytree(internal_src, dist_dir / "_internal", dirs_exist_ok=True)
+    shutil.copy("dist/json_edit_tool/json_edit_tool", dist_dir / "json_edit_tool")
+    if Path("dist").exists():
+        shutil.rmtree("dist")
 
 
 @click.group()
@@ -342,12 +352,8 @@ def run(
         working_dir = os.getcwd()
         console.print(f"[blue]Using current directory as working directory: {working_dir}[/blue]")
 
-    # Ensure working directory is an absolute path
-    if not Path(working_dir).is_absolute():
-        console.print(
-            f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
-        )
-        sys.exit(1)
+    # working_dir 已被 os.path.abspath() 或 os.getcwd() 确保为绝对路径,
+    # 不再需要 is_absolute 校验(死代码)。
 
     agent = Agent(
         agent_type,
@@ -365,6 +371,20 @@ def run(
             error_text = Text(f"Error changing directory: {e}", style="red")
             console.print(error_text)
             sys.exit(1)
+
+    # Render a startup banner — Claude Code style.
+    try:
+        from rich.box import DOUBLE_EDGE
+
+        banner = (
+            f"[bold cyan]trae-agent[/bold cyan]  [dim]·[/dim]  "
+            f"[green]{provider or config.trae_agent.model.model_provider.provider}[/green]"
+            f"[dim]/[/dim]"
+            f"[yellow]{model or config.trae_agent.model.model}[/yellow]"
+        )
+        console.print(Panel(banner, box=DOUBLE_EDGE, border_style="cyan"))
+    except Exception:
+        pass
 
     try:
         task_args = {
@@ -408,6 +428,114 @@ def run(
             console.print(f"\n{error_text}")
             console.print(traceback.format_exc())
         console.print(f"[blue]Trajectory saved to: {agent.trajectory_file}[/blue]")
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("task", required=False)
+@click.option("--file", "-f", "file_path", help="Path to a file containing the task description.")
+@click.option("--provider", "-p", help="LLM provider to use")
+@click.option("--model", "-m", help="Specific model to use")
+@click.option("--max-steps", help="Maximum number of execution steps", type=int)
+@click.option("--working-dir", "-w", help="Working directory for the agent")
+@click.option(
+    "--config-file",
+    help="Path to configuration file",
+    default="trae_config.yaml",
+    envvar="TRAE_CONFIG_FILE",
+)
+def plan(
+    task: str | None,
+    file_path: str | None,
+    provider: str | None = None,
+    model: str | None = None,
+    max_steps: int | None = None,
+    working_dir: str | None = None,
+    config_file: str = "trae_config.yaml",
+):
+    """
+    Plan mode — read-only exploration. Same syntax as `trae run`, but the
+    agent is restricted to non-mutation tools and emits a structured plan.
+
+    Mirrors Claude Code's `plan` / `build` split.
+    """
+    if file_path:
+        if task:
+            console.print("[red]Cannot use both a task string and the --file argument.[/red]")
+            sys.exit(1)
+        try:
+            task = Path(file_path).read_text()
+        except FileNotFoundError:
+            console.print(f"[red]File not found: {file_path}[/red]")
+            sys.exit(1)
+    elif not task:
+        console.print("[red]Must provide either a task string or --file argument.[/red]")
+        sys.exit(1)
+
+    config_file = resolve_config_file(config_file)
+
+    config = Config.create(
+        config_file=config_file,
+    ).resolve_config_values(
+        provider=provider,
+        model=model,
+        max_steps=max_steps,
+    )
+
+    working_dir = working_dir or os.getcwd()
+    if not Path(working_dir).is_absolute():
+        working_dir = os.path.abspath(working_dir)
+
+    # Force plan mode.
+    # Issue 2 修复:此前三版提交(b0f8e35 / 80da4b4 / 089a633)对 plan 模式
+    # 的 max_steps 行为描述互相矛盾,实际逻辑也有坑:
+    #   旧逻辑用 `config.max_steps or 30` → 用户 yaml 里写了 `max_steps: 200`
+    #   (这是给 run 模式用的) 时,plan 模式会把 200 强制压回 30 并打 warning,
+    #   把用户的配置静默覆盖,且 warning 还误导用户"用 --max-steps 设更大值"。
+    # 统一后的语义(只此一条规则,不再有歧义):
+    #   - 显式 --max-steps N         → 用 N(用户说话算数,即便 N>30 也不限)
+    #   - 未传 --max-steps           → plan 模式用 30(独立于 run 模式的配置值,
+    #                                  plan 是只读探索,不需要 run 模式的 200 步)
+    # 这样 plan 模式的默认步数与 run 模式配置完全解耦,避免相互覆盖。
+    if config.trae_agent:
+        if max_steps is not None:
+            config.trae_agent.max_steps = max_steps
+        else:
+            config.trae_agent.max_steps = 30
+
+    cli_console = ConsoleFactory.create_console(
+        console_type=ConsoleType.SIMPLE, mode=ConsoleMode.RUN
+    )
+
+    agent = Agent(
+        "trae_agent",
+        config,
+        None,
+        cli_console,
+    )
+    # Flip the plan-mode flag BEFORE the task starts.
+    if hasattr(agent.agent, "plan_mode"):
+        agent.agent.plan_mode = True
+
+    console.print(
+        Panel(
+            "[bold cyan]PLAN MODE[/bold cyan]\n"
+            "Read-only exploration — the agent will inspect files and emit a "
+            "structured plan, but will not modify anything.\n"
+            f"Project: {working_dir}",
+            border_style="cyan",
+        )
+    )
+
+    try:
+        task_args = {
+            "project_path": working_dir,
+            "issue": task,
+            "must_patch": "false",
+        }
+        _ = asyncio.run(agent.run(task, task_args))
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Plan interrupted.[/yellow]")
         sys.exit(1)
 
 
@@ -575,13 +703,14 @@ async def _run_simple_interactive_loop(
             # Execute the task
             console.print(f"\n[blue]Executing task: {task}[/blue]")
 
-            # Start console and execute task
-            console_task = asyncio.create_task(cli_console.start())
-            execution_task = asyncio.create_task(agent.run(task, task_args))
+            # 重置 console 状态，为新一轮任务做准备
+            # （上一轮的 agent_execution 还是 COMPLETED 状态，会导致 start() 的 while 循环立即退出）
+            cli_console.agent_execution = None
+            cli_console.console_step_history.clear()
 
-            # Wait for execution to complete
-            _ = await execution_task
-            _ = await console_task
+            # agent.run() 内部会创建 cli_console.start() 协程来显示进度
+            # 不需要在这里重复创建，否则两个 console 协程会互相干扰
+            await agent.run(task, task_args)
 
             console.print(f"\n[green]Trajectory saved to: {trajectory_file}[/green]")
 
@@ -720,6 +849,325 @@ def tools():
             tools_table.add_row(tool_name, f"[red]Error loading: {e}[/red]")
 
     console.print(tools_table)
+
+
+@cli.command()
+def version():
+    """Show trae-agent version and exit."""
+    from importlib.metadata import version as _v, PackageNotFoundError
+
+    try:
+        v = _v("trae-agent")
+    except PackageNotFoundError:
+        v = "0.1.0+local"
+    console.print(
+        Panel(
+            f"[bold cyan]trae-agent[/bold cyan] [green]{v}[/green]\n"
+            f"[dim]Python · Local LLM Coding Agent[/dim]",
+            border_style="cyan",
+        )
+    )
+
+
+@cli.command()
+@click.argument("trajectory_file", type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--config-file",
+    default="trae_config.yaml",
+    help="Path to trae_config.yaml. Provider/model are taken from the saved "
+    "trajectory if the loaded values are missing, but the running agent "
+    "still uses the providers defined in this file.",
+)
+@click.option(
+    "--agent-type",
+    default="trae_agent",
+    show_default=True,
+    help="Agent implementation (currently only `trae_agent` is supported).",
+)
+@click.option(
+    "--provider",
+    default=None,
+    help="Override the LLM provider from the trajectory (e.g. doubao, ollama).",
+)
+@click.option(
+    "--model",
+    default=None,
+    help="Override the model id from the trajectory (e.g. qwen2.5-coder:7b).",
+)
+@click.option(
+    "--max-steps",
+    type=int,
+    default=None,
+    help="Override the max-step budget. The resumed run counts steps from "
+    "where the saved trajectory left off, so this is the *additional* "
+    "steps, not the total.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Load and summarize the trajectory without actually running the agent.",
+)
+@click.option(
+    "--trajectory-file-output",
+    type=click.Path(dir_okay=False),
+    default=None,
+    help="Where to write the new trajectory (default: <name>_resumed_<ts>.json "
+    "next to the original).",
+)
+def resume(
+    trajectory_file: str,
+    config_file: str,
+    agent_type: str,
+    provider: str | None,
+    model: str | None,
+    max_steps: int | None,
+    dry_run: bool,
+    trajectory_file_output: str | None,
+):
+    """Resume an interrupted run from a saved trajectory file.
+
+    TRAJECTORY_FILE is the JSON file written by a previous `trae run` /
+    `trae interactive` (look under `trajectories/`). The agent picks up
+    exactly where it stopped — same task, same message history, same step
+    counter — and continues from the next step.
+    """
+    import asyncio
+    from datetime import datetime
+    from pathlib import Path
+
+    from trae_agent.utils.trajectory_loader import (
+        TrajectoryLoadError,
+        load_trajectory,
+        summarize,
+    )
+
+    # ----- Load + sanity check -----
+    try:
+        traj = load_trajectory(trajectory_file)
+    except TrajectoryLoadError as e:
+        error_text = Text(f"Cannot resume: {e}", style="red")
+        console.print(error_text)
+        sys.exit(1)
+
+    console.print(
+        Panel(
+            f"[bold]Resuming trajectory[/bold]\n\n{summarize(traj)}",
+            title="[cyan]trajectory loaded[/cyan]",
+            border_style="cyan",
+        )
+    )
+
+    if dry_run:
+        console.print("[yellow]--dry-run set; not invoking agent.[/yellow]")
+        return
+
+    # ----- Resolve config + effective provider/model -----
+    config_file = resolve_config_file(config_file)
+    config: Config = (
+        Config.create(config_file=config_file)
+        .resolve_config_values(
+            provider=provider or traj.provider or None,
+            model=model or traj.model or None,
+            max_steps=max_steps,
+        )
+    )
+
+    eff_provider = config.trae_agent.model.model_provider.provider
+    eff_model = config.trae_agent.model.model
+
+    # ----- Pick a console (mirrors `run`) -----
+    console_mode = ConsoleMode.RUN
+    selected_console_type = ConsoleFactory.get_recommended_console_type(console_mode)
+    cli_console = ConsoleFactory.create_console(
+        console_type=selected_console_type, mode=console_mode
+    )
+
+    agent = Agent(
+        agent_type,
+        config,
+        None,  # new trajectory path, set below
+        cli_console,
+    )
+
+    # ----- Restore message history + step counter -----
+    agent.resume_from_messages(
+        messages=traj.last_input_messages,
+        completed_steps=traj.completed_steps,
+    )
+
+    # ----- New trajectory path -----
+    if trajectory_file_output:
+        out_path = Path(trajectory_file_output).expanduser().resolve()
+    else:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = traj.trajectory_path.with_name(
+            f"{traj.trajectory_path.stem}_resumed_{ts}.json"
+        )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    agent.set_trajectory_file(str(out_path))
+
+    console.print(
+        f"[blue]Resuming from step {traj.completed_step_count + 1}[/blue]\n"
+        f"[blue]Provider: {eff_provider} | Model: {eff_model}[/blue]\n"
+        f"[blue]New trajectory: {out_path}[/blue]\n"
+    )
+
+    # ----- Run -----
+    task_args = {
+        "project_path": os.getcwd(),
+        "issue": traj.task,
+        "must_patch": "false",
+    }
+    try:
+        execution = asyncio.run(agent.run(traj.task, task_args))
+    except Exception as e:
+        console.print(f"[red]Resume failed: {e}[/red]")
+        sys.exit(1)
+
+    if execution.success:
+        console.print(
+            Panel(
+                f"[green]Resume complete[/green]\n\n{execution.final_result or ''}",
+                border_style="green",
+            )
+        )
+    else:
+        console.print(
+            Panel(
+                f"[yellow]Resume finished with state {execution.agent_state}[/yellow]\n\n"
+                f"{execution.final_result or ''}",
+                border_style="yellow",
+            )
+        )
+        sys.exit(2)
+
+
+@cli.group()
+def skills():
+    """Manage skills (extensible system-prompt fragments)."""
+    pass
+
+
+@skills.command(name="list")
+@click.option("--project-dir", default=".", help="Project root for project-local skills.")
+def skills_list(project_dir: str):
+    """List all discoverable skills (user-wide + project-local)."""
+    from .skills.loader import load_all_skills
+
+    loaded = load_all_skills(project_dir=project_dir)
+
+    if not loaded:
+        console.print(
+            Panel(
+                "[yellow]No skills found.[/yellow]\n\n"
+                "User skills: [cyan]~/.trae-agent/skills/*.md[/cyan]\n"
+                "Project skills: [cyan]./.trae-agent/skills/*.md[/cyan]",
+                title="Skills",
+                border_style="yellow",
+            )
+        )
+        return
+
+    table = Table(title=f"Skills ({len(loaded)} loaded)")
+    table.add_column("Name", style="cyan", width=20)
+    table.add_column("Description", style="green")
+    table.add_column("Source", style="dim")
+
+    for s in loaded:
+        table.add_row(s.name, s.description, s.relative_source)
+
+    console.print(table)
+
+
+@skills.command(name="show")
+@click.argument("name")
+@click.option("--project-dir", default=".", help="Project root for project-local skills.")
+def skills_show(name: str, project_dir: str):
+    """Show the full content of a skill."""
+    from .skills.loader import load_all_skills
+
+    loaded = load_all_skills(project_dir=project_dir)
+    match = next((s for s in loaded if s.name == name), None)
+    if not match:
+        console.print(f"[red]Skill '{name}' not found.[/red]")
+        sys.exit(1)
+
+    console.print(
+        Panel(
+            f"[bold cyan]Description:[/bold cyan] {match.description}\n"
+            f"[bold cyan]Source:[/bold cyan] {match.relative_source}\n"
+            + (
+                f"[bold cyan]Allowed tools:[/bold cyan] {', '.join(match.allowed_tools)}\n"
+                if match.allowed_tools
+                else "[bold cyan]Allowed tools:[/bold cyan] (all)\n"
+            ),
+            title=f"Skill: {match.name}",
+            border_style="cyan",
+        )
+    )
+    console.print(match.content)
+
+
+@skills.command(name="open-dir")
+def skills_open_dir():
+    """Open the user skills directory in Finder (creates it if missing)."""
+    from pathlib import Path
+
+    p = Path.home() / ".trae-agent" / "skills"
+    p.mkdir(parents=True, exist_ok=True)
+    console.print(f"Skills directory: [cyan]{p}[/cyan]")
+    if sys.platform == "darwin":
+        _ = subprocess.Popen(["open", str(p)])
+    elif sys.platform.startswith("linux"):
+        _ = subprocess.Popen(["xdg-open", str(p)])
+    elif os.name == "nt":
+        _ = subprocess.Popen(["explorer", str(p)])
+
+
+@cli.group()
+def trajectory():
+    """Inspect and export saved trajectories."""
+    pass
+
+
+@trajectory.command(name="export")
+@click.argument("trajectory_file", type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["md", "html"], case_sensitive=False),
+    default="md",
+    help="Output format (default: md; auto-detected from --output extension).",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False),
+    default=None,
+    help="Destination path. Default: <trajectory>.md next to the source.",
+)
+def trajectory_export(trajectory_file: str, fmt: str, output: str | None):
+    """Export a trajectory JSON to Markdown or HTML for sharing/review."""
+    from trae_agent.utils.trajectory_exporter import export as _export
+
+    src = Path(trajectory_file).expanduser().resolve()
+    if output is None:
+        out = src.with_suffix("." + fmt.lower())
+    else:
+        out = Path(output).expanduser().resolve()
+
+    try:
+        written = _export(src, out, fmt=fmt.lower())
+    except FileNotFoundError:
+        console.print(f"[red]Trajectory not found: {src}[/red]")
+        sys.exit(1)
+    except (json.JSONDecodeError, ValueError) as e:
+        console.print(f"[red]Cannot parse trajectory: {e}[/red]")
+        sys.exit(1)
+
+    console.print(f"[green]✓ Exported trajectory[/green]")
+    console.print(f"  source: {src}")
+    console.print(f"  output: {written}  ({fmt.upper()})")
 
 
 def main():

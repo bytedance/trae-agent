@@ -25,7 +25,7 @@ TEST_MODEL = "gemini-2.5-flash"
     "Google tests skipped due to SKIP_GOOGLE_TEST environment variable",
 )
 class TestGoogleClient(unittest.TestCase):
-    @patch("trae_agent.utils.google_client.genai.Client")
+    @patch("trae_agent.utils.llm_clients.google_client.genai.Client")
     def test_google_client_init(self, mock_genai_client):
         """Test the initialization of the GoogleClient."""
         model_config = ModelConfig(
@@ -42,7 +42,7 @@ class TestGoogleClient(unittest.TestCase):
         mock_genai_client.assert_called_once_with(api_key="test-api-key")
         self.assertIsNotNone(google_client.client)
 
-    @patch("trae_agent.utils.google_client.genai.Client")
+    @patch("trae_agent.utils.llm_clients.google_client.genai.Client")
     @patch.dict(os.environ, {"GOOGLE_API_KEY": "test-env-api-key"})
     def test_google_client_init_with_env_key(self, mock_genai_client):
         """
@@ -80,7 +80,7 @@ class TestGoogleClient(unittest.TestCase):
         with self.assertRaises(ValueError):
             GoogleClient(model_config)
 
-    @patch("trae_agent.utils.google_client.genai.Client")
+    @patch("trae_agent.utils.llm_clients.google_client.genai.Client")
     def test_google_set_chat_history(self, mock_genai_client):
         """
         Test that the chat history is correctly parsed and stored.
@@ -108,7 +108,7 @@ class TestGoogleClient(unittest.TestCase):
         self.assertEqual(google_client.message_history[0].role, "user")
         self.assertEqual(google_client.message_history[0].parts[0].text, "Hello, world!")
 
-    @patch("trae_agent.utils.google_client.genai.Client")
+    @patch("trae_agent.utils.llm_clients.google_client.genai.Client")
     def test_google_chat(self, mock_genai_client):
         """
         Test the chat method with a simple user message.
@@ -142,7 +142,7 @@ class TestGoogleClient(unittest.TestCase):
         self.assertEqual(response.usage.output_tokens, 20)
         self.assertEqual(response.finish_reason, "STOP")
 
-    @patch("trae_agent.utils.google_client.genai.Client")
+    @patch("trae_agent.utils.llm_clients.google_client.genai.Client")
     def test_google_chat_with_tool_call(self, mock_genai_client):
         """
         Test the chat method's ability to handle tool calls.
@@ -164,6 +164,8 @@ class TestGoogleClient(unittest.TestCase):
         mock_tool = MagicMock(spec=Tool)
         mock_tool.name = "get_weather"
         mock_tool.description = "Gets the weather for a location."
+        mock_tool.get_name.return_value = "get_weather"
+        mock_tool.get_description.return_value = "Gets the weather for a location."
         mock_tool.get_input_schema.return_value = {
             "type": "object",
             "properties": {"location": {"type": "string"}},
@@ -232,7 +234,7 @@ class TestGoogleClient(unittest.TestCase):
         self.assertEqual(parsed_messages[0].parts[0].text, "Hello")
         self.assertEqual(parsed_messages[1].role, "model")
         self.assertEqual(parsed_messages[1].parts[0].function_call.name, "search")
-        self.assertEqual(parsed_messages[2].role, "tool")
+        self.assertEqual(parsed_messages[2].role, "user")
         self.assertEqual(parsed_messages[2].parts[0].function_response.name, "search")
 
     def test_parse_tool_call_result(self):

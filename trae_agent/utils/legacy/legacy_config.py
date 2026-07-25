@@ -77,7 +77,7 @@ class LegacyConfig:
     mcp_servers: dict[str, MCPServerConfig]
     lakeview_config: LakeviewConfig | None = None
     enable_lakeview: bool = True
-    allow_mcp_servers: list[str] = field(default_factory=list)
+    allow_mcp_servers: list[str] | None = field(default=None)
 
     def __init__(self, config_or_config_file: str | dict = "trae_config.json"):  # pyright: ignore[reportMissingTypeArgument, reportUnknownParameterType]
         # Accept either file path or direct config dict
@@ -102,7 +102,7 @@ class LegacyConfig:
         self.mcp_servers = {
             k: MCPServerConfig(**v) for k, v in self._config.get("mcp_servers", {}).items()
         }
-        self.allow_mcp_servers = self._config.get("allow_mcp_servers", [])
+        self.allow_mcp_servers = self._config.get("allow_mcp_servers", None)
 
         if len(self._config.get("model_providers", [])) == 0:
             self.model_providers = {

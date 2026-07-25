@@ -6,7 +6,7 @@
 import json
 import traceback
 import uuid
-from typing import override
+from typing_extensions import override
 
 from google import genai
 from google.genai import types
@@ -59,16 +59,20 @@ class GoogleClient(BaseLLMClient):
 
         current_system_instruction = system_instruction_from_message or self.system_instruction
 
-        if reuse_history:
-            current_chat_contents = self.message_history + newly_parsed_messages
-        else:
-            current_chat_contents = newly_parsed_messages
+        # Agent sends the full accumulated message history on each call.
+        # Only use the agent-provided messages to avoid duplication.
+        current_chat_contents = newly_parsed_messages
 
         # Set up generation config
+        # Issue 4: top_k 统一语义 — 0 表示"未配置",不传给 Gemini SDK
+        # (Gemini 要求 top_k >= 1,传 0 会报错)。仅当 >0 时才下发。
+        top_k_value = (
+            model_config.top_k if model_config.top_k and model_config.top_k > 0 else None
+        )
         generation_config = types.GenerateContentConfig(
             temperature=model_config.temperature,
             top_p=model_config.top_p,
-            top_k=model_config.top_k,
+            top_k=top_k_value,
             max_output_tokens=model_config.max_tokens,
             candidate_count=model_config.candidate_count,
             stop_sequences=model_config.stop_sequences,
@@ -121,10 +125,9 @@ class GoogleClient(BaseLLMClient):
                             )
                         )
 
-        if reuse_history:
-            new_history = self.message_history + newly_parsed_messages
-        else:
-            new_history = newly_parsed_messages
+        # Agent sends the full accumulated message history on each call.
+        # Replace history instead of concatenating to avoid duplication.
+        new_history = newly_parsed_messages
 
         if assistant_response_content:
             new_history.append(assistant_response_content)
@@ -180,7 +183,7 @@ class GoogleClient(BaseLLMClient):
             elif msg.tool_result:
                 gemini_messages.append(
                     types.Content(
-                        role="tool",
+                        role="user",
                         parts=[self.parse_tool_call_result(msg.tool_result)],
                     )
                 )
@@ -222,8 +225,12 @@ class GoogleClient(BaseLLMClient):
         if not result_content:
             result_content["status"] = "Tool executed successfully but returned no output."
 
-        if not hasattr(tool_result, "name") or not tool_result.name:
+        # P1-10 修复:原代码用 `hasattr(tool_result, "name")` 但 ToolResult
+        # 是 @dataclass,name 字段必填,hasattr 永远为 True,raise 分支
+        # 永远不会触发。简化:只检查 name 是否为空字符串。
+        if not tool_result.name:
             raise AttributeError(
-                "ToolResult must have a 'name' attribute matching the function that was called."
+                "ToolResult must have a non-empty 'name' attribute "
+                "matching the function that was called."
             )
         return types.Part.from_function_response(name=tool_result.name, response=result_content)

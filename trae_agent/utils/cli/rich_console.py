@@ -5,7 +5,7 @@
 
 import asyncio
 import os
-from typing import override
+from typing_extensions import override
 
 from rich.panel import Panel
 from rich.text import Text

@@ -35,8 +35,11 @@ class Sandbox:
         )
         print(f"Container {self.container.short_id} started with image {image}")
 
-        cmd = f"chmod -R 777 {self.tools_path} && docker cp {self.tools_path} {self.container.name}:/home/swe-bench/"
-        subprocess.run(cmd, check=True, shell=True)
+        subprocess.run(["chmod", "-R", "777", self.tools_path], check=True)
+        subprocess.run(
+            ["docker", "cp", self.tools_path, f"{self.container.name}:/home/swe-bench/"],
+            check=True,
+        )
 
         checkout_res = self.container.exec_run(f"git checkout {self.commit_id}")
         print("checkout: ", checkout_res)
@@ -60,7 +63,7 @@ class Sandbox:
 
             def execute(self, command, timeout=60):
                 try:
-                    if command[-1] != "&":
+                    if not command or command[-1] != "&":
                         self.sandbox.shell.sendline(command + " && sleep 0.5")
                     else:
                         self.sandbox.shell.sendline(command)

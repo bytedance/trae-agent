@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from trae_agent.utils.legacy_config import LegacyConfig
+from trae_agent.utils.legacy.legacy_config import LegacyConfig
 
 
 class ConfigError(Exception):
@@ -36,11 +36,21 @@ class ModelConfig:
     model_provider: ModelProvider
     temperature: float
     top_p: float
-    top_k: int
     parallel_tool_calls: bool
     max_retries: int
+    # top_k 语义约定(Issue 4 统一):
+    #   0  = 未配置 → 各 client 不发送该参数(走 provider 默认值)
+    #   >0 = 显式配置 → 原样发送给支持 top_k 的 provider(Anthropic/Gemini)
+    # OpenAI 系(OpenAI/MiniMax/NVIDIA/Azure/Ollama 兼容协议)目前一律不发送
+    # top_k(协议本身不支持),无论取值。
+    # 默认 0,这样省略 yaml 字段时不会因缺位置参数而抛 TypeError。
+    top_k: int = 0
     max_tokens: int | None = None  # Legacy max_tokens parameter, optional
     supports_tool_calling: bool = True
+    # Whether this model can consume images (multimodal input).
+    # Opt-in: most configured models are text-only, so we default to
+    # False and only flip it on for vision-capable models.
+    supports_multimodal: bool = False
     candidate_count: int | None = None  # Gemini specific field
     stop_sequences: list[str] | None = None
     max_completion_tokens: int | None = None  # Azure OpenAI specific field
@@ -148,7 +158,7 @@ class AgentConfig:
     Base class for agent configurations.
     """
 
-    allow_mcp_servers: list[str]
+    allow_mcp_servers: list[str] | None
     mcp_servers_config: dict[str, MCPServerConfig]
     max_steps: int
     model: ModelConfig
@@ -269,7 +279,7 @@ class Config:
         mcp_servers_config = {
             k: MCPServerConfig(**v) for k, v in yaml_config.get("mcp_servers", {}).items()
         }
-        allow_mcp_servers = yaml_config.get("allow_mcp_servers", [])
+        allow_mcp_servers = yaml_config.get("allow_mcp_servers", None)
 
         # Parse agents
         agents = yaml_config.get("agents", None)
