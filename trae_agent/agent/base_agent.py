@@ -6,7 +6,7 @@
 import contextlib
 import os
 from abc import ABC, abstractmethod
-from typing import Union
+from typing import Any, Union
 
 from trae_agent.agent.agent_basics import AgentExecution, AgentState, AgentStep, AgentStepState
 from trae_agent.agent.docker_manager import DockerManager
@@ -45,6 +45,15 @@ class BaseAgent(ABC):
         ]
         self.docker_keep = docker_keep
         self.docker_manager: DockerManager | None = None
+        # Resume support: when set > 1, execute_task starts from this step
+        # instead of 1, and replays _replay_steps into the new execution.
+        self._resume_start_step: int = 1
+        self._replay_steps: list[Any] = []
+        # Resume support: track the full LLM-visible message history across
+        # steps so `trae-cli resume` can recover it from a saved trajectory.
+        # `_initial_messages` is replaced by this once execute_task begins;
+        # it is kept in sync with the loop's `messages` local.
+        self._accumulated_messages: list[LLMMessage] = []
         original_tool_executor = ToolExecutor(self._tools)
         if docker_config:
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -144,8 +153,46 @@ class BaseAgent(ABC):
         """Create a new task."""
         pass
 
+    def resume_from_messages(
+        self,
+        messages: list["LLMMessage"],
+        completed_steps: list[Any] | None = None,
+    ) -> None:
+        """Restore the agent to a saved state for resuming execution.
+
+        Args:
+            messages: full LLM message history at the point of interruption,
+                in chronological order. Usually taken from the last
+                ``llm_interactions[*].input_messages`` entry of a saved
+                trajectory.
+            completed_steps: AgentStep-like dicts from the saved trajectory,
+                replayed into the new execution so the trajectory file stays
+                continuous.
+        """
+        self._initial_messages = list(messages)
+        completed_count = len(completed_steps) if completed_steps else 0
+        self._resume_start_step = completed_count + 1
+        self._replay_steps = list(completed_steps or [])
+        # Bump the step budget so `--max-steps N` from the CLI means "N
+        # additional steps after the resume point" rather than "N total
+        # steps since task start". Without this, a previously-incomplete
+        # run of step 50 + `trae-cli resume --max-steps 5` would loop
+        # zero times because 51 > 5.
+        if self._max_steps < self._resume_start_step:
+            self._max_steps = self._resume_start_step + max(
+                0, self._max_steps - 1
+            )
+
     async def execute_task(self) -> AgentExecution:
-        """Execute a task using the agent."""
+        """Execute a task using the agent.
+
+        Args:
+            start_step: 1-based step number to begin from. Default 1 (normal
+                run). For resume from a saved trajectory, set this to the
+                last completed step + 1 and pre-populate
+                ``self._initial_messages`` with the recovered message history
+                (via ``resume_from_messages``).
+        """
         import time
 
         if self.docker_manager:
@@ -155,15 +202,35 @@ class BaseAgent(ABC):
         execution = AgentExecution(task=self._task, steps=[])
         step: AgentStep | None = None
 
+        # Resume support: if start_step > 1, replay the recorded steps into
+        # the execution so trajectory files stay consistent.
+        if self._resume_start_step > 1:
+            for replay_step in self._replay_steps:
+                execution.steps.append(replay_step)
+
         try:
             messages = self._initial_messages
-            step_number = 1
+            # Resume support: if we were restored from a saved trajectory,
+            # `messages` already contains the recovered history. Otherwise
+            # start with a fresh accumulator seeded from initial messages.
+            self._accumulated_messages = list(messages)
+            step_number = self._resume_start_step
             execution.agent_state = AgentState.RUNNING
 
             while step_number <= self._max_steps:
                 step = AgentStep(step_number=step_number, state=AgentStepState.THINKING)
                 try:
-                    messages = await self._run_llm_step(step, messages, execution)
+                    new_messages = await self._run_llm_step(step, messages, execution)
+                    # Resume support: keep an accumulated copy of the full
+                    # message history so the trajectory recorder writes the
+                    # whole conversation into agent_steps[].llm_messages —
+                    # that's what `trae-cli resume` reads back.
+                    #
+                    # _run_llm_step's return value is a SHORT list of new
+                    # tool_result / reflection messages; we extend our running
+                    # accumulator with them rather than replacing it.
+                    self._accumulated_messages = list(messages) + list(new_messages)
+                    messages = self._accumulated_messages
                     await self._finalize_step(
                         step, messages, execution
                     )  # record trajectory for this step and update the CLI console
@@ -187,16 +254,20 @@ class BaseAgent(ABC):
             if self.docker_manager and not self.docker_keep:
                 self.docker_manager.stop()
 
-        # Ensure tool resources are released whether an exception occurs or not.
-        await self._close_tools()
+            # Ensure tool resources are released whether an exception occurs or not.
+            # CancelledError may propagate before these would normally execute,
+            # so they must be in the finally block to prevent resource leaks.
+            with contextlib.suppress(Exception):
+                await self._close_tools()
 
-        execution.execution_time = time.time() - start_time
+            execution.execution_time = time.time() - start_time
 
-        # Clean up any MCP clients
-        with contextlib.suppress(Exception):
-            await self.cleanup_mcp_clients()
+            # Clean up any MCP clients
+            with contextlib.suppress(Exception):
+                await self.cleanup_mcp_clients()
 
-        self._update_cli_console(step, execution)
+            self._update_cli_console(step, execution)
+
         return execution
 
     async def _close_tools(self):
@@ -300,10 +371,16 @@ class BaseAgent(ABC):
 
     def _record_handler(self, step: AgentStep, messages: list[LLMMessage]) -> None:
         if self.trajectory_recorder:
+            # Resume support: when recording each step, prefer the accumulated
+            # full conversation (kept in sync by execute_task) over the
+            # short `messages` slice the caller hands us. The slice only
+            # contains the messages added in this step; the accumulated list
+            # has the full history, which is what `trae-cli resume` needs.
+            record_messages = self._accumulated_messages or messages
             self.trajectory_recorder.record_agent_step(
                 step_number=step.step_number,
                 state=step.state.value,
-                llm_messages=messages,
+                llm_messages=record_messages,
                 llm_response=step.llm_response,
                 tool_calls=step.tool_calls,
                 tool_results=step.tool_results,
@@ -347,6 +424,9 @@ class BaseAgent(ABC):
             # Display reflection
             self._update_cli_console(step)
 
-            messages.append(LLMMessage(role="assistant", content=reflection))
+            # P1-15 修复:reflection 是"工具失败 → 用户视角反馈",
+            # 语义是 role="user"(让模型知道 tool output 不行),而不是
+            # role="assistant"(否则破坏 user/assistant 交替,部分 provider 会拒绝)。
+            messages.append(LLMMessage(role="user", content=reflection))
 
         return messages

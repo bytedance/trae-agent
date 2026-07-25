@@ -5,7 +5,7 @@
 
 import json
 from pathlib import Path
-from typing import override
+from typing_extensions import override
 
 from jsonpath_ng import Fields, Index
 from jsonpath_ng import parse as jsonpath_parse

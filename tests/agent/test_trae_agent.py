@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
 from trae_agent.utils.config import Config
-from trae_agent.utils.legacy_config import LegacyConfig
+from trae_agent.utils.legacy.legacy_config import LegacyConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMResponse
 
 
@@ -64,16 +64,22 @@ class TestTraeAgentExtended(unittest.TestCase):
         self.assertEqual(len(self.agent.tools), 4)
         self.assertTrue(any(tool.get_name() == "bash" for tool in self.agent.tools))
 
-    @patch("subprocess.check_output")
-    @patch("os.chdir")
+    @patch("subprocess.run")
     @patch("os.path.isdir", return_value=True)
-    def test_git_diff_generation(self, mock_isdir, mock_chdir, mock_subprocess):
-        mock_subprocess.return_value = b"test diff"
+    def test_git_diff_generation(self, mock_isdir, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stdout = b"test diff"
+        mock_subprocess.return_value = mock_result
         self.agent.project_path = self.test_project_path
 
         diff = self.agent.get_git_diff()
         self.assertEqual(diff, "test diff")
-        mock_subprocess.assert_called_with(["git", "--no-pager", "diff"])
+        mock_subprocess.assert_called_with(
+            ["git", "--no-pager", "diff"],
+            cwd=self.test_project_path,
+            capture_output=True,
+            check=False,
+        )
 
     def test_patch_filtering(self):
         test_patch = """diff --git a/tests/test_example.py b/tests/test_example.py

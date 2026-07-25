@@ -5,6 +5,7 @@ import hashlib
 import json
 import sqlite3
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -104,8 +105,22 @@ def get_folder_snapshot_hash(folder_path: Path) -> str:
     return get_file_metadata_hash(folder_path)
 
 
+_last_clear_ckg: float = 0.0
+
+
 def clear_older_ckg():
-    """Iterate over all the files in the CKG storage directory and delete the ones that are older than 1 week."""
+    """Iterate over all the files in the CKG storage directory and delete the ones that are
+    older than 1 week.
+
+    每次 BaseAgent.__init__ 都会调用此函数,并发多 agent 时可能误删他人文件。
+    用模块级时间戳做 throttling:最多每小时清理一次,减少竞争窗口也避免每次 init 都 IO。
+    """
+    global _last_clear_ckg
+    now = time.time()
+    if now - _last_clear_ckg < 3600:
+        return
+    _last_clear_ckg = now
+
     for file in CKG_DATABASE_PATH.glob("**/*"):
         if (
             file.is_file()

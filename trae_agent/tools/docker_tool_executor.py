@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 from typing import Any
 
 from trae_agent.agent.docker_manager import DockerManager
@@ -33,18 +34,51 @@ class DockerToolExecutor:
         self._container_workspace_dir = container_workspace_dir
 
     def _translate_path(self, host_path: str) -> str:
-        """Robust path translation function: Translate the host path into the corresponding path within the container."""
+        """Translate a host path into the corresponding container path.
+
+        Security:
+            - Resolves symlinks via ``realpath`` so ``/workspace/foo`` (a symlink
+              to ``/etc``) can't be used to escape.
+            - Uses ``commonpath`` AND a trailing-separator check to prevent
+              prefix collisions like ``/work`` vs ``/workspace``.
+            - If the resolved path escapes the host workspace, the path is
+              returned unchanged so the downstream Docker command receives
+              the literal path (and will likely fail inside the container,
+              which is the safe outcome).
+        """
         if not self._host_workspace_dir:
-            return host_path  # 如果没有配置主机工作区，则不翻译
-        abs_host_path = os.path.abspath(host_path)
-        if (
-            os.path.commonpath([abs_host_path, self._host_workspace_dir])
-            == self._host_workspace_dir
+            return host_path  # No host workspace → no translation.
+
+        # 1) Resolve to absolute, then to realpath (follows symlinks).
+        try:
+            abs_host_path = os.path.abspath(host_path)
+            real_host_path = os.path.realpath(abs_host_path)
+            real_workspace = os.path.realpath(self._host_workspace_dir)
+        except (OSError, ValueError):
+            # realpath can raise on weird FS states; bail out safely.
+            return host_path
+
+        # 2) Confirm the resolved path is under the workspace. Commonpath
+        #    alone is insufficient — ``commonpath(['/workspace-evil',
+        #    '/workspace'])`` returns ``/workspace`` even though the dirs
+        #    are siblings. Append os.sep to both sides before comparing.
+        try:
+            if os.path.commonpath([real_host_path, real_workspace]) != real_workspace:
+                return host_path
+        except ValueError:
+            # commonpath raises if paths are on different drives (Windows).
+            return host_path
+
+        if not (
+            real_host_path == real_workspace
+            or real_host_path.startswith(real_workspace + os.sep)
         ):
-            relative_path = os.path.relpath(abs_host_path, self._host_workspace_dir)
-            container_path = os.path.join(self._container_workspace_dir, relative_path)
-            return os.path.normpath(container_path)
-        return host_path
+            return host_path
+
+        # 3) Compute the relative path and join into the container dir.
+        relative_path = os.path.relpath(real_host_path, real_workspace)
+        container_path = os.path.join(self._container_workspace_dir, relative_path)
+        return os.path.normpath(container_path)
 
     async def close_tools(self):
         """
@@ -117,10 +151,10 @@ class DockerToolExecutor:
                     if key == "command" or value is None:
                         continue
                     if isinstance(value, list):
-                        str_value = " ".join(map(str, value))
+                        str_value = " ".join(shlex.quote(str(v)) for v in value)
                         cmd_parts.append(f"--{key} {str_value}")
                     else:
-                        cmd_parts.append(f"--{key} '{str(value)}'")
+                        cmd_parts.append(f"--{key} {shlex.quote(str(value))}")
 
                 command_to_run = " ".join(cmd_parts)
             # --- Rule 3: Handling json_edit_tool ---
@@ -133,12 +167,11 @@ class DockerToolExecutor:
                     # --- Serialize the 'value' parameter into a JSON string ---
                     if key == "value":
                         json_string_value = json.dumps(value)
-                        cmd_parts.append(f"--{key} '{json_string_value}'")
+                        cmd_parts.append(f"--{key} {shlex.quote(json_string_value)}")
                     elif isinstance(value, list):
-                        # In theory, json edit_tool does not have a list parameter, but it should be kept as a precautionary measure
-                        cmd_parts.append(f"--{key} {' '.join(map(str, value))}")
+                        cmd_parts.append(f"--{key} {' '.join(shlex.quote(str(v)) for v in value)}")
                     else:
-                        cmd_parts.append(f"--{key} '{str(value)}'")
+                        cmd_parts.append(f"--{key} {shlex.quote(str(value))}")
                 command_to_run = " ".join(cmd_parts)
             else:
                 raise NotImplementedError(

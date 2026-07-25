@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from contextlib import AsyncExitStack
 from enum import Enum
 
@@ -68,8 +70,13 @@ class MCPClient:
             for tool in mcp_tools.tools:
                 mcp_tool = MCPTool(self, tool, model_provider)
                 mcp_tools_container.append(mcp_tool)
-        except Exception as e:
-            raise e
+        except Exception:
+            # P1 修复:connect_to_server 已把 ClientSession 注册进 exit_stack,
+            # 若 list_tools() 失败直接 `raise e` 会让 stdio 子进程泄漏。
+            # 重抛前先释放 exit_stack,清理底层资源。
+            with contextlib.suppress(Exception):
+                await self.exit_stack.aclose()
+            raise
 
     async def connect_to_server(self, mcp_server_name, transport):
         """Connect to an MCP server

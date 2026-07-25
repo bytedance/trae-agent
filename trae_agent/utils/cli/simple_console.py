@@ -4,7 +4,7 @@
 """Simple CLI Console implementation."""
 
 import asyncio
-from typing import override
+from typing_extensions import override
 
 from rich.console import Console
 from rich.markdown import Markdown

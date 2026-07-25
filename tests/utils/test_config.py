@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from trae_agent.utils.config import Config, ModelConfig, ModelProvider
-from trae_agent.utils.legacy_config import LegacyConfig
+from trae_agent.utils.legacy.legacy_config import LegacyConfig
 from trae_agent.utils.llm_clients.anthropic_client import AnthropicClient
 from trae_agent.utils.llm_clients.openai_client import OpenAIClient
 

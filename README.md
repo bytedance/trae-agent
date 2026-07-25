@@ -284,3 +284,65 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 We thank Anthropic for building the [anthropic-quickstart](https://github.com/anthropics/anthropic-quickstarts) project that served as a valuable reference for the tool ecosystem.
+
+---
+
+## 🦞 Fork Features (this branch)
+
+This fork adds Claude Code / OpenCode-style ergonomics on top of the
+upstream trae-agent:
+
+### Skills system
+
+Skills are Markdown files with YAML frontmatter that extend the agent's
+system prompt. Drop one in and the agent picks it up automatically.
+
+```bash
+trae-cli skills list                 # see what is loaded
+trae-cli skills show <name>          # inspect content
+trae-cli skills open-dir             # edit user skills in Finder
+```
+
+Loaded from:
+- `~/.trae-agent/skills/*.md`  (user-wide)
+- `./.trae-agent/skills/*.md`  (project-local, overrides user-wide)
+
+Built-in skills installed by default: `debug`, `commit`, `refactor`,
+`review`. See `~/.trae-agent/skills/` after cloning.
+
+### Plan / Build modes
+
+Claude Code-style dual mode:
+
+```bash
+trae-cli plan "add tests for utils"   # read-only, no mutations
+trae-cli run  "add tests for utils"   # full access, executes changes
+```
+
+In `plan` mode the agent can only read files (no `str_replace_based_edit_tool`,
+no `json_edit_tool`), and the system prompt appends a strict no-mutation
+reminder.
+
+### One-shot installer
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/1982167424-art/trae-agent/main/install.sh | bash
+```
+
+Or locally:
+
+```bash
+./install.sh                  # install to ~/.local/bin
+./install.sh --system         # install to /usr/local/bin
+./install.sh --uninstall      # remove
+```
+
+Requires Python 3.10+. Uses [`uv`](https://docs.astral.sh/uv/) to install
+the package in an isolated environment and exposes the `trae` command.
+
+### Polish
+
+- `trae-cli version` — banner with version + provider.
+- `trae-cli skills {list,show,open-dir}` — skill management.
+- Banner & color-coded output that doesn't fight your terminal.
+

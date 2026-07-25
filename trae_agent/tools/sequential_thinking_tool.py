@@ -11,7 +11,7 @@
 
 import json
 from dataclasses import dataclass
-from typing import override
+from typing_extensions import override
 
 from trae_agent.tools.base import Tool, ToolCallArguments, ToolExecResult, ToolParameter
 

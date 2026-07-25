@@ -9,8 +9,9 @@
 #
 # This modified file is released under the same license.
 
+import os
 from pathlib import Path
-from typing import override
+from typing_extensions import override
 
 from trae_agent.tools.base import Tool, ToolCallArguments, ToolError, ToolExecResult, ToolParameter
 from trae_agent.tools.run import maybe_truncate, run
@@ -27,8 +28,12 @@ SNIPPET_LINES: int = 4
 class TextEditorTool(Tool):
     """Tool to replace a string in a file."""
 
-    def __init__(self, model_provider: str | None = None) -> None:
+    def __init__(self, model_provider: str | None = None, working_dir: str | None = None) -> None:
         super().__init__(model_provider)
+        # 可选的沙箱根目录:validate_path 会强制所有读写落在它之内,
+        # 防止 LLM 越权改写 /etc/passwd、~/.ssh/authorized_keys 等。
+        # None 表示不限制(兼容未传入 working_dir 的实例化路径)。
+        self._working_dir: Path | None = Path(working_dir).resolve() if working_dir else None
 
     @override
     def get_model_provider(self) -> str | None:
@@ -138,6 +143,16 @@ Notes for using the `str_replace` command:
             raise ToolError(
                 f"The path {path} is not an absolute path, it should start with `/`. Maybe you meant {suggested_path}?"
             )
+        # 越权防护:若指定了 working_dir,所有路径必须落在它之内。
+        # 原实现只校验"是否为绝对路径",`/../etc/passwd` 通过 is_absolute()
+        # 即可逃出,等于把整个文件系统写权限交给 LLM。这里用 resolve + is_relative_to 堵死。
+        if self._working_dir is not None and not path.resolve().is_relative_to(
+            self._working_dir
+        ):
+            raise ToolError(
+                f"The path {path} is outside the allowed working directory "
+                f"{self._working_dir}. Refusing to access it."
+            )
         # Check if path exists
         if not path.exists() and command != "create":
             raise ToolError(f"The path {path} does not exist. Please provide a valid path.")
@@ -159,10 +174,16 @@ Notes for using the `str_replace` command:
                     "The `view_range` parameter is not allowed when `path` points to a directory."
                 )
 
-            return_code, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
-            if not stderr:
-                stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
-            return ToolExecResult(error_code=return_code, output=stdout, error=stderr)
+            # P0 修复:原代码 `find {path}` 把 LLM 提供的 path 直接拼进 shell 命令,
+            # 存在命令注入(`; rm -rf /`、反引号等)。改为纯 Python 遍历,不依赖 shell,
+            # 且天然排除隐藏项。
+            try:
+                stdout = self._list_directory(path, max_depth=2)
+            except OSError as e:
+                return ToolExecResult(
+                    error=f"Failed to list directory {path}: {e}", error_code=-1
+                )
+            return ToolExecResult(error_code=0, output=stdout, error="")
 
         file_content = self.read_file(path)
         init_line = 1
@@ -194,12 +215,42 @@ Notes for using the `str_replace` command:
             output=self._make_output(file_content, str(path), init_line=init_line)
         )
 
+    def _list_directory(self, path: Path, max_depth: int = 2) -> str:
+        """List a directory up to `max_depth` levels, excluding hidden items.
+
+        Pure-Python replacement for `find path -maxdepth 2 -not -path '*/.*'`,
+        avoiding shell injection of the LLM-controlled `path` argument.
+        """
+        entries: list[str] = []
+        base = str(path)
+        for root, dirs, files in os.walk(path, topdown=True):
+            depth = root[len(base):].count(os.sep)
+            if depth >= max_depth:
+                dirs[:] = []
+                continue
+            # Exclude hidden directories and don't descend into them.
+            dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+            for name in sorted(dirs):
+                entries.append(os.path.join(root, name))
+            for name in sorted(files):
+                if not name.startswith("."):
+                    entries.append(os.path.join(root, name))
+        header = (
+            f"Here's the files and directories up to {max_depth} levels deep "
+            f"in {path}, excluding hidden items:\n"
+        )
+        return header + ("\n".join(entries) if entries else "(empty)") + "\n"
+
     def str_replace(self, path: Path, old_str: str, new_str: str | None) -> ToolExecResult:
         """Implement the str_replace command, which replaces old_str with new_str in the file content"""
         # Read the file content
-        file_content = self.read_file(path).expandtabs()
-        old_str = old_str.expandtabs()
-        new_str = new_str.expandtabs() if new_str is not None else ""
+        raw_content = self.read_file(path)
+        # P2 修复:Windows(CRLF)仓库在 Unix(LF) agent 上,old_str 用 LF 永远匹配不到
+        # CRLF 文件。统一按 LF 做匹配,写回时还原原始换行风格。
+        had_crlf = "\r\n" in raw_content
+        file_content = raw_content.expandtabs().replace("\r\n", "\n")
+        old_str = old_str.expandtabs().replace("\r\n", "\n")
+        new_str = (new_str.expandtabs() if new_str is not None else "").replace("\r\n", "\n")
 
         # Check if old_str is unique in the file
         occurrences = file_content.count(old_str)
@@ -215,7 +266,10 @@ Notes for using the `str_replace` command:
             )
 
         # Replace old_str with new_str
-        new_file_content = file_content.replace(old_str, new_str)
+        new_fc = file_content.replace(old_str, new_str)
+
+        # Restore original line-ending style before writing back.
+        new_file_content = new_fc.replace("\n", "\r\n") if had_crlf else new_fc
 
         # Write the new content to the file
         self.write_file(path, new_file_content)
@@ -237,8 +291,10 @@ Notes for using the `str_replace` command:
 
     def _insert(self, path: Path, insert_line: int, new_str: str) -> ToolExecResult:
         """Implement the insert command, which inserts new_str at the specified line in the file content."""
-        file_text = self.read_file(path).expandtabs()
-        new_str = new_str.expandtabs()
+        raw_text = self.read_file(path)
+        had_crlf = "\r\n" in raw_text
+        file_text = raw_text.expandtabs().replace("\r\n", "\n")
+        new_str = new_str.expandtabs().replace("\r\n", "\n")
         file_text_lines = file_text.split("\n")
         n_lines_file = len(file_text_lines)
 
@@ -257,7 +313,7 @@ Notes for using the `str_replace` command:
             + file_text_lines[insert_line : insert_line + SNIPPET_LINES]
         )
 
-        new_file_text = "\n".join(new_file_text_lines)
+        new_file_text = ("\r\n" if had_crlf else "\n").join(new_file_text_lines)
         snippet = "\n".join(snippet_lines)
 
         self.write_file(path, new_file_text)
@@ -275,12 +331,36 @@ Notes for using the `str_replace` command:
 
     # Note: undo_edit method is not implemented in this version as it was removed
 
+    MAX_READ_BYTES: int = 2_000_000  # 2 MB 上限,避免超大文件爆内存/上下文
+
     def read_file(self, path: Path):
-        """Read the content of a file from a given path; raise a ToolError if an error occurs."""
+        """Read the content of a file from a given path; raise a ToolError if an error occurs.
+
+        P2 修复:原实现无大小限制,1GB 文件会直接打爆内存与上下文。超过上限直接拒绝。
+        stat() 在部分 mock / 虚拟文件系统上不可用,此时降级为"读取后按字节长度判断",
+        不因此阻断正常的文件读取。
+        """
+        # 先用 stat 预检大小(stat 可用时避免真的读入超大文件)。
         try:
-            return path.read_text()
+            size = path.stat().st_size
+            if size > self.MAX_READ_BYTES:
+                raise ToolError(
+                    f"File {path} is {size} bytes, exceeding the read limit of "
+                    f"{self.MAX_READ_BYTES} bytes. Refusing to read it whole."
+                )
+        except OSError:
+            # stat 不可用(路径不存在 / 虚拟 FS)→ 跳过预检,交给下方读取后兜底。
+            pass
+        try:
+            content = path.read_text()
         except Exception as e:
             raise ToolError(f"Ran into {e} while trying to read {path}") from None
+        if len(content.encode("utf-8", "ignore")) > self.MAX_READ_BYTES:
+            raise ToolError(
+                f"File {path} is too large to process (>{self.MAX_READ_BYTES} bytes). "
+                f"Refusing to read it whole."
+            )
+        return content
 
     def write_file(self, path: Path, file: str):
         """Write the content of a file to a given path; raise a ToolError if an error occurs."""
