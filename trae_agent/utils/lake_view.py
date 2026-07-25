@@ -166,6 +166,9 @@ class LakeView:
             content = "<tags>" + llm_response.content.lstrip()
 
             matched_tags: list[str] = tags_re.findall(content)
+            if not matched_tags:
+                retry += 1
+                continue
             tags: list[str] = [tag.strip() for tag in matched_tags[0].split(",")]
             if all(tag in KNOWN_TAGS for tag in tags):
                 return tags
@@ -192,9 +195,7 @@ class LakeView:
         return content
 
     async def create_lakeview_step(self, agent_step: AgentStep) -> LakeViewStep | None:
-        previous_step_str = "(none)"
-        if len(self.steps) > 1:
-            previous_step_str = self.steps[-1]
+        previous_step_str = self.steps[-1] if self.steps else "(none)"
 
         this_step_str = self._agent_step_str(agent_step)
 
@@ -204,6 +205,7 @@ class LakeView:
             )
             tags = await self.extract_tag_in_step(this_step_str)
             tags_emoji = self.get_label(tags)
+            self.steps.append(this_step_str)
             return LakeViewStep(desc_task, desc_details, tags_emoji)
 
         return None

@@ -4,9 +4,10 @@
 """Tools module for Trae Agent."""
 
 from trae_agent.tools.base import Tool, ToolCall, ToolExecutor, ToolResult
-from trae_agent.tools.bash_tool import BashTool
+from trae_agent.tools.bash_tool import BashTool, ReadOnlyBashTool
 from trae_agent.tools.ckg_tool import CKGTool
 from trae_agent.tools.edit_tool import TextEditorTool
+from trae_agent.tools.image_gen_tool import ImageGenTool
 from trae_agent.tools.json_edit_tool import JSONEditTool
 from trae_agent.tools.sequential_thinking_tool import SequentialThinkingTool
 from trae_agent.tools.task_done_tool import TaskDoneTool
@@ -17,13 +18,18 @@ __all__ = [
     "ToolCall",
     "ToolExecutor",
     "BashTool",
+    "ReadOnlyBashTool",
     "TextEditorTool",
     "JSONEditTool",
     "SequentialThinkingTool",
     "TaskDoneTool",
     "CKGTool",
+    "ImageGenTool",
 ]
 
+# `bash` is registered as the standard BashTool for build mode.
+# Plan mode injects ReadOnlyBashTool directly via the agent's tool list,
+# so the registry stays build-mode by default.
 tools_registry: dict[str, type[Tool]] = {
     "bash": BashTool,
     "str_replace_based_edit_tool": TextEditorTool,
@@ -31,4 +37,5 @@ tools_registry: dict[str, type[Tool]] = {
     "sequentialthinking": SequentialThinkingTool,
     "task_done": TaskDoneTool,
     "ckg": CKGTool,
+    "image_gen": ImageGenTool,
 }

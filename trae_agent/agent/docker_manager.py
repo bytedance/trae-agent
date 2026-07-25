@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import uuid
 
@@ -148,11 +149,17 @@ class DockerManager:
             print(f"Stopping and removing managed container {self.container.short_id}...")
             try:
                 self.container.stop()
-                self.container.remove()
-                print("Container cleaned up successfully.")
+                print("Container stopped successfully.")
             except DockerException as e:
                 print(
-                    f"[yellow]Warning: Could not clean up container {self.container.short_id}: {e}[/yellow]"
+                    f"[yellow]Warning: Could not stop container {self.container.short_id}: {e}[/yellow]"
+                )
+            try:
+                self.container.remove(force=True)
+                print("Container removed successfully.")
+            except DockerException as e:
+                print(
+                    f"[yellow]Warning: Could not remove container {self.container.short_id}: {e}[/yellow]"
                 )
 
         self.container = None
@@ -171,8 +178,20 @@ class DockerManager:
             f"Copying tools from '{self.tools_dir}' to container path '{self.CONTAINER_TOOLS_PATH}'..."
         )
         try:
-            cmd = f"docker cp '{os.path.abspath(self.tools_dir)}' '{self.container.id}:{self.CONTAINER_TOOLS_PATH}'"
-            subprocess.run(cmd, shell=True, check=True, capture_output=True)
+            # P0 修复:原代码 `docker cp '{path}' ...` 拼成字符串再用 shell=True 执行,
+            # tools_dir 来自用户 CLI 输入,含 ' 或 ; 时可注入任意命令。
+            # 改用 argv 列表 + shell=False,从根本上杜绝注入。
+            subprocess.run(
+                [
+                    "docker",
+                    "cp",
+                    os.path.abspath(self.tools_dir),
+                    f"{self.container.id}:{self.CONTAINER_TOOLS_PATH}",
+                ],
+                shell=False,
+                check=True,
+                capture_output=True,
+            )
             print("Tools copied successfully.")
         except subprocess.CalledProcessError as e:
             print(f"[red]Failed to copy tools to container: {e.stderr.decode()}[/red]")
@@ -186,7 +205,10 @@ class DockerManager:
         try:
             command = f"docker exec -it {self.container.id} /bin/bash"
             self.shell = pexpect.spawn(command, encoding="utf-8", timeout=120)
-            self.shell.expect([r"\$", r"#"], timeout=120)
+            # P1 修复:macOS 默认 zsh 提示符是 '%',fish 是 '>',oh-my-zsh/Powerline
+            # 常用 '❯'。原只匹配 $ 和 #,Mac 用户跑 Docker 模式会卡满 120s 后 timeout。
+            # 补全常见提示符。
+            self.shell.expect([r"\$", r"#", r"%", r"❯", r">"], timeout=120)
             print("Persistent shell is ready.")
         except pexpect.exceptions.TIMEOUT:
             print(
@@ -210,13 +232,15 @@ class DockerManager:
         if self.shell is None:
             raise RuntimeError("Failed to start or restart the persistent shell.")
 
-        marker = "---CMD_DONE---"
+        # P1 修复:原静态哨兵 "---CMD_DONE---" 一旦命令输出里恰好含该字面量,
+        # 会被误判为结束符并截断后续输出。改为每次调用生成 UUID 哨兵。
+        marker = f"CMD_DONE_{uuid.uuid4().hex}"
         full_command = command.strip()
         marker_command = f"echo {marker}$?"
         self.shell.sendline(full_command)
         self.shell.sendline(marker_command)
         try:
-            self.shell.expect(marker + r"(\d+)", timeout=timeout)
+            self.shell.expect(re.escape(marker) + r"(\d+)", timeout=timeout)
         except pexpect.exceptions.TIMEOUT:
             return (
                 -1,
@@ -238,5 +262,5 @@ class DockerManager:
         # 3. Join the clean lines back together
         cleaned_output = "\n".join(clean_lines)
         # Wait for the next shell prompt to ensure the shell is ready
-        self.shell.expect([r"\$", r"#"])
+        self.shell.expect([r"\$", r"#", r"%", r"❯", r">"])
         return exit_code, cleaned_output.strip()

@@ -123,6 +123,7 @@ def analyze_group(statistics_folder_path, total_num_instances=500):
                 data = json.loads(f.read())
             except Exception:
                 print(f"Error loading {os.path.join(statistics_folder_path, json_file)}")
+                continue
             if data["is_all_success"]:
                 all_success += 1
             if data["is_all_failed"]:

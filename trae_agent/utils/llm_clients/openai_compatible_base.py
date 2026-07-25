@@ -5,7 +5,7 @@
 
 import json
 from abc import ABC, abstractmethod
-from typing import override
+from typing_extensions import override
 
 import openai
 from openai.types.chat import (
@@ -76,15 +76,28 @@ class OpenAICompatibleClient(BaseLLMClient):
         """Set the chat history."""
         self.message_history = self.parse_messages(messages)
 
+    @override
+    def supports_tool_calling(self, model_config: ModelConfig) -> bool:
+        """Check if the current model supports tool calling.
+
+        Combines the user's config (model_config.supports_tool_calling)
+        with the provider's capability check (provider_config.supports_tool_calling).
+        """
+        if not model_config.supports_tool_calling:
+            return False
+        return self.provider_config.supports_tool_calling(model_config.model)
+
     def _create_response(
         self,
         model_config: ModelConfig,
         tool_schemas: list[ChatCompletionToolParam] | None,
         extra_headers: dict[str, str] | None = None,
     ) -> ChatCompletion:
-        """Create a response using the provider's API. This method will be decorated with retry logic."""
-        """Select the correct token parameter based on model configuration.
-        If max_completion_tokens is set, use it. Otherwise, use max_tokens."""
+        """Create a response using the provider's API. This method will be decorated with retry logic.
+
+        Select the correct token parameter based on model configuration.
+        If max_completion_tokens is set, use it. Otherwise, use max_tokens.
+        """
         token_params = {}
         if model_config.should_use_max_completion_tokens():
             token_params["max_completion_tokens"] = model_config.get_max_tokens_param()
@@ -100,7 +113,7 @@ class OpenAICompatibleClient(BaseLLMClient):
             and "o4-mini" not in model_config.model
             and "gpt-5" not in model_config.model
             else openai.NOT_GIVEN,
-            top_p=model_config.top_p,
+            top_p=model_config.top_p if model_config.top_p is not None else openai.NOT_GIVEN,
             extra_headers=extra_headers if extra_headers else None,
             n=1,
             **token_params,

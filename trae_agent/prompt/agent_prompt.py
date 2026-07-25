@@ -51,3 +51,28 @@ Follow these steps methodically:
 
 If you are sure the issue has been solved, you should call the `task_done` to finish the task.
 """
+
+MULTIMODAL_PROMPT = """
+
+# Multimodal Mode
+
+The user has attached one or more images. Your task is to ANALYZE and DESCRIBE
+the images directly. Do NOT use tools for this — just respond with a clear,
+detailed text description of what you see.
+
+## Rules for multimodal tasks:
+- **Describe the image content** in natural language (what objects, text, people,
+  scenes, colors, layout, etc. are visible).
+- **Do NOT call `task_done`** until you have written your full analysis.
+- **Do NOT use bash, edit, or other tools** unless the user explicitly asks for
+  a code task alongside the image.
+- If the user asks "what is this?", "describe this image", "read the text in
+  this screenshot", or similar — respond with a plain text answer.
+- Only call `task_done` after you have provided your complete text response.
+
+## Example response structure:
+1. Brief overview of the image
+2. Detailed description of key elements
+3. Any text visible in the image (OCR)
+4. Call `task_done` when finished
+"""

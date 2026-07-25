@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from trae_agent.utils.legacy_config import LegacyConfig
+from trae_agent.utils.legacy.legacy_config import LegacyConfig
 
 
 class ConfigError(Exception):
@@ -41,6 +41,7 @@ class ModelConfig:
     max_retries: int
     max_tokens: int | None = None  # Legacy max_tokens parameter, optional
     supports_tool_calling: bool = True
+    supports_multimodal: bool = False
     candidate_count: int | None = None  # Gemini specific field
     stop_sequences: list[str] | None = None
     max_completion_tokens: int | None = None  # Azure OpenAI specific field
@@ -148,7 +149,7 @@ class AgentConfig:
     Base class for agent configurations.
     """
 
-    allow_mcp_servers: list[str]
+    allow_mcp_servers: list[str] | None
     mcp_servers_config: dict[str, MCPServerConfig]
     max_steps: int
     model: ModelConfig
@@ -269,7 +270,7 @@ class Config:
         mcp_servers_config = {
             k: MCPServerConfig(**v) for k, v in yaml_config.get("mcp_servers", {}).items()
         }
-        allow_mcp_servers = yaml_config.get("allow_mcp_servers", [])
+        allow_mcp_servers = yaml_config.get("allow_mcp_servers", None)
 
         # Parse agents
         agents = yaml_config.get("agents", None)

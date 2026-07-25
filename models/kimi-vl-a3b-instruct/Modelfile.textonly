@@ -1,0 +1,30 @@
+# Ollama Modelfile - Kimi-VL-A3B-Instruct (Q4_K_M GGUF + f16 vision projector)
+# 仓库: https://huggingface.co/mradermacher/Kimi-VL-A3B-Instruct-GGUF
+#
+# 用法(在该文件所在目录执行):
+#   ollama create kimi-vl-a3b -f Modelfile
+#   ollama run kimi-vl-a3b
+#
+# 若只做纯文本任务(不需要看图),可注释掉 PROJECTOR 行,省 864MB 内存。
+# trae-agent 走文本对话,可只用 FROM 不用 PROJECTOR。
+
+FROM ./Kimi-VL-A3B-Instruct.Q4_K_M.gguf
+# PROJECTOR ./Kimi-VL-A3B-Instruct.mmproj-f16.gguf
+
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+{{ end }}<|im_start|>assistant
+{{ .Response }}<|im_end|>
+"""
+
+SYSTEM """You are Kimi, a helpful AI assistant created by Moonshot AI."""
+
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|endoftext|>"
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER min_p 0.01
+PARAMETER num_ctx 8192

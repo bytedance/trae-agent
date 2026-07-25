@@ -30,7 +30,7 @@ class Agent:
             self.trajectory_file: str = trajectory_file
             self.trajectory_recorder: TrajectoryRecorder = TrajectoryRecorder(trajectory_file)
         else:
-            # Auto-generate trajectory file path
+            # Auto-generate trajectory file path in Desktop/trae-agent-outputs/<project>/
             self.trajectory_recorder = TrajectoryRecorder()
             self.trajectory_file = self.trajectory_recorder.get_trajectory_path()
 
@@ -61,8 +61,9 @@ class Agent:
         task: str,
         extra_args: dict[str, str] | None = None,
         tool_names: list[str] | None = None,
+        images: list | None = None,
     ):
-        self.agent.new_task(task, extra_args, tool_names)
+        self.agent.new_task(task, extra_args, tool_names, images=images)
 
         if self.agent.allow_mcp_servers:
             if self.agent.cli_console:
@@ -98,3 +99,30 @@ class Agent:
             await cli_console_task
 
         return execution
+
+    def resume_from_messages(
+        self,
+        messages: list,
+        completed_steps: list | None = None,
+    ) -> None:
+        """Forward resume state to the underlying TraeAgent.
+
+        Must be called *before* `run()` so the agent picks up the recovered
+        message history instead of starting from a fresh system prompt.
+        """
+        self.agent.resume_from_messages(
+            messages=messages, completed_steps=completed_steps
+        )
+
+    def set_trajectory_file(self, path: str) -> None:
+        """Point the trajectory recorder at a new output file.
+
+        Used by `trae-cli resume` so the resumed run writes to a fresh file
+        (e.g. ``<original>_resumed_<ts>.json``) instead of clobbering the
+        trajectory that was loaded.
+        """
+        self.trajectory_file = path
+        if self.trajectory_recorder is not None:
+            self.trajectory_recorder.trajectory_path = type(
+                self.trajectory_recorder.trajectory_path
+            )(path)

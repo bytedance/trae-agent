@@ -175,7 +175,6 @@ cython_debug/
 
 trae-config-local.json
 trae_config.json
-trae_config.yaml
 
 # Trajectories
 /trajectories/
@@ -184,5 +183,22 @@ trae_config.yaml
 .vscode/
 !.vscode/launch.template.json
 
+# Node modules (Playwright MCP 本地安装)
+node_modules/
+package-lock.json
+
+
 # Patch selection python binary
 py312/
+
+# Downloaded model weights (large binaries, not for VCS)
+*.gguf
+*.safetensors
+*.bin
+models/**/.cache/
+# Keep Modelfile and other text configs
+!models/**/Modelfile
+!models/**/*.md
+
+# Stray nested clones
+/trae-agent/

@@ -1,0 +1,211 @@
+agents:
+    trae_agent:
+        enable_lakeview: true
+        model: trae_agent_model
+        max_steps: 200
+        tools:
+            - bash
+            - str_replace_based_edit_tool
+            - sequentialthinking
+            - task_done
+            - image_gen
+allow_mcp_servers:
+    - playwright
+mcp_servers:
+    playwright:
+        command: node
+        args:
+            - "/Users/zhang/Desktop/tim/trae-agent/node_modules/@playwright/mcp/cli.js"
+lakeview:
+    model: lakeview_model
+
+model_providers:
+    # 火山引擎 Doubao (在线推理, OpenAI 兼容协议)
+    # API key 通过环境变量 DOUBAO_API_KEY 设置
+    doubao:
+        api_key: ""
+        provider: doubao
+        base_url: https://ark.cn-beijing.volces.com/api/v3
+    # 本地 Ollama 模型 (纯本地推理, 不出本机)
+    ollama:
+        api_key: ollama
+        provider: ollama
+        base_url: http://localhost:11434/v1
+    # MiniMax (OpenAI 兼容协议, 在线推理) - 需设置 MINIMAX_API_KEY 环境变量
+    minimax:
+        api_key: ""
+        provider: minimax
+        base_url: https://api.minimax.io/v1
+    # NVIDIA NIM (OpenAI 兼容协议, 在线推理) - 需设置 NVIDIA_API_KEY 环境变量
+    nvidia:
+        api_key: ""
+        provider: nvidia
+        base_url: https://integrate.api.nvidia.com/v1
+
+models:
+    # ===== 默认模型: 火山引擎 Doubao (云端, 质量最优) =====
+    trae_agent_model:
+        model_provider: doubao
+        model: ep-20260723204029-zxn4d
+        supports_multimodal: true
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    lakeview_model:
+        model_provider: doubao
+        model: ep-20260723204029-zxn4d
+        supports_multimodal: true
+        max_tokens: 4096
+        temperature: 0.3
+        top_p: 0.9
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    # ===== 火山引擎 Doubao 多推理流 (同 provider, 不同 endpoint) =====
+    doubao_stream_1:
+        model_provider: doubao
+        model: ep-20260725203556-kzbtx
+        supports_multimodal: true
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    doubao_stream_2:
+        model_provider: doubao
+        model: ep-20260725204640-vdcsr
+        supports_multimodal: true
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    doubao_stream_3:
+        model_provider: doubao
+        model: ep-20260725204741-fk5rq
+        supports_multimodal: true
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    doubao_stream_4:
+        model_provider: doubao
+        model: ep-20260725204908-cns4q
+        supports_multimodal: true
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    doubao_stream_5:
+        model_provider: doubao
+        model: ep-20260725205008-plpsp
+        supports_multimodal: true
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    doubao_stream_6:
+        model_provider: doubao
+        model: ep-20260725205127-jkwmn
+        supports_multimodal: true
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    doubao_stream_7:
+        model_provider: doubao
+        model: ep-20260725205234-k8bkc
+        supports_multimodal: true
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    # ===== 本地 Ollama 模型 (备选, 纯本地推理) =====
+    deepseek_r1_1_5b:
+        model_provider: ollama
+        model: deepseek-r1:1.5b
+        max_tokens: 4096
+        temperature: 0.6
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: false
+    qwen2_5_coder_7b:
+        model_provider: ollama
+        model: qwen2.5-coder:7b
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    qwen2_5_coder_0_5b:
+        model_provider: ollama
+        model: qwen2.5-coder:0.5b
+        max_tokens: 4096
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: false
+    kimi_vl_a3b_instruct:
+        model_provider: ollama
+        model: kimi-vl-a3b
+        max_tokens: 8192
+        temperature: 0.6
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: false
+        supports_multimodal: true
+    # ===== MiniMax (在线推理) =====
+    minimax_m3:
+        model_provider: minimax
+        model: MiniMax-M3
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    # ===== NVIDIA NIM (在线推理) =====
+    nvidia_kimi_k2:
+        model_provider: nvidia
+        model: moonshotai/kimi-k2.6
+        max_tokens: 8192
+        temperature: 0.5
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    nvidia_deepseek_r1:
+        model_provider: nvidia
+        model: deepseek-ai/deepseek-r1
+        max_tokens: 8192
+        temperature: 0.6
+        top_p: 0.95
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: false
+
+# ===== Auto 模型路由 =====
+model_routing:
+    vision: trae_agent_model
+    strong: trae_agent_model
+    fast: qwen2_5_coder_7b
+    tiny: qwen2_5_coder_0_5b

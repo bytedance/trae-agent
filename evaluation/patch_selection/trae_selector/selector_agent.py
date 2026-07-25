@@ -231,7 +231,11 @@ class SelectorAgent:
                 messages += parse_tool_response(
                     llm_response, llm_response.finish_reason or "", self.sandbox_session
                 )
-                if messages[-1].content and " seconds. Partial output:" in messages[-1].content:
+                if (
+                    messages
+                    and messages[-1].content
+                    and " seconds. Partial output:" in messages[-1].content
+                ):
                     self.sandbox_session = self.sandbox.get_session()
 
             print(f"\n### System Response({turn})\n", messages)

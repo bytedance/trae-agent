@@ -1,6 +1,6 @@
 {
-  "default_provider": "anthropic",
-  "max_steps": 20,
+  "default_provider": "openai",
+  "max_steps": 200,
   "enable_lakeview": true,
   "mcp_servers":{
     "playwright": {
@@ -12,12 +12,52 @@
   },
   "model_providers": {
     "openai": {
-      "api_key": "your_openai_api_key",
-      "base_url": "https://api.openai.com/v1",
-      "model": "gpt-4o",
-      "max_tokens": 128000,
+      "api_key": "mimo-gateway",
+      "base_url": "http://localhost:8080/v1",
+      "model": "mimo-v2.5-pro",
+      "max_tokens": 8192,
       "temperature": 0.5,
       "top_p": 1,
+      "max_retries": 10
+    },
+    "ollama": {
+      "api_key": "ollama",
+      "base_url": "http://localhost:11434/v1",
+      "model": "qwen2.5-coder:7b",
+      "max_tokens": 8192,
+      "temperature": 0.5,
+      "top_p": 0.95,
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "ollama_deepseek_r1": {
+      "api_key": "ollama",
+      "base_url": "http://localhost:11434/v1",
+      "model": "deepseek-r1:1.5b",
+      "max_tokens": 4096,
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "ollama_qwen_coder_0_5b": {
+      "api_key": "ollama",
+      "base_url": "http://localhost:11434/v1",
+      "model": "qwen2.5-coder:0.5b",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 0.95,
+      "top_k": 0,
+      "max_retries": 10
+    },
+    "ollama_kimi_vl_a3b": {
+      "api_key": "ollama",
+      "base_url": "http://localhost:11434/v1",
+      "model": "kimi-vl-a3b",
+      "max_tokens": 8192,
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "top_k": 0,
       "max_retries": 10
     },
     "anthropic": {
@@ -43,16 +83,6 @@
       "api_key": "you_azure_api_key",
       "base_url": "your_azure_base_url",
       "api_version": "2024-03-01-preview",
-      "model": "model_name",
-      "max_tokens": 4096,
-      "temperature": 0.5,
-      "top_p": 1,
-      "top_k": 0,
-      "max_retries": 10
-    },
-    "ollama": {
-      "api_key": "ollama",
-      "base_url": "http://localhost:11434/v1",
       "model": "model_name",
       "max_tokens": 4096,
       "temperature": 0.5,

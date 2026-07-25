@@ -7,11 +7,11 @@ import asyncio
 import contextlib
 import os
 import subprocess
-from typing import override
+from typing_extensions import override
 
 from trae_agent.agent.agent_basics import AgentError, AgentExecution
 from trae_agent.agent.base_agent import BaseAgent
-from trae_agent.prompt.agent_prompt import TRAE_AGENT_SYSTEM_PROMPT
+from trae_agent.prompt.agent_prompt import TRAE_AGENT_SYSTEM_PROMPT, MULTIMODAL_PROMPT
 from trae_agent.tools import tools_registry
 from trae_agent.tools.base import Tool, ToolResult
 from trae_agent.utils.config import MCPServerConfig, TraeAgentConfig
@@ -25,6 +25,52 @@ TraeAgentToolNames = [
     "task_done",
     "bash",
 ]
+
+# Plan mode: read-only tool set. file mutation tools are excluded.
+TraeAgentPlanToolNames = [
+    "bash",
+    "sequentialthinking",
+    "task_done",
+]
+
+# Plan mode system prompt — appended after the main prompt.
+TRAE_AGENT_PLAN_PROMPT = """
+
+# Plan Mode
+
+You are currently running in **PLAN MODE** — a read-only exploration mode,
+analogous to Claude Code's plan mode.
+
+## Hard rules
+- **Do NOT modify any files.** Do not use any file-edit / write tools.
+- **Do NOT run mutation commands** (no `git commit`, `rm`, `mv`, install,
+  curl-write, npm/pip install, etc.). bash is restricted to read-only
+  inspection (cat, ls, grep, find, sed -n, head, tail, wc, file, tree).
+- **Do NOT start long-running processes** (`python server.py`, `npm run dev`).
+
+## What you SHOULD do
+- Read the user's request carefully.
+- Explore the repository: list files, grep for symbols, read key modules.
+- Build a concrete plan: which files to change, what to change, why.
+- Present the plan as a numbered list of steps.
+
+## Output format
+
+```
+## Summary
+<one-sentence goal>
+
+## Steps
+1. <step> — touches <file:line> — <reason>
+2. ...
+
+## Risks
+- <risk + mitigation>
+
+## Out of scope
+- <explicitly NOT doing these things>
+```
+"""
 
 
 class TraeAgent(BaseAgent):
@@ -52,19 +98,29 @@ class TraeAgent(BaseAgent):
         self.mcp_servers_config: dict[str, MCPServerConfig] | None = (
             trae_agent_config.mcp_servers_config if trae_agent_config.mcp_servers_config else None
         )
-        self.allow_mcp_servers: list[str] | None = (
-            trae_agent_config.allow_mcp_servers if trae_agent_config.allow_mcp_servers else []
-        )
+        self.allow_mcp_servers: list[str] | None = trae_agent_config.allow_mcp_servers
         self.mcp_tools: list[Tool] = []
         self.mcp_clients: list[MCPClient] = []  # Keep track of MCP clients for cleanup
         self.docker_config = docker_config
+        # Plan mode flag — restricts available tools and appends PLAN prompt.
+        # Set externally before calling new_task().
+        self.plan_mode: bool = False
         super().__init__(
             agent_config=trae_agent_config, docker_config=docker_config, docker_keep=docker_keep
         )
 
     async def initialise_mcp(self):
-        """Async factory to create and initialize TraeAgent."""
-        await self.discover_mcp_tools()
+        """Initialize MCP tools with timeout protection."""
+        if self.plan_mode:
+            return
+        try:
+            # 30 second timeout for MCP initialization
+            import asyncio
+            await asyncio.wait_for(self.discover_mcp_tools(), timeout=30.0)
+        except asyncio.TimeoutError:
+            print("[trae-agent] Warning: MCP tools timed out after 30s, skipping.")
+        except Exception as e:
+            print(f"[trae-agent] Warning: MCP tools failed to initialize: {e}")
 
         if self.mcp_tools:
             self._tools.extend(self.mcp_tools)
@@ -72,9 +128,17 @@ class TraeAgent(BaseAgent):
     async def discover_mcp_tools(self):
         if self.mcp_servers_config:
             for mcp_server_name, mcp_server_config in self.mcp_servers_config.items():
-                if self.allow_mcp_servers is None:
-                    return
-                if mcp_server_name not in self.allow_mcp_servers:
+                # P1-6 修复:之前的逻辑是 `allow_mcp_servers is None → return`，
+                # 这把"None = 不限制"误读成"None = 全部跳过",结果用户配
+                # 了 MCP server 但不写 allow_mcp_servers 时,所有 server 都
+                # 不会被发现。正确语义:
+                #   - None  : 不限制 → 允许所有 server
+                #   - []    : 显式空列表 → 拒绝所有 server
+                #   - [a,b] : 仅允许列表中的 server
+                if self.allow_mcp_servers is not None and (
+                    not self.allow_mcp_servers
+                    or mcp_server_name not in self.allow_mcp_servers
+                ):
                     continue
                 mcp_client = MCPClient()
                 try:
@@ -105,43 +169,129 @@ class TraeAgent(BaseAgent):
         task: str,
         extra_args: dict[str, str] | None = None,
         tool_names: list[str] | None = None,
+        images: list | None = None,
     ):
         """Create a new task."""
         self._task: str = task
+        self._has_images: bool = bool(images)
 
-        if tool_names is None and len(self._tools) == 0:
-            tool_names = TraeAgentToolNames
+        # Decide which tools to instantiate for THIS task.
+        #
+        # P1-1 修复:之前条件是 `tool_names is None and len(self._tools) == 0`,
+        # 但 BaseAgent.__init__ 已经把 agent_config.tools 实例化过了,所以
+        # `len == 0` 几乎永不成立,plan_mode 永远走不到 TraeAgentPlanToolNames,
+        # plan mode 实际失效。
+        #
+        # 新规则:
+        #   1. 显式传 tool_names: 用它(完整覆盖)
+        #   2. plan_mode 启用: 强制用 plan 工具集(覆盖既有)
+        #   3. 否则: 保持 BaseAgent.__init__ 已建好的工具
+        if tool_names is not None:
+            chosen = tool_names
+        elif self.plan_mode:
+            chosen = TraeAgentPlanToolNames
+        else:
+            chosen = None
 
-            # Get the model provider from the LLM client
+        if chosen is not None:
             provider = self._model_config.model_provider.provider
-            self._tools: list[Tool] = [
-                tools_registry[tool_name](model_provider=provider) for tool_name in tool_names
-            ]
-        # self._tool_caller: ToolExecutor = ToolExecutor(self._tools)
+            self._tools: list[Tool] = []
+            for t in chosen:
+                # Plan mode: replace `bash` with the read-only variant.
+                if t == "bash" and self.plan_mode:
+                    from trae_agent.tools.bash_tool import ReadOnlyBashTool
 
-        self._initial_messages: list[LLMMessage] = []
-        self._initial_messages.append(LLMMessage(role="system", content=self.get_system_prompt()))
+                    self._tools.append(ReadOnlyBashTool(model_provider=provider))
+                else:
+                    # 传入 working_dir 让 edit 工具做越权防护(只允许落在 project 内)。
+                    # 仅 edit 工具接受该参数,其余工具(BashTool 等)不接受,需区分。
+                    wd = extra_args.get("project_path") if extra_args else None
+                    if t == "str_replace_based_edit_tool":
+                        tool = tools_registry[t](model_provider=provider, working_dir=wd)
+                    else:
+                        tool = tools_registry[t](model_provider=provider)
+                    self._tools.append(tool)
+            # 重新构造 tool_caller 以匹配新工具集
+            from trae_agent.tools.base import ToolExecutor
 
-        user_message = ""
+            self._tool_caller = ToolExecutor(self._tools)
+
+        # --- Validation (always needed) ---
         if not extra_args:
             raise AgentError("Project path and issue information are required.")
         if "project_path" not in extra_args:
             raise AgentError("Project path is required")
-
         self.project_path = extra_args.get("project_path", "")
-        if self.docker_config:
-            user_message += r"[Project root path]:\workspace\n\n"
-        else:
-            user_message += f"[Project root path]:\n{self.project_path}\n\n"
-
-        if "issue" in extra_args:
-            user_message += f"[Problem statement]: We're currently solving the following issue within our repository. Here's the issue text:\n{extra_args['issue']}\n"
         optional_attrs_to_set = ["base_commit", "must_patch", "patch_path"]
         for attr in optional_attrs_to_set:
             if attr in extra_args:
                 setattr(self, attr, extra_args[attr])
 
-        self._initial_messages.append(LLMMessage(role="user", content=user_message))
+        # --- Skills load + render prompt (always, for tool filtering below) ---
+        skills: list = []
+        skills_block: str = ""
+        try:
+            from trae_agent.skills.loader import (
+                load_all_skills,
+                skills_to_system_message,
+            )
+
+            skills = load_all_skills(
+                project_dir=self.project_path if self.project_path else None
+            )
+            skills_block = skills_to_system_message(skills)
+        except Exception:
+            # Skills are optional; never fail the agent on a skill error.
+            pass
+
+        # --- Build initial messages (normal only) ---
+        if self._resume_start_step <= 1:
+            self._initial_messages: list[LLMMessage] = []
+            self._initial_messages.append(
+                LLMMessage(role="system", content=self.get_system_prompt())
+            )
+            if skills_block:
+                self._initial_messages.append(
+                    LLMMessage(role="system", content=skills_block)
+                )
+
+            user_message = ""
+            if self.docker_config:
+                user_message += (
+                    f"[Project root path]:\n{self.docker_manager.container_workspace}\n\n"
+                )
+            else:
+                user_message += f"[Project root path]:\n{self.project_path}\n\n"
+            if "issue" in extra_args:
+                user_message += (
+                    "[Problem statement]: We're currently solving the following "
+                    "issue within our repository. Here's the issue text:\n"
+                    f"{extra_args['issue']}\n"
+                )
+            # --- Multimodal: attach images to the first user turn ---
+            user_content: str | list = user_message
+            if images:
+                if self._model_config.supports_multimodal:
+                    user_content = [{"type": "text", "text": user_message}, *images]
+                else:
+                    print(
+                        "[trae-agent] Warning: the active model does not "
+                        "support multimodal input; attached images are ignored."
+                    )
+            self._initial_messages.append(LLMMessage(role="user", content=user_content))
+        # else: resume mode — _initial_messages already populated by
+        # resume_from_messages(). Do NOT clobber them.
+
+        # --- Skills tool filtering (P0) ---
+        if skills:
+            allowed = self._compute_skills_allowed_tools(skills)
+            if allowed is not None and self._tools:
+                filtered = [t for t in self._tools if t.name in allowed]
+                if len(filtered) != len(self._tools):
+                    self._tools = filtered
+                    from trae_agent.tools.base import ToolExecutor
+
+                    self._tool_caller = ToolExecutor(self._tools)
 
         # If trajectory recorder is set, start recording
         if self._trajectory_recorder:
@@ -151,6 +301,25 @@ class TraeAgent(BaseAgent):
                 model=self._model_config.model,
                 max_steps=self._max_steps,
             )
+
+    @staticmethod
+    def _compute_skills_allowed_tools(skills: list) -> set[str] | None:
+        """P0 修复:计算所有 skill 中 allowed_tools 交集,作为实际可用工具约束。
+
+        若没有任何 skill 设定了 allowed_tools(或所有都为 None),返回 None
+        表示不限制。若有 skill 设定了列表,则取**交集**。
+
+        空交集意味着**没有任何工具可用**——调用方应 allowlist 为空,
+        agent 将很快因无可用工具自然失败。
+        """
+        sets: list[set[str]] = []
+        for s in skills:
+            if hasattr(s, "allowed_tools") and s.allowed_tools is not None:
+                sets.append(set(s.allowed_tools))
+        if not sets:
+            return None
+        result = set.intersection(*sets)
+        return result
 
     @override
     async def execute_task(self) -> AgentExecution:
@@ -171,30 +340,40 @@ class TraeAgent(BaseAgent):
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for TraeAgent."""
-        return TRAE_AGENT_SYSTEM_PROMPT
+        base = TRAE_AGENT_SYSTEM_PROMPT
+        if self.plan_mode:
+            base += TRAE_AGENT_PLAN_PROMPT
+        # Issue: multimodal tasks need different instructions.
+        # When images are attached, the agent should describe/analyze them
+        # directly in text, not try to use software engineering tools.
+        if getattr(self, "_has_images", False):
+            base += MULTIMODAL_PROMPT
+        return base
 
     @override
     def reflect_on_result(self, tool_results: list[ToolResult]) -> str | None:
         return None
 
     def get_git_diff(self) -> str:
-        """Get the git diff of the project."""
-        pwd = os.getcwd()
+        """Get the git diff of the project.
+
+        P1-6 修复:不再用 os.chdir 改全局 cwd(异步并发任务 A/B 互相串),
+        改用 subprocess.run(..., cwd=self.project_path)。
+        """
         if not os.path.isdir(self.project_path):
             return ""
-        os.chdir(self.project_path)
+        cmd = ["git", "--no-pager", "diff"]
+        if self.base_commit:
+            cmd += [self.base_commit, "HEAD"]
         try:
-            if not self.base_commit:
-                stdout = subprocess.check_output(["git", "--no-pager", "diff"]).decode()
-            else:
-                stdout = subprocess.check_output(
-                    ["git", "--no-pager", "diff", self.base_commit, "HEAD"]
-                ).decode()
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            stdout = ""
-        finally:
-            os.chdir(pwd)
-        return stdout
+            return subprocess.run(
+                cmd,
+                cwd=self.project_path,
+                capture_output=True,
+                check=False,
+            ).stdout.decode()
+        except FileNotFoundError:
+            return ""
 
     # Copyright (c) 2024 paul-gauthier
     # SPDX-License-Identifier: Apache-2.0

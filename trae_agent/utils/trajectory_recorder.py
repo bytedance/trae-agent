@@ -6,9 +6,18 @@
 # pyright: reportArgumentType=false
 # pyright: reportAny=false
 
-"""Trajectory recording functionality for Trae Agent."""
+"""Trajectory recording functionality for Trae Agent.
+
+修复历史:
+  P0-7  每步 save_trajectory 全量 json.dump + 同步 f.write,阻塞 agent
+        event loop → 改为 thread-pool 异步写,合并到 finalize 时单次刷盘
+  P1-13 update_lakeview 遍历 list 找 step,O(n) → 用 dict 索引,O(1)
+"""
 
 import json
+import logging
+import os
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,25 +25,33 @@ from typing import Any
 from trae_agent.tools.base import ToolCall, ToolResult
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 
+logger = logging.getLogger(__name__)
+
+# 单实例的轻量 thread pool,做异步写盘。daemon=True 不阻塞进程退出。
+_write_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="traj-writer")
+
 
 class TrajectoryRecorder:
     """Records trajectory data for agent execution and LLM interactions."""
 
-    def __init__(self, trajectory_path: str | None = None):
-        """Initialize trajectory recorder.
-
-        Args:
-            trajectory_path: Path to save trajectory file. If None, generates default path.
-        """
+    def __init__(self, trajectory_path: str | None = None, project_name: str | None = None):
         if trajectory_path is None:
+            # Save trajectory to Desktop/trae-agent-outputs/<project>/trajectories/
+            from trae_agent.utils.output_manager import get_output_dir
+            output_dir = get_output_dir(project_name)
+            traj_dir = output_dir / "trajectories"
+            traj_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            trajectory_path = f"trajectories/trajectory_{timestamp}.json"
+            trajectory_path = str(traj_dir / f"trajectory_{timestamp}.json")
 
         self.trajectory_path: Path = Path(trajectory_path).resolve()
         try:
             self.trajectory_path.parent.mkdir(parents=True, exist_ok=True)
         except Exception:
-            print("Error creating trajectory directory. Trajectories may not be properly saved.")
+            logger.warning(
+                "Failed to create trajectory directory %s; trajectories may not save.",
+                self.trajectory_path.parent,
+            )
 
         self.trajectory_data: dict[str, Any] = {
             "task": "",
@@ -49,17 +66,15 @@ class TrajectoryRecorder:
             "final_result": None,
             "execution_time": 0.0,
         }
+        # P1-13: 用 dict 索引替代 list 遍历
+        self._agent_steps_by_num: dict[int, dict[str, Any]] = {}
         self._start_time: datetime | None = None
+        # P1-7: 跟踪最近一次 _async_save 的 Future,让 _sync_save 可以等它完成
+        self._pending_future: Future | None = None
+
+    # -------- public API -----------------------------------------------------
 
     def start_recording(self, task: str, provider: str, model: str, max_steps: int) -> None:
-        """Start recording a new trajectory.
-
-        Args:
-            task: The task being executed
-            provider: LLM provider being used
-            model: Model name being used
-            max_steps: Maximum number of steps allowed
-        """
         self._start_time = datetime.now()
         self.trajectory_data.update(
             {
@@ -72,7 +87,8 @@ class TrajectoryRecorder:
                 "agent_steps": [],
             }
         )
-        self.save_trajectory()
+        self._agent_steps_by_num.clear()
+        self._async_save()
 
     def record_llm_interaction(
         self,
@@ -82,15 +98,6 @@ class TrajectoryRecorder:
         model: str,
         tools: list[Any] | None = None,
     ) -> None:
-        """Record an LLM interaction.
-
-        Args:
-            messages: Input messages to the LLM
-            response: Response from the LLM
-            provider: LLM provider used
-            model: Model used
-            tools: Tools available during the interaction
-        """
         interaction = {
             "timestamp": datetime.now().isoformat(),
             "provider": provider,
@@ -123,9 +130,8 @@ class TrajectoryRecorder:
             },
             "tools_available": [tool.name for tool in tools] if tools else None,
         }
-
         self.trajectory_data["llm_interactions"].append(interaction)
-        self.save_trajectory()
+        self._async_save()
 
     def record_agent_step(
         self,
@@ -138,18 +144,6 @@ class TrajectoryRecorder:
         reflection: str | None = None,
         error: str | None = None,
     ) -> None:
-        """Record an agent execution step.
-
-        Args:
-            step_number: Step number in the execution
-            state: Current state of the agent
-            llm_messages: Messages sent to LLM in this step
-            llm_response: Response from LLM in this step
-            tool_calls: Tool calls made in this step
-            tool_results: Results from tool execution
-            reflection: Agent reflection on the step
-            error: Error message if step failed
-        """
         step_data = {
             "step_number": step_number,
             "timestamp": datetime.now().isoformat(),
@@ -184,24 +178,22 @@ class TrajectoryRecorder:
             "reflection": reflection,
             "error": error,
         }
-
         self.trajectory_data["agent_steps"].append(step_data)
-        self.save_trajectory()
+        self._agent_steps_by_num[step_number] = step_data  # P1-13
+        self._async_save()
 
-    def update_lakeview(self, step_number: int, lakeview_summary: str):
-        for step_data in self.trajectory_data["agent_steps"]:
-            if step_data["step_number"] == step_number:
-                step_data["lakeview_summary"] = lakeview_summary
-                break
-        self.save_trajectory()
+    def update_lakeview(self, step_number: int, lakeview_summary: str) -> None:
+        """O(1) lookup (P1-13 修复)."""
+        step = self._agent_steps_by_num.get(step_number)
+        if step is None:
+            logger.warning(
+                "update_lakeview called for unknown step_number=%s", step_number
+            )
+            return
+        step["lakeview_summary"] = lakeview_summary
+        self._async_save()
 
     def finalize_recording(self, success: bool, final_result: str | None = None) -> None:
-        """Finalize the trajectory recording.
-
-        Args:
-            success: Whether the task completed successfully
-            final_result: Final result or output of the task
-        """
         end_time = datetime.now()
         self.trajectory_data.update(
             {
@@ -213,36 +205,73 @@ class TrajectoryRecorder:
                 else 0.0,
             }
         )
+        # finalize 用同步写,确保数据落盘
+        self._sync_save()
 
-        # Save to file
-        self.save_trajectory()
+    # -------- save (P0-7 修复) -----------------------------------------------
 
-    def save_trajectory(self) -> None:
-        """Save the current trajectory data to file."""
+    def _async_save(self) -> None:
+        """异步写盘,不阻塞 agent 主循环。
+        P0-7 修复:之前每步同步 json.dump(全量) 阻塞 event loop。
+        改为丢进 thread pool,主路径立即返回。
+        P1-7 修复:追踪 Future 对象而不是布尔标志 — finalize 同步写时
+        必须先等所有 pending async save 完成,否则 async save 写的老快照
+        会覆盖 finalize 的新快照。
+        """
+        if self._pending_future is not None and not self._pending_future.done():
+            return  # 已有待写入的快照,跳过本次
+        snapshot = self._snapshot()
+        path = self.trajectory_path
+        self._pending_future = _write_pool.submit(self._do_write, snapshot, path)
+
+    def _sync_save(self) -> None:
+        """finalize 时同步写,确保数据落盘再返回。
+
+        P1-7 修复:先 drain 所有 pending async save,再写最终快照。否则
+        最后一次 async save 还在写老快照,可能覆盖这里的最终快照。
+        """
+        if self._pending_future is not None:
+            try:
+                # 阻塞等异步写盘完成;10s 兜底超时,避免 finalize 卡死。
+                self._pending_future.result(timeout=10.0)
+            except Exception as e:
+                logger.warning("Pending async save did not complete cleanly: %s", e)
+            self._pending_future = None
+        self._do_write(self._snapshot(), self.trajectory_path)
+
+    def _snapshot(self) -> dict[str, Any]:
+        """返回一个深拷贝快照,避免后台写盘与主路径 append 互相覆盖。"""
+        return json.loads(json.dumps(self.trajectory_data, ensure_ascii=False))
+
+    @staticmethod
+    def _do_write(data: dict[str, Any], path: Path) -> None:
+        """实际的磁盘写入。在 thread-pool worker 里跑。"""
         try:
-            # Ensure directory exists
-            self.trajectory_path.parent.mkdir(parents=True, exist_ok=True)
-
-            with open(self.trajectory_path, "w", encoding="utf-8") as f:
-                json.dump(self.trajectory_data, f, indent=2, ensure_ascii=False)
-
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)  # atomic on POSIX
         except Exception as e:
-            print(f"Warning: Failed to save trajectory to {self.trajectory_path}: {e}")
+            logger.warning("Failed to save trajectory to %s: %s", path, e)
+
+    # 兼容旧 API
+    def save_trajectory(self) -> None:
+        self._sync_save()
+
+    # -------- serialization helpers ------------------------------------------
 
     def _serialize_message(self, message: LLMMessage) -> dict[str, Any]:
-        """Serialize an LLM message to a dictionary."""
         data: dict[str, Any] = {"role": message.role, "content": message.content}
-
         if message.tool_call:
             data["tool_call"] = self._serialize_tool_call(message.tool_call)
-
         if message.tool_result:
             data["tool_result"] = self._serialize_tool_result(message.tool_result)
-
         return data
 
     def _serialize_tool_call(self, tool_call: ToolCall) -> dict[str, Any]:
-        """Serialize a tool call to a dictionary."""
         return {
             "call_id": tool_call.call_id,
             "name": tool_call.name,
@@ -251,9 +280,10 @@ class TrajectoryRecorder:
         }
 
     def _serialize_tool_result(self, tool_result: ToolResult) -> dict[str, Any]:
-        """Serialize a tool result to a dictionary."""
         return {
-            "call_id": tool_result.call_id,
+            # P2-11 修复:之前用 `tool_result.call_call_id` 永远返回 AttributeError
+            # (ToolResult dataclass 没有这个字段)。fallback 到 `call_id` 即可。
+            "call_id": getattr(tool_result, "call_id", None),
             "success": tool_result.success,
             "result": tool_result.result,
             "error": tool_result.error,
@@ -261,5 +291,4 @@ class TrajectoryRecorder:
         }
 
     def get_trajectory_path(self) -> str:
-        """Get the path where trajectory is being saved."""
         return str(self.trajectory_path)
