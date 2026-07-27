@@ -393,7 +393,11 @@ def run(
 
             if isinstance(e, DockerException):
                 error_text = Text(f"Docker Error: {e}", style="red")
-                console.print(f"\n{error_text}")
+                # Interpolating a Text into an f-string turns it back into a
+                # plain str, so Rich re-parses it as markup and the escaping
+                # the Text was there to provide is lost. Print it as-is.
+                console.print()
+                console.print(error_text)
                 console.print(
                     "[yellow]Please ensure the Docker daemon is running and you have the necessary permissions.[/yellow]"
                 )
@@ -401,12 +405,14 @@ def run(
                 raise e
         except ImportError:
             error_text = Text(f"Unexpected error: {e}", style="red")
-            console.print(f"\n{error_text}")
-            console.print(traceback.format_exc())
+            console.print()
+            console.print(error_text)
+            console.print(Text(traceback.format_exc()))
         except Exception:
             error_text = Text(f"Unexpected error: {e}", style="red")
-            console.print(f"\n{error_text}")
-            console.print(traceback.format_exc())
+            console.print()
+            console.print(error_text)
+            console.print(Text(traceback.format_exc()))
         console.print(f"[blue]Trajectory saved to: {agent.trajectory_file}[/blue]")
         sys.exit(1)
 

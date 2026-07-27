@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -140,11 +141,15 @@ def generate_agent_step_table(agent_step: AgentStep) -> Table:
 
     # Add LLM response row
     if agent_step.llm_response and agent_step.llm_response.content:
-        table.add_row("LLM Response", f"💬 {agent_step.llm_response.content}")
+        # Model output, tool arguments and tool results are arbitrary text that
+        # can contain square brackets. Rich would parse those as console markup
+        # and raise MarkupError on anything resembling a closing tag, so every
+        # such value has to be escaped before it reaches a renderable.
+        table.add_row("LLM Response", f"💬 {escape(agent_step.llm_response.content)}")
 
     # Add tool calls row
     if agent_step.tool_calls:
-        tool_names = [f"[cyan]{call.name}[/cyan]" for call in agent_step.tool_calls]
+        tool_names = [f"[cyan]{escape(call.name)}[/cyan]" for call in agent_step.tool_calls]
         table.add_row("Tools", f"🔧 {', '.join(tool_names)}")
 
         for tool_call in agent_step.tool_calls:
@@ -157,15 +162,15 @@ def generate_agent_step_table(agent_step: AgentStep) -> Table:
                 if tool_result.call_id == tool_call.call_id:
                     tool_result_str = tool_result.result or ""
                     break
-            tool_call_table.add_row(f"{tool_call.arguments}", f"{tool_result_str}")
-            table.add_row(tool_call.name, tool_call_table)
+            tool_call_table.add_row(escape(f"{tool_call.arguments}"), escape(tool_result_str))
+            table.add_row(escape(tool_call.name), tool_call_table)
 
     # Add reflection row
     if agent_step.reflection:
-        table.add_row("Reflection", f"💭 {agent_step.reflection}")
+        table.add_row("Reflection", f"💭 {escape(agent_step.reflection)}")
 
     # Add error row
     if agent_step.error:
-        table.add_row("Error", f"❌ {agent_step.error}")
+        table.add_row("Error", f"❌ {escape(agent_step.error)}")
 
     return table
