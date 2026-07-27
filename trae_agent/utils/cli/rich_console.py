@@ -7,6 +7,7 @@ import asyncio
 import os
 from typing import override
 
+from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 from textual import on
@@ -323,7 +324,11 @@ class RichCLIConsole(CLIConsole):
     def print_task_details(self, details: dict[str, str]):
         """Print initial task configuration details."""
         if self.app and self.app.execution_log:
-            content = "\n".join([f"[bold]{key}:[/bold] {value}" for key, value in details.items()])
+            # `value` includes the user-supplied task description, so it has to
+            # be escaped before being embedded in markup.
+            content = "\n".join(
+                [f"[bold]{escape(key)}:[/bold] {escape(value)}" for key, value in details.items()]
+            )
             _ = self.app.execution_log.write(
                 Panel(content, title="Task Details", border_style="blue")
             )

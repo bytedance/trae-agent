@@ -8,6 +8,7 @@ from typing import override
 
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -169,7 +170,9 @@ class SimpleCLIConsole(CLIConsole):
         """Print initial task configuration details."""
         renderable = ""
         for key, value in details.items():
-            renderable += f"[bold]{key}:[/bold] {value}\n"
+            # `value` includes the user-supplied task description, so it has to
+            # be escaped before being embedded in markup.
+            renderable += f"[bold]{escape(key)}:[/bold] {escape(value)}\n"
         renderable = renderable.strip()
         self.console.print(
             Panel(
