@@ -217,7 +217,7 @@ class Config:
             if config_file is not None:
                 if config_file.endswith(".json"):
                     return cls.create_from_legacy_config(config_file=config_file)
-                with open(config_file, "r") as f:
+                with open(config_file, "r", encoding="utf-8") as f:
                     yaml_config = yaml.safe_load(f)
             elif config_string is not None:
                 yaml_config = yaml.safe_load(config_string)

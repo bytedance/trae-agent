@@ -164,7 +164,10 @@ class TraeAgent(BaseAgent):
             )
 
         if self.patch_path is not None:
-            with open(self.patch_path, "w") as patch_f:
+            # newline="" keeps the diff's LF line endings intact; the universal
+            # newline translation would rewrite them to CRLF on Windows and
+            # `git apply` rejects a patch whose lines end in CRLF.
+            with open(self.patch_path, "w", encoding="utf-8", newline="") as patch_f:
                 _ = patch_f.write(self.get_git_diff())
 
         return execution

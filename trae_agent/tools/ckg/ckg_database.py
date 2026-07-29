@@ -158,7 +158,7 @@ class CKGDatabase:
         # to save time and storage, we try to reuse the existing database if the codebase snapshot hash is the same
         # get the existing codebase snapshot hash from the storage info file
         if CKG_STORAGE_INFO_FILE.exists():
-            with open(CKG_STORAGE_INFO_FILE, "r") as f:
+            with open(CKG_STORAGE_INFO_FILE, "r", encoding="utf-8") as f:
                 ckg_storage_info = json.load(f)
                 if codebase_path.absolute().as_posix() in ckg_storage_info:
                     existing_codebase_snapshot_hash = ckg_storage_info[
@@ -181,7 +181,7 @@ class CKGDatabase:
             database_path = get_ckg_database_path(current_codebase_snapshot_hash)
 
             ckg_storage_info[codebase_path.absolute().as_posix()] = current_codebase_snapshot_hash
-            with open(CKG_STORAGE_INFO_FILE, "w") as f:
+            with open(CKG_STORAGE_INFO_FILE, "w", encoding="utf-8") as f:
                 json.dump(ckg_storage_info, f)
 
         if database_path.exists():
