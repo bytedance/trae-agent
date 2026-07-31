@@ -302,7 +302,7 @@ class BaseAgent(ABC):
         Returns:
             Compressed message list.
         """
-        model_name = getattr(self._model_config, 'model_name', None)
+        model_name = self._model_config.model
         max_context_tokens = int(get_model_context_limit(model_name) * 0.8)
         
         # Count current tokens
