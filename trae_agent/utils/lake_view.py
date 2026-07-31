@@ -76,7 +76,7 @@ class LakeViewStep:
 
 
 class LakeView:
-    def __init__(self, lake_view_config: LakeviewConfig | None):
+    def __init__(self, lake_view_config: LakeviewConfig | None, max_steps: int = 50):
         if lake_view_config is None:
             return
 
@@ -84,6 +84,7 @@ class LakeView:
         self.lakeview_llm_client: LLMClient = LLMClient(self.model_config)
 
         self.steps: list[str] = []
+        self.max_steps = max_steps
 
     def get_label(self, tags: None | list[str], emoji: bool = True) -> str:
         if not tags:
@@ -204,6 +205,12 @@ class LakeView:
             )
             tags = await self.extract_tag_in_step(this_step_str)
             tags_emoji = self.get_label(tags)
+
+            # After creating the step, append to self.steps and enforce limit
+            self.steps.append(this_step_str)
+            if len(self.steps) > self.max_steps:
+                self.steps = self.steps[-self.max_steps:]
+
             return LakeViewStep(desc_task, desc_details, tags_emoji)
 
         return None
