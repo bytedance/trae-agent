@@ -37,6 +37,9 @@ class BaseAgent(ABC):
         self._llm_client = LLMClient(agent_config.model)
         self._model_config = agent_config.model
         self._max_steps = agent_config.max_steps
+        # Maximum conversation messages to retain (excluding system messages)
+        max_history = getattr(agent_config, "max_history_length", None)
+        self._max_history_length: int = int(max_history) if max_history is not None else 100
         self._initial_messages: list[LLMMessage] = []
         self._task: str = ""
         self._tools: list[Tool] = [
@@ -134,6 +137,11 @@ class BaseAgent(ABC):
         """Get the maximum number of steps for the agent."""
         return self._max_steps
 
+    @property
+    def max_history_length(self) -> int:
+        """Get the maximum number of conversation messages to retain."""
+        return self._max_history_length
+
     @abstractmethod
     def new_task(
         self,
@@ -205,6 +213,27 @@ class BaseAgent(ABC):
             # Ensure all tool resources are properly released.
             res = await self._tool_caller.close_tools()
             return res
+
+    def _truncate_messages(self, messages: list[LLMMessage]) -> list[LLMMessage]:
+        """Truncate conversation messages to max_history_length while preserving system messages.
+        
+        System messages (role='system') are always retained. Conversation messages
+        (user, assistant, tool) are truncated to keep only the most recent
+        max_history_length messages.
+        
+        Args:
+            messages: List of messages to truncate.
+            
+        Returns:
+            Truncated list of messages with system messages preserved.
+        """
+        system_messages = [msg for msg in messages if msg.role == "system"]
+        conversation_messages = [msg for msg in messages if msg.role != "system"]
+        
+        if len(conversation_messages) > self._max_history_length:
+            conversation_messages = conversation_messages[-self._max_history_length:]
+        
+        return system_messages + conversation_messages
 
     async def _run_llm_step(
         self, step: "AgentStep", messages: list["LLMMessage"], execution: "AgentExecution"
