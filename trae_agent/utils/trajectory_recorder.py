@@ -20,11 +20,12 @@ from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 class TrajectoryRecorder:
     """Records trajectory data for agent execution and LLM interactions."""
 
-    def __init__(self, trajectory_path: str | None = None):
+    def __init__(self, trajectory_path: str | None = None, buffer_size: int = 10):
         """Initialize trajectory recorder.
 
         Args:
             trajectory_path: Path to save trajectory file. If None, generates default path.
+            buffer_size: Number of write operations to buffer before flushing to disk.
         """
         if trajectory_path is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -50,6 +51,8 @@ class TrajectoryRecorder:
             "execution_time": 0.0,
         }
         self._start_time: datetime | None = None
+        self.buffer_size: int = buffer_size
+        self._pending_writes: int = 0
 
     def start_recording(self, task: str, provider: str, model: str, max_steps: int) -> None:
         """Start recording a new trajectory.
@@ -125,7 +128,9 @@ class TrajectoryRecorder:
         }
 
         self.trajectory_data["llm_interactions"].append(interaction)
-        self.save_trajectory()
+        self._pending_writes += 1
+        if self._pending_writes >= self.buffer_size:
+            self.flush()
 
     def record_agent_step(
         self,
@@ -228,6 +233,16 @@ class TrajectoryRecorder:
 
         except Exception as e:
             print(f"Warning: Failed to save trajectory to {self.trajectory_path}: {e}")
+
+    def flush(self) -> None:
+        """Flush buffered writes to disk immediately."""
+        if self._pending_writes > 0:
+            self.save_trajectory()
+            self._pending_writes = 0
+
+    def close(self) -> None:
+        """Close the recorder and flush any pending writes."""
+        self.flush()
 
     def _serialize_message(self, message: LLMMessage) -> dict[str, Any]:
         """Serialize an LLM message to a dictionary."""
