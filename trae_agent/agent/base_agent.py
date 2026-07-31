@@ -19,6 +19,8 @@ from trae_agent.utils.config import AgentConfig, ModelConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 from trae_agent.utils.llm_clients.llm_client import LLMClient
 from trae_agent.utils.trajectory_recorder import TrajectoryRecorder
+from trae_agent.utils.token_counter import count_messages_tokens, get_model_context_limit
+
 
 
 class BaseAgent(ABC):
@@ -164,6 +166,7 @@ class BaseAgent(ABC):
                 step = AgentStep(step_number=step_number, state=AgentStepState.THINKING)
                 try:
                     messages = await self._run_llm_step(step, messages, execution)
+                    messages = self._compress_context(messages)
                     await self._finalize_step(
                         step, messages, execution
                     )  # record trajectory for this step and update the CLI console
@@ -287,6 +290,60 @@ class BaseAgent(ABC):
     ) -> None:
         if self.cli_console:
             self.cli_console.update_status(step, agent_execution)
+
+    def _compress_context(self, messages: list[LLMMessage]) -> list[LLMMessage]:
+        """Compress conversation context when approaching token limits.
+        
+        Keeps system messages and recent messages intact, summarizes older messages.
+        
+        Args:
+            messages: Current message history.
+            
+        Returns:
+            Compressed message list.
+        """
+        model_name = getattr(self._model_config, 'model_name', None)
+        max_context_tokens = int(get_model_context_limit(model_name) * 0.8)
+        
+        # Count current tokens
+        messages_dict = [{"role": m.role, "content": m.content or ""} for m in messages]
+        current_tokens = count_messages_tokens(messages_dict, model_name)
+        
+        if current_tokens <= max_context_tokens:
+            return messages
+        
+        # Separate system messages and conversation messages
+        system_msgs = [m for m in messages if m.role == "system"]
+        conv_msgs = [m for m in messages if m.role != "system"]
+        
+        # Keep last 10 messages intact
+        keep_recent = 10
+        if len(conv_msgs) <= keep_recent:
+            return messages
+        
+        # Summarize older messages
+        older_msgs = conv_msgs[:-keep_recent]
+        recent_msgs = conv_msgs[-keep_recent:]
+        
+        # Create summary of older messages
+        summary_parts = []
+        for msg in older_msgs:
+            content = msg.content or ""
+            if content:
+                # Truncate very long messages
+                if len(content) > 500:
+                    content = content[:500] + "..."
+                summary_parts.append(f"{msg.role}: {content}")
+        
+        if summary_parts:
+            summary_text = "\n".join(summary_parts)
+            summary_msg = LLMMessage(
+                role="user",
+                content=f"[Previous conversation summary]\n{summary_text}\n[End of summary]"
+            )
+            return system_msgs + [summary_msg] + recent_msgs
+        
+        return system_msgs + recent_msgs
 
     def _update_llm_usage(self, llm_response: LLMResponse, execution: AgentExecution):
         if not llm_response.usage:
