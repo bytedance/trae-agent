@@ -91,6 +91,45 @@ openai:
 ```
 **Note:** For field formatting, use spaces only. Tabs (\t) are not allowed.
 
+### OmniRoute Gateway
+
+OmniRoute can be used as an OpenAI-compatible gateway through the existing `openai`
+client. Define a named provider mapping so it can be selected with
+`--provider omniroute`:
+
+```yaml
+model_providers:
+  omniroute:
+    api_key: replace-with-an-omniroute-api-key
+    provider: openai
+    base_url: http://localhost:20128/v1
+
+models:
+  trae_agent_model:
+    model_provider: omniroute
+    model: auto
+    max_tokens: 4096
+    temperature: 0.5
+    top_p: 1
+    top_k: 0
+    max_retries: 10
+    parallel_tool_calls: true
+```
+
+The mapping name (`omniroute`) is local to Trae Agent; keep its inner `provider`
+value as `openai`. The base URL must include `/v1`, and the current OpenAI client
+sends requests to `/v1/responses`. Use an OmniRoute access key and a model ID
+returned by OmniRoute's `/v1/models` endpoint; `auto` selects OmniRoute's router
+when that model is configured. Trae Agent's OpenAI path is currently synchronous
+and does not enable streaming. Tool calls are passed through when supported by the
+selected OmniRoute model/provider.
+
+Run a task with the named mapping:
+
+```bash
+trae-cli run "Review this repository" --provider omniroute --model auto
+```
+
 ### Environment Variables (Alternative)
 
 You can also configure API keys using environment variables and store them in the .env file:
