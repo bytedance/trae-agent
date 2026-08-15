@@ -219,6 +219,47 @@ class TestLLMTRClientRouting(unittest.TestCase):
         self.assertFalse(client._can_switch_to_responses(mismatch))
 
 
+class TestReasoningReplay(unittest.TestCase):
+    """The Responses route runs with store=False, so reasoning only survives
+    across tool calls when the provider returns an encrypted copy to replay."""
+
+    class FakeSummary:
+        def __init__(self, text: str):
+            self.text = text
+
+        def model_dump(self):
+            return {"type": "summary_text", "text": self.text}
+
+    class FakeReasoningItem:
+        def __init__(self, encrypted_content, summary=None):
+            self.type = "reasoning"
+            self.id = "rs_123"
+            self.encrypted_content = encrypted_content
+            self.summary = summary
+
+    def test_encrypted_reasoning_is_replayable(self):
+        item = self.FakeReasoningItem("cipher-text", [self.FakeSummary("thinking")])
+        param = LLMTRResponsesClient._reasoning_item_param(item)
+        self.assertEqual(
+            param,
+            {
+                "type": "reasoning",
+                "id": "rs_123",
+                "encrypted_content": "cipher-text",
+                "summary": [{"type": "summary_text", "text": "thinking"}],
+            },
+        )
+
+    def test_reasoning_without_encrypted_content_is_dropped(self):
+        # Replaying it would be rejected by the provider, so it must not be sent.
+        self.assertIsNone(LLMTRResponsesClient._reasoning_item_param(self.FakeReasoningItem(None)))
+        self.assertIsNone(LLMTRResponsesClient._reasoning_item_param(self.FakeReasoningItem("")))
+
+    def test_missing_summary_becomes_empty_list(self):
+        param = LLMTRResponsesClient._reasoning_item_param(self.FakeReasoningItem("cipher", None))
+        self.assertEqual(param["summary"], [])
+
+
 class TestLLMTRProvider(unittest.TestCase):
     def test_provider_metadata(self):
         provider = LLMTRProvider()

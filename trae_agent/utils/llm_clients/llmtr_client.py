@@ -252,7 +252,11 @@ class LLMTRResponsesClient(BaseLLMClient):
             input=self.message_history,
             tools=tool_schemas if tool_schemas else openai.NOT_GIVEN,
             max_output_tokens=model_config.get_max_tokens_param(),
+            # Responses are not stored server side, so the reasoning chain only
+            # survives across tool calls if the provider hands back an encrypted
+            # copy that can be replayed with the next request.
             store=False,
+            include=["reasoning.encrypted_content"],
             **sampling_params,
         )
 
@@ -294,8 +298,12 @@ class LLMTRResponsesClient(BaseLLMClient):
         )
         response = retry_decorator(model_config, tool_schemas)
 
+        # Walk the output once, collecting the response and rebuilding the
+        # assistant turn in its original order so the reasoning chain stays
+        # attached to the tool calls it produced.
         content = ""
         tool_calls: list[ToolCall] = []
+        assistant_turn: ResponseInputParam = []
         for item in response.output:
             match item.type:
                 case "function_call":
@@ -307,13 +315,25 @@ class LLMTRResponsesClient(BaseLLMClient):
                             id=item.id,
                         )
                     )
+                    assistant_turn.append(
+                        ResponseFunctionToolCallParam(
+                            call_id=item.call_id,
+                            name=item.name,
+                            arguments=item.arguments or "{}",
+                            type="function_call",
+                        )
+                    )
                 case "message":
-                    for part in item.content:
-                        if part.type == "output_text":
-                            content += part.text
+                    text = "".join(part.text for part in item.content if part.type == "output_text")
+                    content += text
+                    if text:
+                        assistant_turn.append({"role": "assistant", "content": text})
+                case "reasoning":
+                    reasoning_param = self._reasoning_item_param(item)
+                    if reasoning_param is not None:
+                        assistant_turn.append(reasoning_param)
                 case _:
-                    # Reasoning and provider-specific items carry no state we can
-                    # replay without `store=True`, so they are dropped.
+                    # Provider-specific items we cannot round-trip are dropped.
                     continue
 
         llm_response = LLMResponse(
@@ -324,18 +344,7 @@ class LLMTRResponsesClient(BaseLLMClient):
             usage=self._parse_usage(response),
         )
 
-        # Update message history with the assistant turn.
-        if content:
-            self.message_history.append({"role": "assistant", "content": content})
-        for tool_call in tool_calls:
-            self.message_history.append(
-                ResponseFunctionToolCallParam(
-                    call_id=tool_call.call_id,
-                    name=tool_call.name,
-                    arguments=json.dumps(tool_call.arguments),
-                    type="function_call",
-                )
-            )
+        self.message_history.extend(assistant_turn)
 
         if self.trajectory_recorder:
             self.trajectory_recorder.record_llm_interaction(
@@ -347,6 +356,25 @@ class LLMTRResponsesClient(BaseLLMClient):
             )
 
         return llm_response
+
+    @staticmethod
+    def _reasoning_item_param(item) -> dict[str, object] | None:
+        """Rebuild a reasoning item so it can be replayed on the next request.
+
+        With ``store=False`` the gateway keeps no server-side state, so a
+        reasoning item is only replayable when the provider returned its
+        encrypted payload. Items without one are dropped rather than sent back
+        in a form the provider would reject.
+        """
+        encrypted_content = getattr(item, "encrypted_content", None)
+        if not encrypted_content:
+            return None
+        return {
+            "type": "reasoning",
+            "id": item.id,
+            "encrypted_content": encrypted_content,
+            "summary": [summary.model_dump() for summary in item.summary or []],
+        }
 
     @staticmethod
     def _finish_reason(response, has_tool_calls: bool) -> str | None:
