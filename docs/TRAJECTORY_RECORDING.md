@@ -280,7 +280,7 @@ The trajectory file is a JSON document with the following structure:
 
 - `task`: The original task description
 - `start_time`/`end_time`: ISO format timestamps
-- `provider`: LLM provider used (e.g., "anthropic", "openai", "google", "azure", "doubao", "ollama", "openrouter")
+- `provider`: LLM provider used (e.g., "anthropic", "openai", "google", "azure", "doubao", "ollama", "openrouter", "llmtr")
 - `model`: Model name
 - `max_steps`: Maximum allowed execution steps
 - `success`: Whether the task completed successfully

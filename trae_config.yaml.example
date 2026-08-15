@@ -22,6 +22,13 @@ model_providers:
     anthropic:
         api_key: your_anthropic_api_key
         provider: anthropic
+    # LLMTR (https://llmtr.com) is an OpenAI-compatible gateway serving both
+    # Turkey-hosted and global models behind one API key. Model ids are
+    # `owner/model`, e.g. anthropic/claude-sonnet-5 or llmtr/trendyol-asure-12b.
+    llmtr:
+        api_key: your_llmtr_api_key
+        provider: llmtr
+        base_url: https://llmtr.com/v1
 
 models:
     trae_agent_model:
@@ -36,6 +43,16 @@ models:
     lakeview_model:
         model_provider: anthropic
         model: claude-3.5-sonnet
+        max_tokens: 4096
+        temperature: 0.5
+        top_p: 1
+        top_k: 0
+        max_retries: 10
+        parallel_tool_calls: true
+    # Example LLMTR model. Point `agents.trae_agent.model` at this to use it.
+    llmtr_model:
+        model_provider: llmtr
+        model: anthropic/claude-sonnet-5
         max_tokens: 4096
         temperature: 0.5
         top_p: 1

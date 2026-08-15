@@ -17,7 +17,7 @@ For technical details please refer to [our technical report](https://arxiv.org/a
 ## ✨ Features
 
 - 🌊 **Lakeview**: Provides short and concise summarisation for agent steps
-- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure, OpenRouter, Ollama and Google Gemini APIs
+- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure, OpenRouter, LLMTR, Ollama and Google Gemini APIs
 - 🛠️ **Rich Tool Ecosystem**: File editing, bash execution, sequential thinking, and more
 - 🎯 **Interactive Mode**: Conversational interface for iterative development
 - 📊 **Trajectory Recording**: Detailed logging of all agent actions for debugging and analysis
@@ -106,6 +106,8 @@ export OPENROUTER_API_KEY="your-openrouter-api-key"
 export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
 export DOUBAO_API_KEY="your-doubao-api-key"
 export DOUBAO_BASE_URL="https://ark.cn-beijing.volces.com/api/v3/"
+export LLMTR_API_KEY="your-llmtr-api-key"
+export LLMTR_BASE_URL="https://llmtr.com/v1"
 ```
 
 ### MCP Services (Optional)
@@ -158,9 +160,36 @@ trae-cli run "Generate documentation" --provider openrouter --model "openai/gpt-
 # Doubao
 trae-cli run "Refactor the database module" --provider doubao --model doubao-seed-1.6
 
+# LLMTR (Türkiye-hosted and global models behind one API key)
+trae-cli run "Fix the bug in main.py" --provider llmtr --model "anthropic/claude-sonnet-5"
+trae-cli run "Refactor this module" --provider llmtr --model "openai/gpt-5.3-codex"
+trae-cli run "Kodu Türkçe yorumla" --provider llmtr --model "llmtr/trendyol-asure-12b"
+
 # Ollama (local models)
 trae-cli run "Comment this code" --provider ollama --model qwen3
 ```
+
+#### A note on LLMTR
+
+LLMTR serves its catalogue across two endpoint families: most models speak
+`/v1/chat/completions`, while some — including `openai/gpt-5.3-codex` and the
+`xai/grok-4.x` family — are only reachable over `/v1/responses`. Trae Agent reads
+the public model catalogue (`GET https://llmtr.com/v1/models`, no API key needed,
+cached for 24h under `~/.trae-agent/`) and routes each model automatically, so
+you only ever pass the model id. Models that cannot serve a chat at all —
+embedding, image, video and audio models — are rejected up front with a message
+naming chat-capable alternatives.
+
+Reasoning effort can be selected with the slug suffix LLMTR accepts:
+
+```bash
+trae-cli run "Plan this refactor" --provider llmtr --model "openai/gpt-5.3-codex:high"
+```
+
+Trae Agent drives every step through tool calls, so pick a model with native
+function calling. Search models (`perplexity/sonar-*`) and some of the smaller
+local models answer in plain text instead of emitting tool calls and cannot run
+the agent loop.
 
 ### Advanced Options
 
