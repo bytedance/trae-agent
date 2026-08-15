@@ -1,7 +1,7 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-"""LLM Client wrapper for OpenAI, Anthropic, Azure, and OpenRouter APIs."""
+"""LLM Client wrapper for OpenAI, Anthropic, Azure, OpenRouter and LLMTR APIs."""
 
 from enum import Enum
 
@@ -22,6 +22,7 @@ class LLMProvider(Enum):
     OPENROUTER = "openrouter"
     DOUBAO = "doubao"
     GOOGLE = "google"
+    LLMTR = "llmtr"
 
 
 class LLMClient:
@@ -60,6 +61,10 @@ class LLMClient:
                 from .google_client import GoogleClient
 
                 self.client = GoogleClient(model_config)
+            case LLMProvider.LLMTR:
+                from .llmtr_client import LLMTRClient
+
+                self.client = LLMTRClient(model_config)
 
     def set_trajectory_recorder(self, recorder: TrajectoryRecorder | None) -> None:
         """Set the trajectory recorder for the underlying client."""

@@ -78,6 +78,16 @@
       "temperature": 0.5,
       "top_p": 1,
       "max_retries": 20
+    },
+    "llmtr": {
+      "api_key": "your_llmtr_api_key",
+      "base_url": "https://llmtr.com/v1",
+      "model": "anthropic/claude-sonnet-5",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
     }
   },
   "lakeview_config": {
