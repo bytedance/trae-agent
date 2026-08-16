@@ -18,7 +18,7 @@ The core class that handles recording trajectory data to JSON files.
 
 **Key methods:**
 
-- `start_recording()`: Initialize recording with task metadata
+- `start_recording()`: Initialize a clean recording with task metadata
 - `record_llm_interaction()`: Capture LLM request/response pairs
 - `record_agent_step()`: Capture agent execution steps
 - `finalize_recording()`: Complete recording and save final results

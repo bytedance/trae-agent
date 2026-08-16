@@ -65,11 +65,15 @@ class TrajectoryRecorder:
             {
                 "task": task,
                 "start_time": self._start_time.isoformat(),
+                "end_time": "",
                 "provider": provider,
                 "model": model,
                 "max_steps": max_steps,
                 "llm_interactions": [],
                 "agent_steps": [],
+                "success": False,
+                "final_result": None,
+                "execution_time": 0.0,
             }
         )
         self.save_trajectory()
