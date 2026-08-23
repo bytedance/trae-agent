@@ -10,11 +10,19 @@ agents:
             - task_done
 allow_mcp_servers:
     - playwright
+    - gbr
 mcp_servers:
     playwright:
         command: npx
         args:
             - "@playwright/mcp@0.0.27"
+    # Build Remote Agent (gbr/1). Requires `gbr-agent run`. Clone
+    # https://github.com/LinespottingOrg/GrokBuildRemote-Agents and npm install mcp/gbr-mcp.
+    # Phone is spectator. Never put mailbox keys here.
+    gbr:
+        command: node
+        args:
+            - GrokBuildRemote-Agents/mcp/gbr-mcp/bin/gbr-mcp.js
 lakeview:
     model: lakeview_model
 
