@@ -58,6 +58,22 @@ class TestBashTool(unittest.IsolatedAsyncioTestCase):
         self.assertIn("hello world", result.output)
         self.assertEqual(result.error, "")
 
+    async def test_large_stdout_and_stderr_do_not_time_out(self):
+        output_size = 200_000
+        command = (
+            "python3 -c 'import sys; "
+            f'print("x" * {output_size}); print("y" * {output_size}, file=sys.stderr)\''
+        )
+
+        result = await self.tool.execute(ToolCallArguments({"command": command}))
+
+        self.assertEqual(result.error_code, 0)
+        self.assertEqual(len(result.output), output_size)
+        self.assertEqual(len(result.error), output_size)
+
+        follow_up = await self.tool.execute(ToolCallArguments({"command": "echo still running"}))
+        self.assertEqual(follow_up.output, "still running")
+
     async def test_missing_command_handling(self):
         result = await self.tool.execute(ToolCallArguments({}))
         self.assertIn("no command provided", result.error.lower())
