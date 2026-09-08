@@ -26,6 +26,7 @@ class _BashSession:
     _output_delay: float = 0.2  # seconds
     _timeout: float = 120.0  # seconds
     _sentinel: str = ",,,,bash-command-exit-__ERROR_CODE__-banner,,,,"  # `__ERROR_CODE__` will be replaced by `$?` or `!errorlevel!` later
+    _stderr_sentinel: str = ",,,,bash-command-stderr-end-banner,,,,"
 
     def __init__(self) -> None:
         self._started = False
@@ -115,48 +116,59 @@ class _BashSession:
         self._process.stdin.write(
             b"(\n"
             + command.encode()
-            + f"\n){command_sep} echo {self._sentinel.replace('__ERROR_CODE__', errcode_retriever)}\n".encode()
+            + f"\n){command_sep} echo {self._sentinel.replace('__ERROR_CODE__', errcode_retriever)}".encode()
+            + f"{command_sep} echo {self._stderr_sentinel} ".encode()
+            + (b"1>&2\n" if os.name == "nt" else b">&2\n")
         )
         await self._process.stdin.drain()
 
-        # read output from the process, until the sentinel is found
+        # Consume both streams while the command runs. Merely inspecting the
+        # StreamReader buffers allows pipe backpressure to block large outputs
+        # before the shell can write the sentinel.
         try:
             async with asyncio.timeout(self._timeout):
-                while True:
-                    await asyncio.sleep(self._output_delay)
-                    # if we read directly from stdout/stderr, it will wait forever for
-                    # EOF. use the StreamReader buffer directly instead.
-                    output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-                    if sentinel_before in output:
-                        # strip the sentinel from output
-                        output, pivot, exit_banner = output.rpartition(sentinel_before)
-                        assert pivot
-
-                        # get error code inside banner
-                        error_code_str, pivot, _ = exit_banner.partition(sentinel_after)
-                        if not pivot or not error_code_str.isdecimal():
-                            continue
-
-                        error_code = int(error_code_str)
-                        break
+                stdout, stderr = await asyncio.gather(
+                    self._read_until_marker(
+                        self._process.stdout,
+                        sentinel_after.encode(),
+                    ),
+                    self._read_until_marker(
+                        self._process.stderr,
+                        self._stderr_sentinel.encode(),
+                    ),
+                )
         except asyncio.TimeoutError:
             self._timed_out = True
             raise ToolError(
                 f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
             ) from None
 
+        output, pivot, error_code_str = stdout.decode().rpartition(sentinel_before)
+        if not pivot or not error_code_str.isdecimal():
+            raise ToolError("bash returned an invalid exit status banner")
+        error_code = int(error_code_str)
+
         if output.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
             output = output[:-1]  # pyright: ignore[reportUnknownVariableType]
 
-        error: str = self._process.stderr._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
+        error = stderr.decode()
         if error.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
             error = error[:-1]  # pyright: ignore[reportUnknownVariableType]
 
-        # clear the buffers so that the next output can be read correctly
-        self._process.stdout._buffer.clear()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-        self._process.stderr._buffer.clear()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-
         return ToolExecResult(output=output, error=error, error_code=error_code)  # pyright: ignore[reportUnknownArgumentType]
+
+    @staticmethod
+    async def _read_until_marker(reader: asyncio.StreamReader, marker: bytes) -> bytes:
+        """Read and consume a stream until marker is encountered."""
+        output = bytearray()
+        while True:
+            chunk = await reader.read(65536)
+            if not chunk:
+                raise ToolError("bash exited before returning a command result")
+            output.extend(chunk)
+            marker_index = output.find(marker)
+            if marker_index != -1:
+                return bytes(output[:marker_index])
 
 
 class BashTool(Tool):
