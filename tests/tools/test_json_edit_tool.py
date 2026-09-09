@@ -66,6 +66,25 @@ class TestJSONEditTool(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(written_data["config"]["enabled"])
 
     @patch("json.dump")
+    async def test_set_value_to_null(self, mock_json_dump):
+        self.mock_file_read()
+
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "operation": "set",
+                    "file_path": self.test_file_path,
+                    "json_path": "$.config.enabled",
+                    "value": None,
+                }
+            )
+        )
+
+        self.assertEqual(result.error_code, 0)
+        written_data = mock_json_dump.call_args[0][0]
+        self.assertIsNone(written_data["config"]["enabled"])
+
+    @patch("json.dump")
     async def test_update_user_name(self, mock_json_dump):
         """Test updating a name in a list of objects."""
         self.mock_file_read()
@@ -105,6 +124,41 @@ class TestJSONEditTool(unittest.IsolatedAsyncioTestCase):
         written_data = mock_json_dump.call_args[0][0]
         self.assertEqual(len(written_data["users"]), 3)
         self.assertEqual(written_data["users"][2]["name"], "Charlie")
+
+    @patch("json.dump")
+    async def test_add_null_value(self, mock_json_dump):
+        self.mock_file_read()
+
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "operation": "add",
+                    "file_path": self.test_file_path,
+                    "json_path": "$.users[2]",
+                    "value": None,
+                }
+            )
+        )
+
+        self.assertEqual(result.error_code, 0)
+        written_data = mock_json_dump.call_args[0][0]
+        self.assertIsNone(written_data["users"][2])
+
+    async def test_set_requires_value_argument(self):
+        self.mock_file_read()
+
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "operation": "set",
+                    "file_path": self.test_file_path,
+                    "json_path": "$.config.enabled",
+                }
+            )
+        )
+
+        self.assertEqual(result.error_code, -1)
+        self.assertEqual(result.error, "A 'value' parameter is required for the 'set' operation.")
 
     @patch("json.dump")
     async def test_add_new_config_key(self, mock_json_dump):

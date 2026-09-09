@@ -129,7 +129,7 @@ JSONPath syntax supported:
                 )
 
             if operation in ["set", "add"]:
-                if value is None:
+                if "value" not in arguments:
                     return ToolExecResult(
                         error=f"A 'value' parameter is required for the '{operation}' operation.",
                         error_code=-1,
