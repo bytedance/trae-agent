@@ -8,7 +8,9 @@ import shutil
 import subprocess
 import tarfile
 import traceback
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -227,26 +229,44 @@ class BenchmarkEvaluation:
 
         self.config.problem_statement(instance, instance_result_dir)
 
-        container: Container = self.docker_client.containers.run(
-            image_name,
-            command="/bin/bash",
-            detach=True,
-            tty=True,
-            stdin_open=True,
-            volumes={
-                instance_result_dir.absolute().as_posix(): {"bind": "/instance-data", "mode": "rw"},
-            },
-            working_dir="/trae-workspace",
-            environment=self.docker_env_config.get("experiment_env", None),
-            stream=True,
+        network = self.docker_client.networks.create(
+            f"trae-eval-{uuid.uuid4().hex[:12]}",
+            driver="bridge",
+            labels={"trae-agent.trial": "true"},
         )
+        try:
+            container: Container = self.docker_client.containers.run(
+                image_name,
+                command="/bin/bash",
+                detach=True,
+                tty=True,
+                stdin_open=True,
+                volumes={
+                    instance_result_dir.absolute().as_posix(): {"bind": "/instance-data", "mode": "rw"},
+                },
+                working_dir="/trae-workspace",
+                environment=self.docker_env_config.get("experiment_env", None),
+                network=network.name,
+                stream=True,
+            )
 
-        for fname in ["trae-agent.tar", "uv.tar", "uv_shared.tar", "trae_config.yaml"]:
-            tar_stream = io.BytesIO()
-            with tarfile.open(fileobj=tar_stream, mode="w") as tar:
-                tar.add(self.working_dir / fname, arcname=fname)
-            tar_stream.seek(0)
-            container.put_archive("/trae-workspace", tar_stream.getvalue())
+            for fname in ["trae-agent.tar", "uv.tar", "uv_shared.tar", "trae_config.yaml"]:
+                tar_stream = io.BytesIO()
+                with tarfile.open(fileobj=tar_stream, mode="w") as tar:
+                    tar.add(self.working_dir / fname, arcname=fname)
+                tar_stream.seek(0)
+                container.put_archive("/trae-workspace", tar_stream.getvalue())
+        except Exception:
+            if "container" in locals():
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    traceback.print_exc()
+            try:
+                network.remove()
+            except Exception:
+                traceback.print_exc()
+            raise
 
         setup_commands = [
             "tar xf trae-agent.tar",
@@ -304,8 +324,26 @@ class BenchmarkEvaluation:
             print(f"{command} failed.")
             print(traceback.format_exc())
 
-        container.stop()
-        container.remove()
+        finally:
+            with suppress(Exception):
+                container.reload()
+            networks = list(
+                container.attrs.get("NetworkSettings", {}).get("Networks", {})
+            )
+            try:
+                container.stop()
+            except Exception:
+                traceback.print_exc()
+            try:
+                container.remove(force=True)
+            except Exception:
+                traceback.print_exc()
+            for network_name in networks:
+                if network_name.startswith("trae-eval-"):
+                    try:
+                        self.docker_client.networks.get(network_name).remove()
+                    except Exception:
+                        traceback.print_exc()
 
     def run_all(self):
         """

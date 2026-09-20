@@ -23,15 +23,12 @@ class Sandbox:
 
     def start_container(self):
         image = f"{self.namespace}/{self.name}:{self.tag}"
-        host_path = "/tmp"
-        container_path = "/tmp"
         self.container = self.client.containers.run(
             image,
             detach=True,
             tty=True,
             stdin_open=True,
             privileged=True,
-            volumes={host_path: {"bind": container_path, "mode": "rw"}},
         )
         print(f"Container {self.container.short_id} started with image {image}")
 
