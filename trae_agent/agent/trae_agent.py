@@ -256,3 +256,7 @@ class TraeAgent(BaseAgent):
                 # Use a generic server name for cleanup since we don't track which server each client is for
                 await client.cleanup("cleanup")
         self.mcp_clients.clear()
+        if self.mcp_tools:
+            self._tools[:] = [tool for tool in self._tools if tool not in self.mcp_tools]
+            self.mcp_tools.clear()
+            self._tool_caller.invalidate_tool_map()

@@ -54,6 +54,9 @@ class DockerToolExecutor:
         if self._original_executor:
             return await self._original_executor.close_tools()
 
+    def invalidate_tool_map(self):
+        self._original_executor.invalidate_tool_map()
+
     async def sequential_tool_call(self, tool_calls: list[ToolCall]) -> list[ToolResult]:
         """Executes tool calls sequentially, routing to Docker if necessary."""
         results = []
