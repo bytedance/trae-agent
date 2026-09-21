@@ -202,6 +202,9 @@ class ToolExecutor:
             self._tool_map = {self._normalize_name(tool.name): tool for tool in self._tools}
         return self._tool_map
 
+    def invalidate_tool_map(self):
+        self._tool_map = None
+
     async def execute_tool_call(self, tool_call: ToolCall) -> ToolResult:
         """Execute a tool call."""
         normalized_name = self._normalize_name(tool_call.name)

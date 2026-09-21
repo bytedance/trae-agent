@@ -1,12 +1,14 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import asyncio
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
-from trae_agent.utils.config import Config
+from trae_agent.utils.config import Config, MCPServerConfig
 from trae_agent.utils.legacy_config import LegacyConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMResponse
 
@@ -145,6 +147,43 @@ class TestTraeAgentExtended(unittest.TestCase):
         mock_console = MagicMock(spec=CLIConsole)
         self.agent.set_cli_console(mock_console)
         self.assertEqual(self.agent.cli_console, mock_console)
+
+    def test_mcp_tools_are_refreshed_between_tasks(self):
+        class FakeMCPClient:
+            instances = []
+
+            def __init__(self):
+                self.cleaned = False
+                self.tool = SimpleNamespace(name="mcp_tool", client=self)
+                self.instances.append(self)
+
+            async def connect_and_discover(self, server_name, config, tools, model_provider):
+                tools.append(self.tool)
+
+            async def cleanup(self, server_name):
+                self.cleaned = True
+
+        async def run_test():
+            self.agent.mcp_servers_config = {"test_server": MCPServerConfig(command="test")}
+            self.agent.allow_mcp_servers = ["test_server"]
+            self.agent._llm_client.provider.value = "anthropic"
+            native_tools = list(self.agent.tools)
+
+            with patch("trae_agent.agent.trae_agent.MCPClient", FakeMCPClient):
+                await self.agent.initialise_mcp()
+                first_tool = self.agent.mcp_tools[0]
+                self.assertIs(self.agent._tool_caller.tools["mcptool"], first_tool)
+
+                await self.agent.cleanup_mcp_clients()
+                await self.agent.initialise_mcp()
+
+            self.assertEqual([tool.name for tool in self.agent.tools].count("mcp_tool"), 1)
+            self.assertEqual(self.agent.tools[: len(native_tools)], native_tools)
+            self.assertIsNot(self.agent.mcp_tools[0], first_tool)
+            self.assertIs(self.agent._tool_caller.tools["mcptool"], self.agent.mcp_tools[0])
+            self.assertTrue(FakeMCPClient.instances[0].cleaned)
+
+        asyncio.run(run_test())
 
 
 if __name__ == "__main__":
