@@ -24,6 +24,25 @@ EditToolSubCommands = [
 SNIPPET_LINES: int = 4
 
 
+def expanded_char_origins(text: str) -> list[int]:
+    """Map each position of ``text.expandtabs()`` back to the position it came from in ``text``.
+
+    Every column a tab was expanded into maps to that tab, so a replacement that covers only
+    part of a tab's columns consumes the whole tab instead of leaving half of an indent behind.
+    """
+    origins: list[int] = []
+    column = 0
+    for index, char in enumerate(text):
+        if char == "\t":
+            width = 8 - column % 8
+            origins.extend([index] * width)
+            column += width
+        else:
+            origins.append(index)
+            column = 0 if char in "\n\r" else column + 1
+    return origins
+
+
 class TextEditorTool(Tool):
     """Tool to replace a string in a file."""
 
@@ -196,8 +215,11 @@ Notes for using the `str_replace` command:
 
     def str_replace(self, path: Path, old_str: str, new_str: str | None) -> ToolExecResult:
         """Implement the str_replace command, which replaces old_str with new_str in the file content"""
-        # Read the file content
-        file_content = self.read_file(path).expandtabs()
+        # Read the file content. The tool shows its own output with tabs expanded, so
+        # `old_str` is matched against that view, but the replacement is spliced into the
+        # text as it stands: otherwise every tab in the file is rewritten by one edit.
+        raw_content = self.read_file(path)
+        file_content = raw_content.expandtabs()
         old_str = old_str.expandtabs()
         new_str = new_str.expandtabs() if new_str is not None else ""
 
@@ -215,13 +237,18 @@ Notes for using the `str_replace` command:
             )
 
         # Replace old_str with new_str
-        new_file_content = file_content.replace(old_str, new_str)
+        origins = expanded_char_origins(raw_content)
+        start = file_content.index(old_str)
+        stop = start + len(old_str)
+        new_file_content = (
+            raw_content[: origins[start]] + new_str + raw_content[origins[stop - 1] + 1 :]
+        )
 
         # Write the new content to the file
         self.write_file(path, new_file_content)
 
         # Create a snippet of the edited section
-        replacement_line = file_content.split(old_str)[0].count("\n")
+        replacement_line = file_content[:start].count("\n")
         start_line = max(0, replacement_line - SNIPPET_LINES)
         end_line = replacement_line + SNIPPET_LINES + new_str.count("\n")
         snippet = "\n".join(new_file_content.split("\n")[start_line : end_line + 1])
@@ -237,7 +264,9 @@ Notes for using the `str_replace` command:
 
     def _insert(self, path: Path, insert_line: int, new_str: str) -> ToolExecResult:
         """Implement the insert command, which inserts new_str at the specified line in the file content."""
-        file_text = self.read_file(path).expandtabs()
+        # `insert` splices whole lines, and expanding tabs neither adds nor removes one, so
+        # the file is used as it stands and the lines around the insertion keep their text.
+        file_text = self.read_file(path)
         new_str = new_str.expandtabs()
         file_text_lines = file_text.split("\n")
         n_lines_file = len(file_text_lines)
