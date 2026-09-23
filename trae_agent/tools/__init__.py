@@ -29,6 +29,7 @@ tools_registry: dict[str, type[Tool]] = {
     "str_replace_based_edit_tool": TextEditorTool,
     "json_edit_tool": JSONEditTool,
     "sequentialthinking": SequentialThinkingTool,
+    "sequential_thinking": SequentialThinkingTool,
     "task_done": TaskDoneTool,
     "ckg": CKGTool,
 }

@@ -1,6 +1,6 @@
 # Tools
 
-Trae Agent provides five built-in tools for software engineering tasks:
+Trae Agent provides six built-in tools for software engineering tasks:
 
 ## str_replace_based_edit_tool
 
@@ -32,9 +32,9 @@ Execute shell commands in a persistent session.
 - Avoid commands with excessive output
 - Long-running commands should use `&` for background execution
 
-## sequential_thinking
+## sequentialthinking
 
-Structured problem-solving tool for complex analysis.
+Structured problem-solving tool for complex analysis. (Also aliased as `sequential_thinking` in configuration).
 
 **Capabilities:**
 - Break down problems into sequential thoughts
@@ -49,6 +49,21 @@ Structured problem-solving tool for complex analysis.
 - `next_thought_needed` - Continue thinking flag
 - `is_revision` / `revises_thought` - Revision tracking
 - `branch_from_thought` / `branch_id` - Alternative exploration
+
+## ckg
+
+Construct and query the Code Knowledge Graph (CKG) of a codebase for fast structural symbol navigation.
+
+**Commands:**
+- `search_function` - Search for function definitions in the codebase
+- `search_class` - Search for class definitions in the codebase
+- `search_class_method` - Search for class methods in the codebase
+
+**Parameters:**
+- `command` - One of `search_function`, `search_class`, or `search_class_method` (required)
+- `path` - Path to the codebase root (required)
+- `identifier` - Name/identifier of the function or class to search for (required)
+- `print_body` - Whether to print the full function or class body (optional, boolean, default `true`)
 
 ## task_done
 
