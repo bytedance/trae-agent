@@ -15,19 +15,37 @@ There are many ways you can contribute to Trae Agent:
 
 ## Development Setup
 
-1. Fork the repository
-2. Clone your fork:
+You need Python 3.12 or newer, [uv](https://docs.astral.sh/uv/) and `make`. The `make` targets below
+shell out to `uv` (`uv venv`, `uv sync --all-extras`, `uv run pytest`), so `make install-dev` fails
+with `uv: command not found` if `uv` is not installed.
+
+1. Fork the repository (the **Fork** button at the top of the repository page)
+
+2. Clone **your fork**, then add this repository as a second remote:
 
    ```bash
-   git clone https://github.com/bytedance/trae-agent.git
+   git clone https://github.com/<your-username>/trae-agent.git
    cd trae-agent
+   git remote add upstream https://github.com/bytedance/trae-agent.git
    ```
+
+   `origin` now points at the repository you can push to, and `upstream` at the repository you
+   will open pull requests against. Cloning `bytedance/trae-agent` instead makes `origin` a
+   repository you have no write access to, and step 4 of the Development Process below then fails.
 
 3. Set up your development environment:
 
    ```bash
    make install-dev
    make pre-commit-install
+   ```
+
+4. Before you start work, and again before you open a pull request, bring your branch up to date
+   with `upstream`:
+
+   ```bash
+   git fetch upstream
+   git rebase upstream/main
    ```
 
 ## Running Tests
