@@ -91,6 +91,41 @@ openai:
 ```
 **Note:** For field formatting, use spaces only. Tabs (\t) are not allowed.
 
+### Tsubasa
+
+Tsubasa uses Chat Completions through the `tsubasa` provider. Set
+`TSUBASA_API_KEY`, then save this as `trae_config.yaml`:
+
+```yaml
+agents:
+  trae_agent:
+    model: tsubasa
+    enable_lakeview: false
+    max_steps: 20
+    tools: [bash, str_replace_based_edit_tool, sequentialthinking, task_done]
+model_providers:
+  tsubasa:
+    provider: tsubasa
+    api_key: "" # Read TSUBASA_API_KEY from the environment.
+models:
+  tsubasa:
+    model_provider: tsubasa
+    model: tsubasa-fast
+    max_tokens: 4096
+    temperature: 0.5
+    top_p: 1
+    top_k: 0
+    max_retries: 3
+    parallel_tool_calls: false
+```
+
+Run `trae-cli run "Describe this project"`, or select the other alias with
+`--model tsubasa-pro`. Both aliases have a 32,768-token context window; long
+histories and large tool results must fit alongside the output allowance.
+The endpoint defaults to `https://api.tsubasa.sh/v1`; `base_url` or
+`TSUBASA_BASE_URL` can override it. Lakeview is disabled in this example to
+avoid configuring a second model.
+
 ### Environment Variables (Alternative)
 
 You can also configure API keys using environment variables and store them in the .env file:
