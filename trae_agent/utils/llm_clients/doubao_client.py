@@ -43,4 +43,9 @@ class DoubaoClient(OpenAICompatibleClient):
     """Doubao client wrapper that maintains compatibility while using the new architecture."""
 
     def __init__(self, model_config: ModelConfig):
+        if (
+            model_config.model_provider.base_url is None
+            or model_config.model_provider.base_url == ""
+        ):
+            model_config.model_provider.base_url = "https://ark.cn-beijing.volces.com/api/v3"
         super().__init__(model_config, DoubaoProvider())
