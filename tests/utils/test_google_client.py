@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from trae_agent.tools.base import Tool, ToolCall, ToolResult
-from trae_agent.utils.config import ModelConfig, ModelProvider
+from trae_agent.utils.config import ConfigError, ModelConfig, ModelProvider
 from trae_agent.utils.llm_clients.google_client import GoogleClient
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage
 
@@ -65,7 +65,7 @@ class TestGoogleClient(unittest.TestCase):
     @patch.dict(os.environ, {"GOOGLE_API_KEY": ""})
     def test_google_client_init_no_key_raises_error(self):
         """
-        Test that a ValueError is raised if no API key is provided.
+        Test that a ConfigError is raised if no API key is provided.
         """
         model_config = ModelConfig(
             model=TEST_MODEL,
@@ -77,7 +77,7 @@ class TestGoogleClient(unittest.TestCase):
             parallel_tool_calls=False,
             max_retries=1,
         )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigError):
             GoogleClient(model_config)
 
     @patch("trae_agent.utils.google_client.genai.Client")
