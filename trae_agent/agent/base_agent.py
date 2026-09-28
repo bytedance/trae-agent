@@ -215,6 +215,7 @@ class BaseAgent(ABC):
         # Get LLM response
         llm_response = self._llm_client.chat(messages, self._model_config, self._tools)
         step.llm_response = llm_response
+        step.llm_usage = llm_response.usage
 
         # Display step with LLM response
         self._update_cli_console(step, execution)
