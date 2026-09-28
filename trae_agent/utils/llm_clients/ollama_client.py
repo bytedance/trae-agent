@@ -26,6 +26,32 @@ from trae_agent.utils.llm_clients.retry_utils import retry_with
 
 
 class OllamaClient(BaseLLMClient):
+    # Ollama serves `tools` for some tags only. This is the list the pre-refactor
+    # `trae_agent/utils/ollama_client.py` kept (extended by #212); the llm_clients refactor dropped
+    # the method along with the file, leaving every tag to be reported capable.
+    TOOL_CALLING_MODELS: tuple[str, ...] = (
+        "deepseek-r1",
+        "qwen3",
+        "llama3.1",
+        "llama3.2",
+        "mistral",
+        "qwen2.5",
+        "qwen2.5-coder",
+        "mistral-nemo",
+        "llama3.3",
+        "qwq",
+        "mistral-small",
+        "mixtral",
+        "smollm2",
+        "llama4",
+        "command-r",
+        "hermes3",
+        "phi4-mini",
+        "granite3.3",
+        "devstral",
+        "mistral-small3.1",
+    )
+
     def __init__(self, model_config: ModelConfig):
         super().__init__(model_config)
 
@@ -42,6 +68,12 @@ class OllamaClient(BaseLLMClient):
     @override
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
         self.message_history = self.parse_messages(messages)
+
+    @override
+    def supports_tool_calling(self, model_config: ModelConfig) -> bool:
+        """Answer for the tag at hand, on top of whatever the config says."""
+        capable = any(name in model_config.model for name in self.TOOL_CALLING_MODELS)
+        return super().supports_tool_calling(model_config) and capable
 
     def _create_ollama_response(
         self,

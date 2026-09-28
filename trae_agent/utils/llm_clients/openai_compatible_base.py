@@ -76,6 +76,12 @@ class OpenAICompatibleClient(BaseLLMClient):
         """Set the chat history."""
         self.message_history = self.parse_messages(messages)
 
+    @override
+    def supports_tool_calling(self, model_config: ModelConfig) -> bool:
+        """Ask the provider, which keeps the list of models it can send tools for."""
+        capable = self.provider_config.supports_tool_calling(model_config.model)
+        return super().supports_tool_calling(model_config) and capable
+
     def _create_response(
         self,
         model_config: ModelConfig,
