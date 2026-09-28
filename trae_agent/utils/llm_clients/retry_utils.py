@@ -18,9 +18,10 @@ _RETRYABLE_CLIENT_STATUS_CODES = frozenset({408, 409, 425, 429})
 def is_permanent_failure(error: BaseException) -> bool:
     """Would repeating this exact request change the answer?
 
-    Only the OpenAI and Anthropic SDKs expose a status code, and any error that does not carry
-    one stays retryable, so this narrows the retry loop rather than changing how a connection
-    problem is handled.
+    An error that carries no HTTP status stays retryable, so this narrows the loop only for the
+    providers that can answer the question: the OpenAI and Anthropic SDKs set `status_code`, the
+    ollama client sets it for an HTTP failure and `-1` otherwise, and google's `genai` errors keep
+    the code on `.code` instead -- it is the status being an int in the client range that decides.
     """
     status_code = getattr(error, "status_code", None)
     if not isinstance(status_code, int):

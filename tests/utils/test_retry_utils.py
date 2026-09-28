@@ -92,6 +92,7 @@ class TestIsPermanentFailure(unittest.TestCase):
             StatusError(429): False,
             StatusError(408): False,
             StatusError(503): False,
+            StatusError(-1): False,  # what the ollama client raises for a non-HTTP failure
             StatusError("401"): False,
             StatusError(None): False,
             ConnectionError("reset"): False,
