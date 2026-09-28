@@ -1,6 +1,14 @@
 # HTTP Server
 
-This folder contains the elements for hosting the Trae agent as an HTTP server using FastAPI. It is still under construction and should **not** be used in production yet.
+**Status: not implemented.** This folder holds the design notes for hosting the Trae agent as an HTTP
+server. It contains no code: there is nothing in here to start, import, or deploy, and no module of
+this repository serves HTTP. The only entry point Trae Agent installs today is `trae-cli`; the
+programmatic interface behind it is the `Agent` class in `trae_agent/agent/agent.py`, whose `run`
+method the Roadmap below is written around.
+
+If you want Trae Agent over HTTP, the open feature requests to watch or comment on are #148, #250 and
+#350. If you want to build it, the sections below are the shape the server is expected to take --
+implement against them rather than starting the discussion over.
 
 ## Expected Features of the HTTP Server
 
