@@ -97,7 +97,15 @@ class CKGTool(Tool):
                 error=f"No identifier provided for the {self.get_name()} tool",
                 error_code=-1,
             )
-        print_body = bool(arguments.get("print_body")) if "print_body" in arguments else True
+        print_body_arg = arguments.get("print_body", True)
+        if print_body_arg is None:
+            # get_input_schema() makes this parameter required and nullable for the
+            # openai provider, so null is a legal value and must keep the default.
+            print_body = True
+        elif isinstance(print_body_arg, bool):
+            print_body = print_body_arg
+        else:
+            return ToolExecResult(error="print_body parameter must be a boolean.", error_code=-1)
 
         codebase_path = Path(path)
         if not codebase_path.exists():
