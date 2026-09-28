@@ -9,6 +9,24 @@ from typing import Any, Callable, TypeVar
 
 T = TypeVar("T")
 
+# A 4xx whose answer cannot change by asking again. The exceptions that carry these codes are
+# retryable on the same basis as a timeout: a 429 says "ask again later", a 401 says "asking
+# again with the same key is pointless".
+_RETRYABLE_CLIENT_STATUS_CODES = frozenset({408, 409, 425, 429})
+
+
+def is_permanent_failure(error: BaseException) -> bool:
+    """Would repeating this exact request change the answer?
+
+    Only the OpenAI and Anthropic SDKs expose a status code, and any error that does not carry
+    one stays retryable, so this narrows the retry loop rather than changing how a connection
+    problem is handled.
+    """
+    status_code = getattr(error, "status_code", None)
+    if not isinstance(status_code, int):
+        return False
+    return 400 <= status_code < 500 and status_code not in _RETRYABLE_CLIENT_STATUS_CODES
+
 
 def retry_with(
     func: Callable[..., T],
@@ -35,6 +53,9 @@ def retry_with(
             try:
                 return func(*args, **kwargs)
             except Exception as e:
+                if is_permanent_failure(e):
+                    raise
+
                 last_exception = e
 
                 if attempt == max_retries:
