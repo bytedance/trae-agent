@@ -128,7 +128,9 @@ class DockerToolExecutor:
                 executable_path = f"{self._docker_manager.CONTAINER_TOOLS_PATH}/json_edit_tool"
                 cmd_parts = [executable_path]
                 for key, value in processed_args.items():
-                    if value is None:
+                    # `null` is a legal JSON payload, so an explicitly passed `value` has to
+                    # survive as `--value 'null'`; None means "absent" for every other parameter.
+                    if value is None and key != "value":
                         continue
                     # --- Serialize the 'value' parameter into a JSON string ---
                     if key == "value":

@@ -231,8 +231,11 @@ async def amain():
 
     file_path = Path(args.file_path)
 
+    # `--value null` parses to None just like an omitted flag, so presence is tracked apart:
+    # JSON null is a value the caller is allowed to write.
+    value_provided = args.value is not None
     parsed_value = None
-    if args.value is not None:
+    if value_provided:
         try:
             parsed_value = json.loads(args.value)
         except json.JSONDecodeError:
@@ -250,13 +253,13 @@ async def amain():
         if args.operation == "view":
             result = await tool._view_json(file_path, args.json_path, args.pretty_print)
         elif args.operation == "set":
-            if args.json_path is None or parsed_value is None:
+            if args.json_path is None or not value_provided:
                 raise ToolError("--json_path and --value are required for 'set' operation.")
             result = await tool._set_json_value(
                 file_path, args.json_path, parsed_value, args.pretty_print
             )
         elif args.operation == "add":
-            if args.json_path is None or parsed_value is None:
+            if args.json_path is None or not value_provided:
                 raise ToolError("--json_path and --value are required for 'add' operation.")
             result = await tool._add_json_value(
                 file_path, args.json_path, parsed_value, args.pretty_print
