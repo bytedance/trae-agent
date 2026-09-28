@@ -1,6 +1,6 @@
 # Legacy JSON Configuration Guide
 
-> **⚠️ DEPRECATED:** This JSON configuration format is deprecated and maintained for legacy compatibility only. For new installations, please use the [YAML configuration format](../README.md#configuration) instead.
+> **⚠️ DEPRECATED:** This JSON configuration format is deprecated and maintained for legacy compatibility only. For new installations, please use the [YAML configuration format](../README.md#yaml-configuration-recommended) instead.
 
 ## JSON Configuration Setup
 
@@ -16,7 +16,13 @@
    - Replace `"your_openai_api_key"` with your actual OpenAI API key
    - Replace `"your_anthropic_api_key"` with your actual Anthropic API key
    - Replace `"your_google_api_key"` with your actual Google API key
+   - Replace `"your_azure_api_key"` with your actual Azure API key
    - Replace `"your_azure_base_url"` with your actual Azure base URL
+   - Replace `"your_openrouter_api_key"` with your actual OpenRouter API key
+   - Replace `"your_doubao_api_key"` with your actual Doubao API key
+   - Replace `"your_doubao_base_url"` with your actual Doubao base URL
+   - Replace `"model_name"` with the model you want to call; the `azure`, `ollama` and `doubao`
+     providers all ship with it
    - Replace other placeholder URLs and API keys as needed
 
 **Note:** The `trae_config.json` file is ignored by git to prevent accidentally committing your API keys.
@@ -81,4 +87,4 @@ To migrate from JSON to YAML configuration:
    rm trae_config.json
    ```
 
-For detailed YAML configuration instructions, please refer to the main [README.md](../README.md#configuration).
+For detailed YAML configuration instructions, please refer to the main [README.md](../README.md#yaml-configuration-recommended).
