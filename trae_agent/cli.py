@@ -422,7 +422,7 @@ def run(
     default="trae_config.yaml",
     envvar="TRAE_CONFIG_FILE",
 )
-@click.option("--max-steps", help="Maximum number of execution steps", type=int, default=20)
+@click.option("--max-steps", help="Maximum number of execution steps", type=int)
 @click.option("--trajectory-file", "-t", help="Path to save trajectory file")
 @click.option(
     "--console-type",
