@@ -124,30 +124,38 @@ You should:
                 description="Estimated total thoughts needed. Minimum value is 1.",
                 required=True,
             ),
+            # ToolParameter.required defaults to True, but these five are conditional by the
+            # tool description ("If is_revision is true, ...") and _validate_thought_data()
+            # already accepts both an absent value and null for each of them.
             ToolParameter(
                 name="is_revision",
                 type="boolean",
                 description="Whether this revises previous thinking",
+                required=False,
             ),
             ToolParameter(
                 name="revises_thought",
                 type="integer",
                 description="Which thought is being reconsidered. Minimum value is 1.",
+                required=False,
             ),
             ToolParameter(
                 name="branch_from_thought",
                 type="integer",
                 description="Branching point thought number. Minimum value is 1.",
+                required=False,
             ),
             ToolParameter(
                 name="branch_id",
                 type="string",
                 description="Branch identifier",
+                required=False,
             ),
             ToolParameter(
                 name="needs_more_thoughts",
                 type="boolean",
                 description="If more thoughts are needed",
+                required=False,
             ),
         ]
 
