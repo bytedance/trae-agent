@@ -2,6 +2,8 @@
 
 This roadmap outlines the planned features and enhancements for Trae Agent. Our goal is to build a comprehensive, research-friendly AI agent platform that serves both developers and researchers in the rapidly evolving field of AI agents.
 
+A Key Feature marked `[shipped]` is already in the code, and the files that provide it are named so you can read, use or improve them. Every other item on this page is still planned.
+
 ## SDK Development
 
 ### Overview
@@ -52,11 +54,11 @@ Enhance trajectory recording and analysis capabilities by integrating with popul
 ## Tools and Model Context Protocol (MCP)
 
 ### Overview
-Expand the tool ecosystem to support more file formats and integrate with the Model Context Protocol (MCP) for enhanced interoperability and standardized tool interfaces.
+Expand the tool ecosystem to more structured file formats, and keep the Model Context Protocol (MCP) integration standardized and dependable.
 
 ### Key Features
-- **Structured File Support**: Enhanced support for Jupyter Notebooks, configuration files, and other structured formats
-- **MCP Integration**: Implement Model Context Protocol for standardized tool communication
+- **Structured File Support**: Enhanced support for Jupyter Notebooks, configuration files, and other structured formats. Still planned: no code under `trae_agent/` recognizes `.ipynb`.
+- **MCP Integration** `[shipped]`: Model Context Protocol support is in the repository, not on the roadmap. `mcp==1.12.2` is a declared dependency in `pyproject.toml`; `trae_agent/utils/mcp_client.py` speaks the protocol and `trae_agent/tools/mcp_tool.py` presents each MCP server's tools to the model as ordinary tools; `MCPServerConfig` and `allow_mcp_servers` in `trae_agent/utils/config.py` read the `mcp_servers` block from your configuration, and `TraeAgent.discover_mcp_tools` in `trae_agent/agent/trae_agent.py` registers the discovered tools when an agent starts. Usage is documented under "MCP Services (Optional)" in `README.md`, and `tests/tools/test_mcp_tool.py` and `tests/utils/test_mcp_client.py` cover it. If MCP behaviour is wrong, that is a bug worth filing against those files -- please do not open a pull request that adds a second MCP client.
 
 ### Benefits
 - **Enhanced Productivity**: Better support for Jupyter Notebooks enables seamless data science and research workflows
