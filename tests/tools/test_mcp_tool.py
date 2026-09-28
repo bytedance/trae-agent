@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
+import mcp
+
 from trae_agent.tools.base import ToolCallArguments, ToolExecResult
 from trae_agent.tools.mcp_tool import MCPTool
 
@@ -41,7 +43,7 @@ class TestMCPTool(unittest.IsolatedAsyncioTestCase):
     async def test_execute_success(self):
         mock_response = MagicMock()
         mock_response.isError = False
-        mock_response.content = [MagicMock(text="Execution successful")]
+        mock_response.content = [mcp.types.TextContent(type="text", text="Execution successful")]
         self.mock_client.call_tool = AsyncMock(return_value=mock_response)
 
         arguments = ToolCallArguments(arguments={"param1": "value", "param2": 123})
@@ -53,7 +55,7 @@ class TestMCPTool(unittest.IsolatedAsyncioTestCase):
     async def test_execute_failure(self):
         mock_response = MagicMock()
         mock_response.isError = True
-        mock_response.content = [MagicMock(text="Something went wrong")]
+        mock_response.content = [mcp.types.TextContent(type="text", text="Something went wrong")]
         self.mock_client.call_tool = AsyncMock(return_value=mock_response)
 
         arguments = ToolCallArguments(arguments={"param1": "value"})
