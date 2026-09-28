@@ -108,18 +108,26 @@ Create a `docker_env_config.json` file if you need custom environment variables:
 
 ## Usage
 
+Run the commands in this page **from the repository root**, not from `evaluation/`. The `cd evaluation` in
+Setup is only for `./setup.sh`. `run_evaluation.py` is a module of the `evaluation` package
+(`evaluation/__init__.py`) and starts with a relative import, so running it as a file path fails
+immediately with `ImportError: attempted relative import with no known parent package`. The form that
+starts is `python -m evaluation.run_evaluation`, used by every command below. The paths in those commands
+are relative to the root: `./trae_config.yaml` is the file created in step 2 above, and the harness is at
+`./evaluation/SWE-bench` because `setup.sh` clones into whichever directory you run it from.
+
 ### Basic Usage
-The evaluation script `run_evaluation.py` provides several modes of operation:
+The evaluation script `evaluation/run_evaluation.py` provides several modes of operation:
 
 ```bash
 # Run evaluation on all instances of SWE-bench_Verified
-python run_evaluation.py --dataset SWE-bench_Verified --working-dir ./trae-workspace
+python -m evaluation.run_evaluation --dataset SWE-bench_Verified --working-dir ./trae-workspace
 
 # Run evaluation on specific instances
-python run_evaluation.py --instance_ids django__django-12345 scikit-learn__scikit-learn-67890
+python -m evaluation.run_evaluation --instance_ids django__django-12345 scikit-learn__scikit-learn-67890
 
 # Run with custom configuration
-python run_evaluation.py --config-file trae_config.yaml --run-id experiment-1
+python -m evaluation.run_evaluation --config-file ./trae_config.yaml --run-id experiment-1
 ```
 
 ### Available Benchmarks and Datasets
@@ -148,24 +156,25 @@ The script supports three modes:
 
 ```bash
 # Only generate patches
-python run_evaluation.py --mode expr --dataset SWE-bench_Verified
+python -m evaluation.run_evaluation --mode expr --dataset SWE-bench_Verified
 
 # Only evaluate existing patches
-python run_evaluation.py --mode eval --benchmark-harness-path ./SWE-bench
+python -m evaluation.run_evaluation --mode eval --benchmark-harness-path ./evaluation/SWE-bench
 
 # End-to-end evaluation (default)
-python swebench.py --mode e2e --benchmark-harness-path ./SWE-bench
+python -m evaluation.run_evaluation --mode e2e --benchmark-harness-path ./evaluation/SWE-bench
 ```
 
 ### Full Command Reference
 
 ```bash
-python run_evaluation.py \
+python -m evaluation.run_evaluation \
   --benchmark SWE-bench \
   --dataset SWE-bench_Verified \
+  --working-dir ./trae-workspace \
   --config-file ./trae_config.yaml \
   --run-id experiment-1 \
-  --benchmark-harness-path ./SWE-bench \
+  --benchmark-harness-path ./evaluation/SWE-bench \
   --docker-env-config ./docker_env_config.json \
   --mode e2e \
   --max_workers 4 \
@@ -175,6 +184,8 @@ python run_evaluation.py \
 **Parameters:**
 - `--benchmark`:  Benchmark to use
 - `--dataset`:  Dataset to use
+- `--working-dir`: Workspace directory: holds the copied `trae_config.yaml` and the build artifacts
+  (`trae-agent.tar`, `uv.tar`, `uv_shared.tar`) listed under Output Files
 - `--config-file`: Trae Agent configuration file
 - `--run-id`: Run ID for benchmark evaluation
 - `--benchmark-harness-path`: Path to SWE-bench harness (required for evaluation)
