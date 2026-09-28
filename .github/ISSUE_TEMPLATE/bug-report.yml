@@ -1,7 +1,7 @@
 name: Bug Report
 description: File a bug report to help us improve Trae Agent
 title: "[Bug]: "
-labels: ["type/bug", "status/need_triage"]
+labels: ["type/bug", "status/need-triage"]
 body:
   - type: markdown
     attributes:
