@@ -10,6 +10,63 @@ class TestCli(unittest.TestCase):
     def setUp(self):
         self.runner = CliRunner()
 
+    def _resolved_max_steps(self, command_args):
+        with self.runner.isolated_filesystem():
+            with open("test_config.yaml", "w") as config_file:
+                config_file.write(
+                    """agents:
+  trae_agent:
+    enable_lakeview: false
+    model: trae_agent_model
+    max_steps: 50
+    tools: []
+model_providers:
+  openai:
+    provider: openai
+    api_key: placeholder
+models:
+  trae_agent_model:
+    model_provider: openai
+    model: gpt-4o
+    max_tokens: 128
+    temperature: 0.0
+    top_p: 1
+    top_k: 0
+    max_retries: 1
+    parallel_tool_calls: true
+"""
+                )
+
+            with (
+                patch("trae_agent.cli.Agent") as mock_agent,
+                patch("trae_agent.cli.asyncio.run") as mock_asyncio_run,
+                patch("trae_agent.cli.ConsoleFactory.create_console", return_value=MagicMock()),
+            ):
+                result = self.runner.invoke(
+                    cli, [*command_args, "--config-file", "test_config.yaml"]
+                )
+                if command_args[0] == "interactive" and mock_asyncio_run.called:
+                    mock_asyncio_run.call_args.args[0].close()
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            return mock_agent.call_args.args[1].trae_agent.max_steps
+
+    def test_interactive_uses_configured_max_steps_when_option_is_omitted(self):
+        resolved_max_steps = self._resolved_max_steps(["interactive"])
+
+        self.assertEqual(resolved_max_steps, 50)
+        self.assertIsInstance(resolved_max_steps, int)
+        max_steps_option = next(
+            option for option in cli.commands["interactive"].params if option.name == "max_steps"
+        )
+        self.assertIsNone(max_steps_option.default)
+
+    def test_interactive_cli_max_steps_overrides_config(self):
+        self.assertEqual(self._resolved_max_steps(["interactive", "--max-steps", "70"]), 70)
+
+    def test_run_uses_configured_max_steps(self):
+        self.assertEqual(self._resolved_max_steps(["run", "test task"]), 50)
+
     @patch("trae_agent.cli.resolve_config_file", return_value="test_config.yaml")
     @patch("trae_agent.cli.Agent")
     @patch("trae_agent.cli.asyncio.run")
