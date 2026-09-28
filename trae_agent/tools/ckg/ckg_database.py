@@ -471,6 +471,17 @@ class CKGDatabase:
                 if parent_class:
                     method_entry.parent_class = parent_class.name
                 self._insert_entry(method_entry)
+        elif root_node.type == "function_declaration":
+            function_name_node = root_node.child_by_field_name("name")
+            if function_name_node:
+                function_entry = FunctionEntry(
+                    name=function_name_node.text.decode(),
+                    file_path=file_path,
+                    body=root_node.text.decode(),
+                    start_line=root_node.start_point[0] + 1,
+                    end_line=root_node.end_point[0] + 1,
+                )
+                self._insert_entry(function_entry)
 
         if len(root_node.children) != 0:
             for child in root_node.children:
@@ -526,6 +537,17 @@ class CKGDatabase:
                 if parent_class:
                     method_entry.parent_class = parent_class.name
                 self._insert_entry(method_entry)
+        elif root_node.type == "function_declaration":
+            function_name_node = root_node.child_by_field_name("name")
+            if function_name_node:
+                function_entry = FunctionEntry(
+                    name=function_name_node.text.decode(),
+                    file_path=file_path,
+                    body=root_node.text.decode(),
+                    start_line=root_node.start_point[0] + 1,
+                    end_line=root_node.end_point[0] + 1,
+                )
+                self._insert_entry(function_entry)
 
         if len(root_node.children) != 0:
             for child in root_node.children:
