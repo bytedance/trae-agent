@@ -4,11 +4,10 @@
 """OpenAI API client wrapper with tool integration."""
 
 import json
-from typing import override
+from typing import cast, override
 
 import openai
 from openai.types.responses import (
-    EasyInputMessageParam,
     FunctionToolParam,
     Response,
     ResponseFunctionToolCallParam,
@@ -111,17 +110,6 @@ class OpenAIClient(BaseLLMClient):
                         id=output_block.id,
                     )
                 )
-                tool_call_param = ResponseFunctionToolCallParam(
-                    arguments=output_block.arguments,
-                    call_id=output_block.call_id,
-                    name=output_block.name,
-                    type="function_call",
-                )
-                if output_block.status:
-                    tool_call_param["status"] = output_block.status
-                if output_block.id:
-                    tool_call_param["id"] = output_block.id
-                self.message_history.append(tool_call_param)
             elif output_block.type == "message":
                 content = "".join(
                     content_block.text
@@ -129,10 +117,14 @@ class OpenAIClient(BaseLLMClient):
                     if content_block.type == "output_text"
                 )
 
-        if content != "":
-            self.message_history.append(
-                EasyInputMessageParam(content=content, role="assistant", type="message")
+        # Preserve reasoning items and their order alongside messages and tool calls.
+        # Responses output items can be replayed as input on subsequent requests.
+        self.message_history.extend(
+            cast(
+                ResponseInputParam,
+                [item.model_dump(exclude_unset=True) for item in response.output],
             )
+        )
 
         usage = None
         if response.usage:
