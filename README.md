@@ -76,6 +76,22 @@ models:
     model: claude-sonnet-4-20250514
     max_tokens: 4096
     temperature: 0.5
+    top_p: 1
+    top_k: 0
+    max_retries: 10
+    parallel_tool_calls: true
+  lakeview_model:
+    model_provider: anthropic
+    model: claude-sonnet-4-20250514
+    max_tokens: 4096
+    temperature: 0.5
+    top_p: 1
+    top_k: 0
+    max_retries: 10
+    parallel_tool_calls: true
+
+lakeview:
+  model: lakeview_model  # the model configuration name for Lakeview
 ```
 
 **Note:** The `trae_config.yaml` file is ignored by git to protect your API keys.
