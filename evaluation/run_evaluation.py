@@ -70,8 +70,7 @@ class BenchmarkEvaluation:
         self.max_workers = max_workers
         if instance_ids is None:
             instance_ids = [instance["instance_id"] for instance in self.dataset]
-        else:
-            self.instance_ids = instance_ids
+        self.instance_ids = instance_ids
 
         if docker_env_config != "":
             with open(docker_env_config, "r") as f:
@@ -175,7 +174,7 @@ class BenchmarkEvaluation:
             "curl -LsSf https://astral.sh/uv/install.sh | sh",
             "rm -rf /trae-workspace/trae-agent && mkdir /trae-workspace/trae-agent",
             "cp -r -t /trae-workspace/trae-agent/ /trae-src/trae_agent /trae-src/.python-version /trae-src/pyproject.toml /trae-src/uv.lock /trae-src/README.md",
-            "cd /trae-workspace/trae-agent && source $HOME/.local/bin/env && uv sync",
+            "cd /trae-workspace/trae-agent && source $HOME/.local/bin/env && uv sync --extra evaluation",
         ]
 
         for command in tqdm(

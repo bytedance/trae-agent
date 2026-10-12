@@ -88,10 +88,10 @@ def _write_multi_problem_statement(instance_dir: Path, resolved_issues: list[dic
 
 
 def multi_swebench_evaluate_harness_before(task_results_dir, dataset_name, max_workers):
-    task_results_dir = Path(task_results_dir)
+    task_results_dir = Path(task_results_dir).resolve()
     pred_json_path = task_results_dir / "predictions.json"
     pred_jsonl_path = task_results_dir / "predictions.jsonl"
-    dataset_file_path = f"{dataset_name.lower().replace('-', '_')}.jsonl"
+    dataset_file_path = Path(f"{dataset_name.lower().replace('-', '_')}.jsonl").resolve()
 
     instance_map = {}
     with open(dataset_file_path, "r", encoding="utf-8") as f:
@@ -120,10 +120,8 @@ def multi_swebench_evaluate_harness_before(task_results_dir, dataset_name, max_w
             }
             f.write(json.dumps(new_item, ensure_ascii=False) + "\n")
 
-    base_dir = Path(__file__).resolve().parent
-    task_results_dir = base_dir / task_results_dir
-    patch_file_path = str((base_dir / pred_jsonl_path).resolve())
-    dataset_file_path = str((base_dir / dataset_file_path).resolve())
+    # The harness runs in its own directory, so serialize absolute input paths.
+    patch_file_path = str(pred_jsonl_path)
 
     output_dir = (task_results_dir / "dataset").resolve()
     repo_dir = (task_results_dir / "repos").resolve()
@@ -144,7 +142,7 @@ def multi_swebench_evaluate_harness_before(task_results_dir, dataset_name, max_w
         "mode": "evaluation",
         "workdir": workdir,
         "patch_files": [patch_file_path],
-        "dataset_files": [dataset_file_path],
+        "dataset_files": [str(dataset_file_path)],
         "force_build": False,
         "output_dir": output_dir,
         "specifics": [],
@@ -265,10 +263,7 @@ BENCHMARK_CONFIG: dict[str, BenchmarkConfig] = {
             "-m",
             "multi_swe_bench.harness.run_evaluation",
             "--config",
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                task_results_dir / "evaluate_config.json",
-            ),
+            (Path(task_results_dir) / "evaluate_config.json").resolve().as_posix(),
         ],
         evaluate_harness_before=multi_swebench_evaluate_harness_before,
         evaluate_harness_after=multi_swebench_evaluate_harness_after,
