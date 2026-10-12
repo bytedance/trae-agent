@@ -27,25 +27,31 @@ Before running the evaluation, ensure you have:
 
 ## Setup Instructions
 
-Make sure installing extra dependencies for evaluation and running scripts in the `evaluation` directory.
+Run the commands below from the repository root. Install the evaluation dependencies first:
 
 ```bash
 uv sync --extra evaluation
-cd evaluation
 ```
 
 ### 1. Clone and Setup Benchmark Harness
 
-The `setup.sh` script automates the setup of benchmark harness:
+The `evaluation/setup.sh` script installs the selected benchmark harness. Run it in a
+subshell so it clones into `evaluation/` and leaves your shell at the repository root:
 
 ```bash
-chmod +x setup.sh
-./setup.sh [swe_bench|swe_bench_live|multi_swe_bench]
+(cd evaluation && bash setup.sh swe_bench)
 ```
 
 - `swe_bench`: Setup for SWE-Bench
 - `swe_bench_live`: Setup for SWE-Bench-Live
 - `multi_swe_bench`: Setup for Multi-SWE-Bench
+
+Replace `swe_bench` in the command with the desired option. The corresponding
+`--benchmark-harness-path` is `./evaluation/SWE-bench`,
+`./evaluation/SWE-bench-Live`, or `./evaluation/multi-swe-bench`.
+These paths are relative to the repository root because the setup script clones
+into its current working directory. The setup and harness commands require a
+Bash/POSIX environment; on Windows, use WSL with Docker access.
 
 This script:
 - Clones the benchmark repository
@@ -55,7 +61,7 @@ This script:
 
 ### 2. Configure Trae Agent
 
-Ensure your `trae_config.yaml` file is properly configured with valid API keys:
+Create `trae_config.yaml` in the repository root and configure it with valid API keys:
 
 ```
 agents:
@@ -91,7 +97,7 @@ models:
 
 ### 3. Optional: Docker Environment Configuration
 
-Create a `docker_env_config.json` file if you need custom environment variables:
+Create `docker_env_config.json` in the repository root if you need custom environment variables:
 
 ```json
 {
@@ -109,17 +115,26 @@ Create a `docker_env_config.json` file if you need custom environment variables:
 ## Usage
 
 ### Basic Usage
-The evaluation script `run_evaluation.py` provides several modes of operation:
+Run `evaluation.run_evaluation` as a package module from the repository root.
+The module form is required for its relative imports; `uv run` uses the project
+environment containing the evaluation dependencies. Evaluation (`eval` or the
+default `e2e` mode) also needs the matching benchmark harness path.
 
 ```bash
 # Run evaluation on all instances of SWE-bench_Verified
-python run_evaluation.py --dataset SWE-bench_Verified --working-dir ./trae-workspace
+uv run python -m evaluation.run_evaluation \
+  --dataset SWE-bench_Verified --working-dir ./trae-workspace \
+  --benchmark-harness-path ./evaluation/SWE-bench
 
-# Run evaluation on specific instances
-python run_evaluation.py --instance_ids django__django-12345 scikit-learn__scikit-learn-67890
+# Run evaluation on a specific instance (choose IDs from the selected dataset)
+uv run python -m evaluation.run_evaluation \
+  --instance_ids astropy__astropy-13453 \
+  --benchmark-harness-path ./evaluation/SWE-bench
 
 # Run with custom configuration
-python run_evaluation.py --config-file trae_config.yaml --run-id experiment-1
+uv run python -m evaluation.run_evaluation \
+  --config-file ./trae_config.yaml --run-id experiment-1 \
+  --benchmark-harness-path ./evaluation/SWE-bench
 ```
 
 ### Available Benchmarks and Datasets
@@ -135,8 +150,8 @@ python run_evaluation.py --config-file trae_config.yaml --run-id experiment-1
 - **SWE-bench-Live/full**
 
 **Multi-SWE-bench**:
-- **Multi-SWE-bench-flash** (Please download `multi_swe_bench_flash.jsonl` from https://huggingface.co/datasets/ByteDance-Seed/Multi-SWE-bench-flash/tree/main and place it in the  `evaluation` directory.)
-- **Multi-SWE-bench_mini** (Please download `multi_swe_bench_mini.jsonl` from https://huggingface.co/datasets/ByteDance-Seed/Multi-SWE-bench_mini/tree/main and place it in the  `evaluation` directory.)
+- **Multi-SWE-bench-flash** (Please download `multi_swe_bench_flash.jsonl` from https://huggingface.co/datasets/ByteDance-Seed/Multi-SWE-bench-flash/tree/main and place it in the repository root.)
+- **Multi-SWE-bench_mini** (Please download `multi_swe_bench_mini.jsonl` from https://huggingface.co/datasets/ByteDance-Seed/Multi-SWE-bench_mini/tree/main and place it in the repository root.)
 
 ### Evaluation Modes
 
@@ -148,24 +163,25 @@ The script supports three modes:
 
 ```bash
 # Only generate patches
-python run_evaluation.py --mode expr --dataset SWE-bench_Verified
+uv run python -m evaluation.run_evaluation --mode expr --dataset SWE-bench_Verified
 
 # Only evaluate existing patches
-python run_evaluation.py --mode eval --benchmark-harness-path ./SWE-bench
+uv run python -m evaluation.run_evaluation --mode eval --benchmark-harness-path ./evaluation/SWE-bench
 
 # End-to-end evaluation (default)
-python swebench.py --mode e2e --benchmark-harness-path ./SWE-bench
+uv run python -m evaluation.run_evaluation --mode e2e --benchmark-harness-path ./evaluation/SWE-bench
 ```
 
 ### Full Command Reference
 
 ```bash
-python run_evaluation.py \
+uv run python -m evaluation.run_evaluation \
   --benchmark SWE-bench \
   --dataset SWE-bench_Verified \
   --config-file ./trae_config.yaml \
   --run-id experiment-1 \
-  --benchmark-harness-path ./SWE-bench \
+  --benchmark-harness-path ./evaluation/SWE-bench \
+  --working-dir ./trae-workspace \
   --docker-env-config ./docker_env_config.json \
   --mode e2e \
   --max_workers 4 \
@@ -175,6 +191,7 @@ python run_evaluation.py \
 **Parameters:**
 - `--benchmark`:  Benchmark to use
 - `--dataset`:  Dataset to use
+- `--working-dir`: Workspace directory for configuration and build artifacts (default: `./trae-workspace`)
 - `--config-file`: Trae Agent configuration file
 - `--run-id`: Run ID for benchmark evaluation
 - `--benchmark-harness-path`: Path to SWE-bench harness (required for evaluation)
@@ -217,7 +234,8 @@ Using benchmark harness:
 
 ### Output Files
 
-The evaluation creates several files in the working directory:
+From the repository root, evaluation writes results under `results/` and places
+configuration and build artifacts in `--working-dir` (default: `./trae-workspace`):
 
 ```
 results/{benchmark}_{dataset}_{run_id}/
