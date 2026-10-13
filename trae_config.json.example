@@ -78,6 +78,16 @@
       "temperature": 0.5,
       "top_p": 1,
       "max_retries": 20
+    },
+    "cheaperinference": {
+      "api_key": "your_cheaperinference_api_key",
+      "base_url": "https://api.cheaperinference.com/v1",
+      "model": "gpt-5.4-mini",
+      "max_tokens": 4096,
+      "temperature": 0.5,
+      "top_p": 1,
+      "top_k": 0,
+      "max_retries": 10
     }
   },
   "lakeview_config": {
