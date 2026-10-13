@@ -17,7 +17,7 @@ For technical details please refer to [our technical report](https://arxiv.org/a
 ## ✨ Features
 
 - 🌊 **Lakeview**: Provides short and concise summarisation for agent steps
-- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure, OpenRouter, Ollama and Google Gemini APIs
+- 🤖 **Multi-LLM Support**: Works with OpenAI, Anthropic, Doubao, Azure, OpenRouter, Ollama, Google Gemini and Cheaper Inference APIs
 - 🛠️ **Rich Tool Ecosystem**: File editing, bash execution, sequential thinking, and more
 - 🎯 **Interactive Mode**: Conversational interface for iterative development
 - 📊 **Trajectory Recording**: Detailed logging of all agent actions for debugging and analysis
@@ -106,6 +106,8 @@ export OPENROUTER_API_KEY="your-openrouter-api-key"
 export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
 export DOUBAO_API_KEY="your-doubao-api-key"
 export DOUBAO_BASE_URL="https://ark.cn-beijing.volces.com/api/v3/"
+export CHEAPERINFERENCE_API_KEY="your-cheaperinference-api-key"
+export CHEAPERINFERENCE_BASE_URL="https://api.cheaperinference.com/v1"
 ```
 
 ### MCP Services (Optional)
@@ -160,6 +162,9 @@ trae-cli run "Refactor the database module" --provider doubao --model doubao-see
 
 # Ollama (local models)
 trae-cli run "Comment this code" --provider ollama --model qwen3
+
+# Cheaper Inference (OpenAI-compatible gateway)
+trae-cli run "Write unit tests" --provider cheaperinference --model gpt-5.4-mini
 ```
 
 ### Advanced Options
