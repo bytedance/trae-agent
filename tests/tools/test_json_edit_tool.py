@@ -199,6 +199,36 @@ class TestJSONEditTool(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.error_code, -1)
             self.assertIn("File does not exist", result.error)
 
+    async def test_pretty_print_null_defaults_true(self):
+        """OpenAI strict schemas may send pretty_print=null; treat as default True."""
+        self.mock_file_read()
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "operation": "view",
+                    "file_path": self.test_file_path,
+                    "pretty_print": None,
+                }
+            )
+        )
+        self.assertEqual(result.error_code, 0)
+        self.assertIsNone(result.error)
+        self.assertIn("\n", result.output or "")
+
+    async def test_pretty_print_false_still_honored(self):
+        self.mock_file_read()
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "operation": "view",
+                    "file_path": self.test_file_path,
+                    "pretty_print": False,
+                }
+            )
+        )
+        self.assertEqual(result.error_code, 0)
+        self.assertNotIn("\n  ", result.output or "")
+
 
 if __name__ == "__main__":
     unittest.main()
