@@ -3,6 +3,8 @@
 
 """Azure client wrapper with tool integrations"""
 
+import os
+
 import openai
 
 from trae_agent.utils.config import ModelConfig
@@ -22,9 +24,22 @@ class AzureProvider(ProviderConfig):
         if not base_url:
             raise ValueError("base_url is required for AzureClient")
 
+        # Prefer config, then AZURE_API_VERSION (matches <PROVIDER>_API_KEY / _BASE_URL),
+        # then OPENAI_API_VERSION (SDK fallback). Treat "" as missing so we do not forward
+        # an empty api-version that httpx would drop from the request URL.
+        resolved_api_version = (
+            api_version or os.getenv("AZURE_API_VERSION") or os.getenv("OPENAI_API_VERSION")
+        )
+        if not resolved_api_version:
+            raise ValueError(
+                "api_version is required for AzureClient. Set `api_version` in the model "
+                "provider configuration (for example `api_version: 2024-03-01-preview`), "
+                "or export AZURE_API_VERSION."
+            )
+
         return openai.AzureOpenAI(
             azure_endpoint=base_url,
-            api_version=api_version,
+            api_version=resolved_api_version,
             api_key=api_key,
         )
 
