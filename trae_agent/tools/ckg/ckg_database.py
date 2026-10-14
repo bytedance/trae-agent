@@ -543,7 +543,8 @@ class CKGDatabase:
                 and not file.name.startswith(".")
                 and "/." not in file.absolute().as_posix()
             ):
-                extension = file.suffix
+                # Path.suffix keeps on-disk case; map keys are lowercase
+                extension = file.suffix.lower()
                 # ignore files with unknown extensions
                 if extension not in extension_to_language:
                     continue
