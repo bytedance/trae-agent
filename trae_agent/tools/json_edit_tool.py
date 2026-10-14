@@ -114,7 +114,10 @@ JSONPath syntax supported:
             value = arguments.get("value")
 
             pretty_print_arg = arguments.get("pretty_print", True)
-            if not isinstance(pretty_print_arg, bool):
+            # OpenAI strict schemas make optional booleans nullable; treat null as default.
+            if pretty_print_arg is None:
+                pretty_print_arg = True
+            elif not isinstance(pretty_print_arg, bool):
                 return ToolExecResult(
                     error="pretty_print parameter must be a boolean.", error_code=-1
                 )
