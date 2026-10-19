@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 from typing import Any
 
 from trae_agent.agent.docker_manager import DockerManager
@@ -117,12 +118,11 @@ class DockerToolExecutor:
                     if key == "command" or value is None:
                         continue
                     if isinstance(value, list):
-                        str_value = " ".join(map(str, value))
-                        cmd_parts.append(f"--{key} {str_value}")
+                        cmd_parts.extend([f"--{key}", *map(str, value)])
                     else:
-                        cmd_parts.append(f"--{key} '{str(value)}'")
+                        cmd_parts.extend([f"--{key}", str(value)])
 
-                command_to_run = " ".join(cmd_parts)
+                command_to_run = shlex.join(cmd_parts)
             # --- Rule 3: Handling json_edit_tool ---
             elif tool_call.name == "json_edit_tool":
                 executable_path = f"{self._docker_manager.CONTAINER_TOOLS_PATH}/json_edit_tool"
@@ -133,13 +133,13 @@ class DockerToolExecutor:
                     # --- Serialize the 'value' parameter into a JSON string ---
                     if key == "value":
                         json_string_value = json.dumps(value)
-                        cmd_parts.append(f"--{key} '{json_string_value}'")
+                        cmd_parts.extend([f"--{key}", json_string_value])
                     elif isinstance(value, list):
                         # In theory, json edit_tool does not have a list parameter, but it should be kept as a precautionary measure
-                        cmd_parts.append(f"--{key} {' '.join(map(str, value))}")
+                        cmd_parts.extend([f"--{key}", *map(str, value)])
                     else:
-                        cmd_parts.append(f"--{key} '{str(value)}'")
-                command_to_run = " ".join(cmd_parts)
+                        cmd_parts.extend([f"--{key}", str(value)])
+                command_to_run = shlex.join(cmd_parts)
             else:
                 raise NotImplementedError(
                     f"The logic for Docker execution of tool '{tool_call.name}' is not implemented."
