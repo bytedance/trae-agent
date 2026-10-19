@@ -49,10 +49,11 @@ class MCPTool(Tool):
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
         try:
             output = await self.client.call_tool(self.get_name(), arguments)
+            text = "\n".join(block.text for block in output.content)
             if output.isError:
-                return ToolExecResult(output=None, error=output.content[0].text)
+                return ToolExecResult(output=None, error=text)
             else:
-                return ToolExecResult(output=output.content[0].text)
+                return ToolExecResult(output=text)
 
         except Exception as e:
             return ToolExecResult(error=f"Error running mcp tool: {e}", error_code=-1)
