@@ -4,13 +4,80 @@
 """Tests for JSONEditTool."""
 
 import json
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import mock_open, patch
 
+import pytest
+
 from trae_agent.tools.base import ToolCallArguments
 from trae_agent.tools.json_edit_tool import JSONEditTool
+
+
+@pytest.mark.parametrize(
+    ("original", "json_path", "expected"),
+    [
+        ({"remove": 1, "keep": 2}, "$.remove", {"keep": 2}),
+        ([1, 2, 3], "$[0]", [2, 3]),
+        ({"items": [1, 2, 3]}, "$.items[0]", {"items": [2, 3]}),
+        ({"items": [1, 2, 3]}, "$.items[*]", {"items": []}),
+    ],
+)
+def test_cli_removes_selected_elements_once(tmp_path, original, json_path, expected):
+    path = tmp_path / "data.json"
+    path.write_text(json.dumps(original), encoding="utf-8")
+    script = Path(__file__).resolve().parents[2] / "trae_agent/tools/json_edit_tool_cli.py"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            str(script),
+            "--operation",
+            "remove",
+            "--file_path",
+            str(path),
+            "--json_path",
+            json_path,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(path.read_text(encoding="utf-8")) == expected
+
+
+def test_cli_rejects_removing_document_root_without_writing(tmp_path):
+    path = tmp_path / "data.json"
+    original = '{"keep": 1}\n'
+    path.write_text(original, encoding="utf-8")
+    script = Path(__file__).resolve().parents[2] / "trae_agent/tools/json_edit_tool_cli.py"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            str(script),
+            "--operation",
+            "remove",
+            "--file_path",
+            str(path),
+            "--json_path",
+            "$",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 1
+    assert "document root" in result.stderr
+    assert path.read_text(encoding="utf-8") == original
 
 
 class TestJSONEditTool(unittest.IsolatedAsyncioTestCase):
