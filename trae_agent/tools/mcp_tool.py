@@ -21,7 +21,7 @@ class MCPTool(Tool):
 
     @override
     def get_description(self) -> str:
-        return self.tool.description
+        return self.tool.description or ""
 
     @override
     def get_parameters(self) -> list[ToolParameter]:
@@ -37,7 +37,7 @@ class MCPTool(Tool):
                     name=name,
                     type=prop["type"],
                     items=prop.get("items", None),
-                    description=prop["description"],
+                    description=prop.get("description", ""),
                     required=name in required,
                 )
                 parameters.append(tool_para)
