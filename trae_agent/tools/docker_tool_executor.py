@@ -1,5 +1,6 @@
 import json
 import os
+import posixpath
 from typing import Any
 
 from trae_agent.agent.docker_manager import DockerManager
@@ -33,17 +34,21 @@ class DockerToolExecutor:
         self._container_workspace_dir = container_workspace_dir
 
     def _translate_path(self, host_path: str) -> str:
-        """Robust path translation function: Translate the host path into the corresponding path within the container."""
+        """Translate host workspace paths to POSIX paths in the Linux container."""
         if not self._host_workspace_dir:
             return host_path  # 如果没有配置主机工作区，则不翻译
         abs_host_path = os.path.abspath(host_path)
-        if (
-            os.path.commonpath([abs_host_path, self._host_workspace_dir])
-            == self._host_workspace_dir
-        ):
+        try:
+            common_path = os.path.commonpath([abs_host_path, self._host_workspace_dir])
+        except ValueError:
+            # Different Windows drives cannot be inside the same workspace.
+            return host_path
+        if os.path.normcase(common_path) == os.path.normcase(self._host_workspace_dir):
             relative_path = os.path.relpath(abs_host_path, self._host_workspace_dir)
-            container_path = os.path.join(self._container_workspace_dir, relative_path)
-            return os.path.normpath(container_path)
+            container_path = posixpath.join(
+                self._container_workspace_dir, relative_path.replace(os.sep, "/")
+            )
+            return posixpath.normpath(container_path)
         return host_path
 
     async def close_tools(self):
@@ -83,8 +88,8 @@ class DockerToolExecutor:
             # --- Parameter preprocessing and path translation ---
             processed_args: dict[str, Any] = {}
             for key, value in tool_call.arguments.items():
-                # Assuming that all parameters named 'path' are paths that need to be translated
-                if key == "path" and isinstance(value, str):
+                # Both edit tool schemas carry host paths, under different names.
+                if key in {"path", "file_path"} and isinstance(value, str):
                     translated_path = self._translate_path(value)
                     processed_args[key] = translated_path
                 else:
