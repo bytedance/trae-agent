@@ -5,6 +5,8 @@
 
 import json
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import mock_open, patch
 
 from trae_agent.tools.base import ToolCallArguments
@@ -22,6 +24,42 @@ class TestJSONEditTool(unittest.IsolatedAsyncioTestCase):
             "users": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}],
             "config": {"enabled": True},
         }
+
+    async def test_remove_root_children(self):
+        cases = [
+            ({"remove": 1, "keep": 2}, "$.remove", {"keep": 2}),
+            ({"a": 1, "b": 2}, "$.*", {}),
+            (["first", "second", "third"], "$[0]", ["second", "third"]),
+            ([1, 2, 3], "$[*]", []),
+            ([1, 2, 3, 4], "$[1:3]", [1, 4]),
+            ({"a.b": 1, "keep": 2}, "$['a.b']", {"keep": 2}),
+            ({"items": [{"x": 1}, {"x": 2}]}, "$.items[*].x", {"items": [{}, {}]}),
+        ]
+        for original, json_path, expected in cases:
+            with self.subTest(json_path=json_path), TemporaryDirectory() as directory:
+                path = Path(directory) / "data.json"
+                path.write_text(json.dumps(original), encoding="utf-8")
+
+                result = await self.tool.execute(
+                    {"operation": "remove", "file_path": str(path), "json_path": json_path}
+                )
+
+                self.assertEqual(result.error_code, 0, result.error)
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8")), expected)
+
+    async def test_remove_document_root_preserves_file(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "data.json"
+            original = '{"keep": 1}\n'
+            path.write_text(original, encoding="utf-8")
+
+            result = await self.tool.execute(
+                {"operation": "remove", "file_path": str(path), "json_path": "$"}
+            )
+
+            self.assertEqual(result.error_code, -1)
+            self.assertIn("document root", result.error)
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def mock_file_read(self, json_data=None):
         """Helper to mock file reading operations."""
