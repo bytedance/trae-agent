@@ -162,6 +162,16 @@ You should:
 
     def _validate_thought_data(self, arguments: ToolCallArguments) -> ThoughtData:
         """Validate the input arguments and return a ThoughtData object."""
+        # bool is an int subclass in Python, but not a JSON integer.
+        for field in ("thought_number", "total_thoughts", "revises_thought", "branch_from_thought"):
+            if isinstance(arguments.get(field), bool):
+                raise ValueError(f"{field} must be an integer, not a boolean")
+
+        for field in ("is_revision", "needs_more_thoughts"):
+            value = arguments.get(field)
+            if value is not None and not isinstance(value, bool):
+                raise ValueError(f"{field} must be a boolean")
+
         if "thought" not in arguments or not isinstance(arguments["thought"], str):
             raise ValueError("Invalid thought: must be a string")
 
