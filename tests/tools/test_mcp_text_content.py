@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from mcp.types import CallToolResult, TextContent, Tool
+from mcp.types import CallToolResult, ImageContent, TextContent, Tool
 
 from trae_agent.tools.mcp_tool import MCPTool
 
@@ -33,3 +33,19 @@ async def test_error_preserves_all_text_blocks():
     result = await tool.execute({})
     assert result.output is None
     assert result.error == "failure\ndetails"
+
+
+@pytest.mark.asyncio
+async def test_nontext_blocks_do_not_hide_text_results():
+    client = AsyncMock()
+    client.call_tool.return_value = CallToolResult(
+        content=[
+            TextContent(type="text", text="before"),
+            ImageContent(type="image", data="aGVsbG8=", mimeType="image/png"),
+            TextContent(type="text", text="after"),
+        ]
+    )
+    tool = MCPTool(client, Tool(name="example", inputSchema={"type": "object"}))
+    result = await tool.execute({})
+    assert result.error is None
+    assert result.output == "before\nafter"

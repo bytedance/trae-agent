@@ -49,7 +49,7 @@ class MCPTool(Tool):
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
         try:
             output = await self.client.call_tool(self.get_name(), arguments)
-            text = "\n".join(block.text for block in output.content)
+            text = "\n".join(block.text for block in output.content if hasattr(block, "text"))
             if output.isError:
                 return ToolExecResult(output=None, error=text)
             else:
