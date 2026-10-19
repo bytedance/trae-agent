@@ -182,22 +182,23 @@ class JSONEditTool(Tool):
                 error=f"No matches found for JSONPath: {json_path_str}", error_code=-1
             )
         match_count = len(matches)
-        jsonpath_expr.filter(
-            lambda v: True, data
-        )  # This is a conceptual way to remove, actual removal is more complex
-        # A more robust remove logic:
         for match in reversed(matches):
-            parent_path = match.full_path.left
+            if match.context is None:
+                return ToolExecResult(error="Cannot remove the JSON document root", error_code=-1)
             target = match.path
-            for parent_match in parent_path.find(data):
-                parent_obj = parent_match.value
-                try:
-                    if isinstance(target, Fields):
+            parent_obj = match.context.value
+            try:
+                if isinstance(target, Fields):
+                    if isinstance(parent_obj, dict) and target.fields[0] in parent_obj:
                         del parent_obj[target.fields[0]]
-                    elif isinstance(target, Index):
-                        parent_obj.pop(target.index)
-                except (KeyError, IndexError):
-                    pass
+                elif (
+                    isinstance(target, Index)
+                    and isinstance(parent_obj, list)
+                    and -len(parent_obj) <= target.index < len(parent_obj)
+                ):
+                    parent_obj.pop(target.index)
+            except (KeyError, IndexError):
+                pass
         await self._save_json_file(file_path, data, pretty_print)
         return ToolExecResult(
             output=f"Successfully removed {match_count} element(s) at JSONPath '{json_path_str}'"
