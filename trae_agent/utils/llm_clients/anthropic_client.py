@@ -3,7 +3,6 @@
 
 """Anthropic API client wrapper with tool integration."""
 
-import json
 from typing import override
 
 import anthropic
@@ -193,7 +192,7 @@ class AnthropicClient(BaseLLMClient):
             type="tool_use",
             id=tool_call.call_id,
             name=tool_call.name,
-            input=json.dumps(tool_call.arguments),
+            input=tool_call.arguments,
         )
 
     def parse_tool_call_result(
