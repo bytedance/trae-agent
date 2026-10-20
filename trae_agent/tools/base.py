@@ -189,7 +189,10 @@ class ToolExecutor:
     async def close_tools(self):
         """Ensure all tool resources are properly released."""
         tasks = [tool.close() for tool in self._tools if hasattr(tool, "close")]
-        res = await asyncio.gather(*tasks)
+        res = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in res:
+            if isinstance(result, BaseException):
+                raise result
         return res
 
     def _normalize_name(self, name: str) -> str:
