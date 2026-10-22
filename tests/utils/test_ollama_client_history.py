@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
+from trae_agent.tools.base import ToolCall, ToolResult
 from trae_agent.utils.config import ModelConfig, ModelProvider
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage
 from trae_agent.utils.llm_clients.ollama_client import OllamaClient
@@ -92,3 +93,57 @@ async def test_chat_does_not_append_openai_function_call_records() -> None:
 
     for record in client.message_history:
         assert "type" not in record, f"Unexpected typed record: {record!r}"
+
+
+def test_parse_messages_emits_messages_ollama_accepts() -> None:
+    """Every message we hand to ollama.chat must pass ollama's own validator.
+
+    Regression guard for the second half of #427: the first client turn was
+    persisted correctly, but the *outgoing* conversion of a tool result still
+    produced an OpenAI ``function_call_output`` item with no ``role``, so the
+    second turn raised a ValidationError inside ``ollama.chat`` before any
+    request was sent. Asserting against ``ollama._types.Message`` (no network,
+    no mocking of the client) pins the contract that actually failed.
+    """
+    from ollama._types import Message
+
+    client = OllamaClient(_config())
+    tool_call = ToolCall(call_id="call_1", name="bash", arguments={"command": "ls"}, id="fc_1")
+    tool_result = ToolResult(
+        call_id="call_1",
+        name="bash",
+        success=True,
+        result="a.txt",
+        id="fc_1",
+    )
+
+    messages = client.parse_messages(
+        [
+            LLMMessage("user", "list the files"),
+            LLMMessage("assistant", tool_call=tool_call),
+            LLMMessage("user", tool_result=tool_result),
+        ]
+    )
+
+    for message in messages:
+        assert "role" in message, f"ollama requires role on every message: {message!r}"
+        Message.model_validate(message)
+
+    assert messages[1]["tool_calls"] == [
+        {"function": {"name": "bash", "arguments": {"command": "ls"}}}
+    ]
+    assert messages[2] == {"role": "tool", "content": "a.txt"}
+
+
+def test_parse_tool_call_result_drops_openai_ids() -> None:
+    """Ollama matches tool results to calls by order, not by id."""
+    client = OllamaClient(_config())
+    tool_result = ToolResult(
+        call_id="call_1",
+        name="bash",
+        success=False,
+        error="boom",
+        id="fc_1",
+    )
+
+    assert client.parse_tool_call_result(tool_result) == {"role": "tool", "content": "boom"}
