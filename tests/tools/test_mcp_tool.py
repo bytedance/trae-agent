@@ -61,6 +61,7 @@ class TestMCPTool(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result.output)
         self.assertEqual(result.error, "Something went wrong")
+        self.assertEqual(result.error_code, -1)
 
     async def test_execute_exception(self):
         self.mock_client.call_tool = AsyncMock(side_effect=RuntimeError("Tool crashed"))
