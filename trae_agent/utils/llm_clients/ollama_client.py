@@ -5,24 +5,34 @@
 Ollama API client wrapper with tool integration
 """
 
-import json
 import uuid
-from typing import override
+from typing import Any, TypedDict, override
 
 import openai
 from ollama import chat as ollama_chat  # pyright: ignore[reportUnknownVariableType]
-from openai.types.responses import (
-    FunctionToolParam,
-    ResponseFunctionToolCallParam,
-    ResponseInputParam,
-)
-from openai.types.responses.response_input_param import FunctionCallOutput
+from openai.types.responses import FunctionToolParam
 
 from trae_agent.tools.base import Tool, ToolCall, ToolResult
 from trae_agent.utils.config import ModelConfig
 from trae_agent.utils.llm_clients.base_client import BaseLLMClient
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
 from trae_agent.utils.llm_clients.retry_utils import retry_with
+
+
+class OllamaMessage(TypedDict, total=False):
+    """One ``ollama.chat`` message; ``role`` is required by ollama's validator.
+
+    ``total=False`` keeps the tool-call variant expressible, but every message
+    built here sets ``role`` explicitly — omitting it is the bug this shape
+    replaced.
+    """
+
+    role: str
+    content: str
+    tool_calls: list[dict[str, Any]]
+
+
+OllamaMessages = list[OllamaMessage]
 
 
 class OllamaClient(BaseLLMClient):
@@ -37,7 +47,7 @@ class OllamaClient(BaseLLMClient):
             else "http://localhost:11434/v1",
         )
 
-        self.message_history: ResponseInputParam = []
+        self.message_history: OllamaMessages = []
 
     @override
     def set_chat_history(self, messages: list[LLMMessage]) -> None:
@@ -79,7 +89,7 @@ class OllamaClient(BaseLLMClient):
         """
         A rewritten version of ollama chan
         """
-        msgs: ResponseInputParam = self.parse_messages(messages)
+        msgs: OllamaMessages = self.parse_messages(messages)
 
         tool_schemas = None
         if tools:
@@ -120,9 +130,36 @@ class OllamaClient(BaseLLMClient):
                         id=self._id_generator(),
                     )
                 )
+            # Persist assistant tool call response in message history using
+            # the Ollama-native message shape (role/tool_calls). The OpenAI
+            # `function_call` items used previously are rejected by ollama.chat
+            # and caused multi-turn tool calling to fail (see PR #427).
+            self.message_history.append(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": tc.name,
+                                "arguments": dict(tc.arguments),
+                            }
+                        }
+                        for tc in tool_calls
+                    ],
+                }
+            )
         else:
             # consider response is not a tool call
             content = str(response.message.content)
+            # Persist assistant text response in message history
+            if content:
+                self.message_history.append(
+                    {
+                        "role": "assistant",
+                        "content": content,
+                    }
+                )
 
         llm_response = LLMResponse(
             content=content,
@@ -143,40 +180,55 @@ class OllamaClient(BaseLLMClient):
 
         return llm_response
 
-    def parse_messages(self, messages: list[LLMMessage]) -> ResponseInputParam:
+    def parse_messages(self, messages: list[LLMMessage]) -> OllamaMessages:
+        """Convert LLM messages to the shape ``ollama.chat`` accepts.
+
+        Every entry must carry ``role``: ollama validates each message into its
+        own ``Message`` model, where ``role`` is required. The OpenAI Responses
+        items used previously (``function_call`` / ``function_call_output``)
+        carry no ``role``, so ``ollama.chat`` raised a ValidationError before
+        the request was ever sent.
         """
-        Ollama parse messages should be compatible with openai handling
-        """
-        openai_messages: ResponseInputParam = []
+        ollama_messages: OllamaMessages = []
         for msg in messages:
             if msg.tool_result:
-                openai_messages.append(self.parse_tool_call_result(msg.tool_result))
+                ollama_messages.append(self.parse_tool_call_result(msg.tool_result))
             elif msg.tool_call:
-                openai_messages.append(self.parse_tool_call(msg.tool_call))
+                ollama_messages.append(self.parse_tool_call(msg.tool_call))
             else:
                 if not msg.content:
                     raise ValueError("Message content is required")
                 if msg.role == "system":
-                    openai_messages.append({"role": "system", "content": msg.content})
+                    ollama_messages.append({"role": "system", "content": msg.content})
                 elif msg.role == "user":
-                    openai_messages.append({"role": "user", "content": msg.content})
+                    ollama_messages.append({"role": "user", "content": msg.content})
                 elif msg.role == "assistant":
-                    openai_messages.append({"role": "assistant", "content": msg.content})
+                    ollama_messages.append({"role": "assistant", "content": msg.content})
                 else:
                     raise ValueError(f"Invalid message role: {msg.role}")
-        return openai_messages
+        return ollama_messages
 
-    def parse_tool_call(self, tool_call: ToolCall) -> ResponseFunctionToolCallParam:
-        """Parse the tool call from the LLM response."""
-        return ResponseFunctionToolCallParam(
-            call_id=tool_call.call_id,
-            name=tool_call.name,
-            arguments=json.dumps(tool_call.arguments),
-            type="function_call",
-        )
+    def parse_tool_call(self, tool_call: ToolCall) -> OllamaMessage:
+        """Parse a tool call into an Ollama assistant message."""
+        return {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": tool_call.name,
+                        "arguments": tool_call.arguments,
+                    }
+                }
+            ],
+        }
 
-    def parse_tool_call_result(self, tool_call_result: ToolResult) -> FunctionCallOutput:
-        """Parse the tool call result from the LLM response."""
+    def parse_tool_call_result(self, tool_call_result: ToolResult) -> OllamaMessage:
+        """Parse a tool result into an Ollama ``tool`` message.
+
+        Ollama matches a tool message to its call by order, not by id, so the
+        OpenAI ``call_id``/``id`` fields are intentionally dropped.
+        """
         result: str = ""
         if tool_call_result.result:
             result = result + tool_call_result.result + "\n"
@@ -184,12 +236,7 @@ class OllamaClient(BaseLLMClient):
             result += tool_call_result.error
         result = result.strip()
 
-        return FunctionCallOutput(
-            call_id=tool_call_result.call_id,
-            id=tool_call_result.id,
-            output=result,
-            type="function_call_output",
-        )
+        return {"role": "tool", "content": result}
 
     def _id_generator(self) -> str:
         """Generate a random ID string"""
