@@ -50,9 +50,7 @@ class MCPTool(Tool):
         try:
             output = await self.client.call_tool(self.get_name(), arguments)
             if output.isError:
-                return ToolExecResult(
-                    output=None, error=output.content[0].text, error_code=-1
-                )
+                return ToolExecResult(output=None, error=output.content[0].text, error_code=-1)
             else:
                 return ToolExecResult(output=output.content[0].text)
 
