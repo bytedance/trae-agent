@@ -168,6 +168,7 @@ class BashTool(Tool):
     def __init__(self, model_provider: str | None = None):
         super().__init__(model_provider)
         self._session: _BashSession | None = None
+        self._session_lock = asyncio.Lock()
 
     @override
     def get_model_provider(self) -> str | None:
@@ -183,6 +184,7 @@ class BashTool(Tool):
 * When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
 * You have access to a mirror of common linux and python packages via apt and pip.
 * State is persistent across command calls and discussions with the user.
+* Commands, restarts, and cleanup sharing this shell are executed sequentially.
 * To inspect a particular line range of a file, e.g. lines 10-25, try 'sed -n 10,25p /path/to/the/file'.
 * Please avoid commands that may produce a very large amount of output.
 * Please run long lived commands in the background, e.g. 'sleep 10 &' or start a server in the background.
@@ -211,36 +213,38 @@ class BashTool(Tool):
 
     @override
     async def execute(self, arguments: ToolCallArguments) -> ToolExecResult:
-        if arguments.get("restart"):
-            if self._session:
-                await self._session.stop()
-            self._session = _BashSession()
-            await self._session.start()
-
-            return ToolExecResult(output="tool has been restarted.")
-
-        if self._session is None:
-            try:
+        async with self._session_lock:
+            if arguments.get("restart"):
+                if self._session:
+                    await self._session.stop()
                 self._session = _BashSession()
                 await self._session.start()
-            except Exception as e:
-                return ToolExecResult(error=f"Error starting bash session: {e}", error_code=-1)
 
-        command = str(arguments["command"]) if "command" in arguments else None
-        if command is None:
-            return ToolExecResult(
-                error=f"No command provided for the {self.get_name()} tool",
-                error_code=-1,
-            )
-        try:
-            return await self._session.run(command)
-        except Exception as e:
-            return ToolExecResult(error=f"Error running bash command: {e}", error_code=-1)
+                return ToolExecResult(output="tool has been restarted.")
+
+            if self._session is None:
+                try:
+                    self._session = _BashSession()
+                    await self._session.start()
+                except Exception as e:
+                    return ToolExecResult(error=f"Error starting bash session: {e}", error_code=-1)
+
+            command = str(arguments["command"]) if "command" in arguments else None
+            if command is None:
+                return ToolExecResult(
+                    error=f"No command provided for the {self.get_name()} tool",
+                    error_code=-1,
+                )
+            try:
+                return await self._session.run(command)
+            except Exception as e:
+                return ToolExecResult(error=f"Error running bash command: {e}", error_code=-1)
 
     @override
     async def close(self):
         """Properly close self._process."""
-        if self._session:
-            ret = await self._session.stop()
-            self._session = None
-            return ret
+        async with self._session_lock:
+            if self._session:
+                ret = await self._session.stop()
+                self._session = None
+                return ret
