@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 from datetime import datetime
@@ -71,11 +72,34 @@ def get_git_status_hash(folder_path: Path) -> str:
         if not status_result.stdout.strip():
             return f"git-clean-{base_hash}"
 
-        # If there are uncommitted changes, include them in the hash
-        uncommitted_hash = hashlib.md5(status_result.stdout.encode()).hexdigest()[:8]
-        return f"git-dirty-{base_hash}-{uncommitted_hash}"
+        # Status paths alone do not change when a dirty file is edited again.
+        uncommitted_hash = hashlib.md5(status_result.stdout.encode())
+        diff_result = subprocess.run(
+            ["git", "diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD"],
+            cwd=folder_path,
+            capture_output=True,
+            check=True,
+            timeout=10,
+        )
+        uncommitted_hash.update(diff_result.stdout)
+        untracked_result = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+            cwd=folder_path,
+            capture_output=True,
+            check=True,
+            timeout=10,
+        )
+        for name in untracked_result.stdout.split(b"\0"):
+            if not name:
+                continue
+            file = folder_path / os.fsdecode(name)
+            if file.is_file():
+                uncommitted_hash.update(name + b"\0")
+                with file.open("rb") as source:
+                    uncommitted_hash.update(hashlib.file_digest(source, "md5").digest())
+        return f"git-dirty-{base_hash}-{uncommitted_hash.hexdigest()[:8]}"
 
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+    except (subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired):
         # Fallback to file metadata hash if git commands fail
         return get_file_metadata_hash(folder_path)
 
