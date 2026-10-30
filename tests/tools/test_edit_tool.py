@@ -84,6 +84,23 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.error_code, -1)
         self.assertIn("Multiple occurrences", result.error or "")
+        self.assertIn("lines [1, 2]", result.error or "")
+
+    async def test_str_replace_multiple_occurrences_multiline(self):
+        self.mock_file_system(content="block\nend\nmiddle\nblock\nend\n")
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "command": "str_replace",
+                    "path": str(self.test_file),
+                    "old_str": "block\nend",
+                    "new_str": "new_block",
+                }
+            )
+        )
+        self.assertEqual(result.error_code, -1)
+        self.assertIn("Multiple occurrences", result.error or "")
+        self.assertIn("lines [1, 4]", result.error or "")
 
     async def test_str_replace_success(self):
         self.mock_file_system(content="old_content\nline2")
