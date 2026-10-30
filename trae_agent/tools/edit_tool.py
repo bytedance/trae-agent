@@ -208,8 +208,14 @@ Notes for using the `str_replace` command:
                 f"No replacement was performed, old_str `{old_str}` did not appear verbatim in {path}."
             )
         elif occurrences > 1:
-            file_content_lines = file_content.split("\n")
-            lines = [idx + 1 for idx, line in enumerate(file_content_lines) if old_str in line]
+            lines = []
+            pos = 0
+            while True:
+                pos = file_content.find(old_str, pos)
+                if pos == -1:
+                    break
+                lines.append(file_content[:pos].count("\n") + 1)
+                pos += len(old_str)
             raise ToolError(
                 f"No replacement was performed. Multiple occurrences of old_str `{old_str}` in lines {lines}. Please ensure it is unique"
             )
