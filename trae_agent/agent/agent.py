@@ -64,33 +64,35 @@ class Agent:
     ):
         self.agent.new_task(task, extra_args, tool_names)
 
-        if self.agent.allow_mcp_servers:
-            if self.agent.cli_console:
-                self.agent.cli_console.print("Initialising MCP tools...")
-            await self.agent.initialise_mcp()
-
-        if self.agent.cli_console:
-            task_details = {
-                "Task": task,
-                "Model Provider": self.agent_config.model.model_provider.provider,
-                "Model": self.agent_config.model.model,
-                "Max Steps": str(self.agent_config.max_steps),
-                "Trajectory File": self.trajectory_file,
-                "Tools": ", ".join([tool.name for tool in self.agent.tools]),
-            }
-            if extra_args:
-                for key, value in extra_args.items():
-                    task_details[key.capitalize()] = value
-            self.agent.cli_console.print_task_details(task_details)
-
-        cli_console_task = (
-            asyncio.create_task(self.agent.cli_console.start()) if self.agent.cli_console else None
-        )
-
         try:
+            if self.agent.allow_mcp_servers:
+                if self.agent.cli_console:
+                    self.agent.cli_console.print("Initialising MCP tools...")
+                await self.agent.initialise_mcp()
+
+            if self.agent.cli_console:
+                task_details = {
+                    "Task": task,
+                    "Model Provider": self.agent_config.model.model_provider.provider,
+                    "Model": self.agent_config.model.model,
+                    "Max Steps": str(self.agent_config.max_steps),
+                    "Trajectory File": self.trajectory_file,
+                    "Tools": ", ".join([tool.name for tool in self.agent.tools]),
+                }
+                if extra_args:
+                    for key, value in extra_args.items():
+                        task_details[key.capitalize()] = value
+                self.agent.cli_console.print_task_details(task_details)
+
+            cli_console_task = (
+                asyncio.create_task(self.agent.cli_console.start())
+                if self.agent.cli_console
+                else None
+            )
+
             execution = await self.agent.execute_task()
         finally:
-            # Ensure MCP cleanup happens even if execution fails
+            # Include initialization: discovery may have connected only some clients.
             with contextlib.suppress(Exception):
                 await self.agent.cleanup_mcp_clients()
 
