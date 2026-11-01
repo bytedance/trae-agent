@@ -342,6 +342,7 @@ class BenchmarkEvaluation:
         process = subprocess.run(cmd, capture_output=True, cwd=benchmark_harness_path.as_posix())
         print(process.stdout.decode())
         print(process.stderr.decode())
+        process.check_returncode()
 
         result_filename = "results.json"
         result_path = self.task_results_dir / result_filename
