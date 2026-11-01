@@ -92,10 +92,10 @@ class TraeAgent(BaseAgent):
                         await mcp_client.cleanup(mcp_server_name)
                     continue
                 except asyncio.CancelledError:
-                    # If the task is cancelled, clean up and skip this server
+                    # Cancellation revokes the whole run, not just this server.
                     with contextlib.suppress(Exception):
                         await mcp_client.cleanup(mcp_server_name)
-                    continue
+                    raise
         else:
             return
 
