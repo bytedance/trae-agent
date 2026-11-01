@@ -1,11 +1,13 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
+from trae_agent.tools.base import ToolCall
 from trae_agent.utils.config import Config
 from trae_agent.utils.legacy_config import LegacyConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMResponse
@@ -45,6 +47,48 @@ class TestTraeAgentExtended(unittest.TestCase):
 
     def tearDown(self):
         self.llm_client_patcher.stop()
+
+    def test_cancelled_execution_releases_resources(self):
+        asyncio.run(self.check_interrupted_execution("cancel"))
+
+    def test_timed_out_execution_releases_resources(self):
+        asyncio.run(self.check_interrupted_execution("timeout"))
+
+    async def check_interrupted_execution(self, interruption):
+        started = asyncio.Event()
+        tool = self.agent.tools[0]
+        response = LLMResponse(
+            content="",
+            tool_calls=[ToolCall(name=tool.name, call_id="call_1")],
+        )
+
+        async def blocked_step(*args):
+            started.set()
+            await asyncio.Event().wait()
+
+        with (
+            patch.object(self.agent.llm_client, "chat", return_value=response),
+            patch.object(tool, "execute", side_effect=blocked_step),
+            patch.object(tool, "close", new_callable=AsyncMock) as close_tool,
+            patch.object(self.agent, "cleanup_mcp_clients", new_callable=AsyncMock) as cleanup_mcp,
+        ):
+            task = asyncio.create_task(self.agent.execute_task())
+            try:
+                await asyncio.wait_for(started.wait(), timeout=1)
+                if interruption == "cancel":
+                    task.cancel()
+                    with self.assertRaises(asyncio.CancelledError):
+                        await task
+                else:
+                    with self.assertRaises(TimeoutError):
+                        await asyncio.wait_for(task, timeout=0)
+            finally:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+            close_tool.assert_awaited_once_with()
+            cleanup_mcp.assert_awaited_once_with()
 
     def test_new_task_initialization(self):
         with self.assertRaises(AgentError):

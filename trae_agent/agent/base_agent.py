@@ -187,14 +187,15 @@ class BaseAgent(ABC):
             if self.docker_manager and not self.docker_keep:
                 self.docker_manager.stop()
 
-        # Ensure tool resources are released whether an exception occurs or not.
-        await self._close_tools()
+            # Cancellation bypasses the exception handlers above, so release
+            # resources inside finally as well as on normal completion.
+            await self._close_tools()
 
-        execution.execution_time = time.time() - start_time
+            execution.execution_time = time.time() - start_time
 
-        # Clean up any MCP clients
-        with contextlib.suppress(Exception):
-            await self.cleanup_mcp_clients()
+            # Clean up any MCP clients
+            with contextlib.suppress(Exception):
+                await self.cleanup_mcp_clients()
 
         self._update_cli_console(step, execution)
         return execution
