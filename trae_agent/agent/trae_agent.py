@@ -179,21 +179,15 @@ class TraeAgent(BaseAgent):
 
     def get_git_diff(self) -> str:
         """Get the git diff of the project."""
-        pwd = os.getcwd()
         if not os.path.isdir(self.project_path):
             return ""
-        os.chdir(self.project_path)
         try:
-            if not self.base_commit:
-                stdout = subprocess.check_output(["git", "--no-pager", "diff"]).decode()
-            else:
-                stdout = subprocess.check_output(
-                    ["git", "--no-pager", "diff", self.base_commit]
-                ).decode()
+            diff_command = ["git", "--no-pager", "diff"]
+            if self.base_commit:
+                diff_command.append(self.base_commit)
+            stdout = subprocess.check_output(diff_command, cwd=self.project_path).decode()
         except (subprocess.CalledProcessError, FileNotFoundError):
             stdout = ""
-        finally:
-            os.chdir(pwd)
         return stdout
 
     # Copyright (c) 2024 paul-gauthier
