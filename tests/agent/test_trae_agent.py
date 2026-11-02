@@ -1,7 +1,13 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import os
+import subprocess
+import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from trae_agent.agent.agent_basics import AgentError
@@ -46,6 +52,174 @@ class TestTraeAgentExtended(unittest.TestCase):
     def tearDown(self):
         self.llm_client_patcher.stop()
 
+    def test_base_commit_diff_includes_unstaged_edits(self):
+        self.check_base_commit_diff("unstaged")
+
+    def test_default_diff_includes_staged_edits(self):
+        self.check_base_commit_diff("staged", use_base=False)
+
+    def test_default_diff_includes_unstaged_edits(self):
+        self.check_base_commit_diff("unstaged", use_base=False)
+
+    def test_default_diff_combines_staged_and_unstaged_edits(self):
+        self.check_base_commit_diff("mixed", use_base=False)
+
+    def test_default_diff_includes_current_files_before_first_commit(self):
+        for object_format in ("sha1", "sha256"):
+            with (
+                self.subTest(object_format=object_format),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                subprocess.check_output(
+                    ["git", "init", "-q", f"--object-format={object_format}"], cwd=root
+                )
+                target = root / "new.txt"
+                target.write_text("staged version\n")
+                subprocess.check_output(["git", "add", "new.txt"], cwd=root)
+                target.write_text("working version\n")
+                self.agent.project_path = directory
+                self.agent.base_commit = None
+
+                patch_text = self.agent.get_git_diff()
+
+                self.assertIn("new file mode", patch_text)
+                self.assertIn("+working version", patch_text)
+                self.assertNotIn("+staged version", patch_text)
+
+    def test_parallel_diffs_stay_in_their_own_projects(self):
+        original_cwd = os.getcwd()
+        real_check_output = subprocess.check_output
+        first_started = threading.Event()
+        second_started = threading.Event()
+        first_finished = threading.Event()
+        request = threading.local()
+        with tempfile.TemporaryDirectory() as directory:
+            roots = [Path(directory) / name for name in ("first", "second")]
+            for root in roots:
+                root.mkdir()
+                commands = (
+                    ["init", "-q"],
+                    ["add", "change.txt"],
+                    ["commit", "-qm", "base"],
+                )
+                (root / "change.txt").write_text("before\n")
+                for command in commands:
+                    real_check_output(
+                        [
+                            "git",
+                            "-c",
+                            "commit.gpgsign=false",
+                            "-c",
+                            "user.name=Test User",
+                            "-c",
+                            "user.email=test@example.invalid",
+                            "-c",
+                            f"core.hooksPath={root / 'hooks'}",
+                            *command,
+                        ],
+                        cwd=root,
+                    )
+                (root / "change.txt").write_text(f"after {root.name}\n")
+
+            def diff(project):
+                request.project = project
+                agent = MagicMock()
+                agent.project_path = str(project)
+                agent.base_commit = None
+                return TraeAgent.get_git_diff(agent)
+
+            def synchronized_output(*args, **kwargs):
+                if request.project == roots[0]:
+                    first_started.set()
+                    self.assertTrue(second_started.wait(5))
+                    try:
+                        return real_check_output(*args, **kwargs)
+                    finally:
+                        first_finished.set()
+                second_started.set()
+                self.assertTrue(first_finished.wait(5))
+                return real_check_output(*args, **kwargs)
+
+            try:
+                with (
+                    patch("subprocess.check_output", side_effect=synchronized_output),
+                    ThreadPoolExecutor(max_workers=2) as executor,
+                ):
+                    first = executor.submit(diff, roots[0])
+                    self.assertTrue(first_started.wait(5))
+                    second = executor.submit(diff, roots[1])
+                    first_patch, second_patch = first.result(), second.result()
+                self.assertIn("+after first", first_patch)
+                self.assertIn("+after second", second_patch)
+                self.assertEqual(os.getcwd(), original_cwd)
+            finally:
+                os.chdir(original_cwd)
+
+    def test_base_commit_diff_includes_staged_edits(self):
+        self.check_base_commit_diff("staged")
+
+    def test_base_commit_diff_includes_committed_and_working_edits(self):
+        self.check_base_commit_diff("mixed")
+
+    def check_base_commit_diff(self, mode, use_base=True):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*args):
+                return subprocess.check_output(
+                    [
+                        "git",
+                        "-c",
+                        "core.autocrlf=false",
+                        "-c",
+                        "commit.gpgsign=false",
+                        "-c",
+                        "user.name=Test User",
+                        "-c",
+                        "user.email=test@example.invalid",
+                        "-c",
+                        f"core.hooksPath={root / 'hooks'}",
+                        *args,
+                    ],
+                    cwd=root,
+                    text=True,
+                )
+
+            git("init", "-q")
+            names = (
+                ["committed.txt", "staged.txt", "unstaged.txt"]
+                if mode == "mixed"
+                else ["change.txt"]
+            )
+            for name in names:
+                (root / name).write_text("before\n")
+            git("add", ".")
+            git("commit", "-qm", "base")
+            self.agent.base_commit = git("rev-parse", "HEAD").strip() if use_base else None
+            self.agent.project_path = directory
+            self.agent.must_patch = "true"
+
+            for name in names:
+                (root / name).write_text(f"after {name}\n")
+                if name == "committed.txt":
+                    git("add", name)
+                    git("commit", "-qm", "committed edit")
+                elif mode == "staged" or name == "staged.txt":
+                    git("add", name)
+
+            patch_text = self.agent.get_git_diff()
+
+            expected_names = (
+                names if use_base else [name for name in names if name != "committed.txt"]
+            )
+            for name in expected_names:
+                self.assertIn(f"diff --git a/{name} b/{name}", patch_text)
+                self.assertIn(f"+after {name}", patch_text)
+            if not use_base:
+                self.assertNotIn("diff --git a/committed.txt", patch_text)
+            self.assertTrue(self.agent._is_task_completed(LLMResponse(content="done")))
+
     def test_new_task_initialization(self):
         with self.assertRaises(AgentError):
             self.agent.new_task("test", {})  # Missing required params
@@ -65,15 +239,16 @@ class TestTraeAgentExtended(unittest.TestCase):
         self.assertTrue(any(tool.get_name() == "bash" for tool in self.agent.tools))
 
     @patch("subprocess.check_output")
-    @patch("os.chdir")
     @patch("os.path.isdir", return_value=True)
-    def test_git_diff_generation(self, mock_isdir, mock_chdir, mock_subprocess):
-        mock_subprocess.return_value = b"test diff"
+    def test_git_diff_generation(self, mock_isdir, mock_subprocess):
+        mock_subprocess.side_effect = [b"commit-id\n", b"test diff"]
         self.agent.project_path = self.test_project_path
 
         diff = self.agent.get_git_diff()
         self.assertEqual(diff, "test diff")
-        mock_subprocess.assert_called_with(["git", "--no-pager", "diff"])
+        mock_subprocess.assert_called_with(
+            ["git", "--no-pager", "diff", "commit-id"], cwd=self.test_project_path
+        )
 
     def test_patch_filtering(self):
         test_patch = """diff --git a/tests/test_example.py b/tests/test_example.py
