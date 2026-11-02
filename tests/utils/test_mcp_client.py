@@ -1,5 +1,8 @@
+import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
+from mcp.types import ListToolsResult, Tool
 
 from trae_agent.utils.mcp_client import MCPClient, MCPServerConfig, MCPServerStatus
 
@@ -44,19 +47,22 @@ class TestMCPClient(unittest.IsolatedAsyncioTestCase):
         mock_stdio_client.return_value.__aenter__.return_value = (mock_stdio, mock_writer)
 
         # Mock session and list_tools return
-        mock_session = mock_client_session.return_value
+        mock_session = mock_client_session.return_value.__aenter__.return_value
         mock_session.initialize = AsyncMock()
-
-        mock_session.call_tool = AsyncMock()
-
-        mcp_servers_dict = {}
-        await self.client.connect_and_discover(
-            "test_server", config, mcp_servers_dict, model_provider="mock_provider"
+        mock_session.list_tools = AsyncMock(
+            side_effect=[
+                ListToolsResult(tools=[Tool(name="first", inputSchema={})], nextCursor="next"),
+                ListToolsResult(tools=[Tool(name="second", inputSchema={})]),
+            ]
         )
-        all_tools = []
-        for _, tools in mcp_servers_dict.items():
-            all_tools.extend(tools)
-        self.assertTrue(all(tool.__class__.__name__ == "MCPTool" for tool in all_tools))
+
+        discovered_tools = []
+        await self.client.connect_and_discover(
+            "test_server", config, discovered_tools, model_provider="mock_provider"
+        )
+        self.addAsyncCleanup(self.client.cleanup, "test_server")
+        self.assertEqual([tool.name for tool in discovered_tools], ["first", "second"])
+        self.assertEqual(mock_session.list_tools.await_args_list, [call(), call(cursor="next")])
 
     async def test_connect_and_discover_invalid_config(self):
         config = MCPServerConfig()
@@ -76,12 +82,71 @@ class TestMCPClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"result": "ok"})
 
     async def test_list_tools(self):
+        response = ListToolsResult(
+            tools=[Tool(name="tool1", inputSchema={}), Tool(name="tool2", inputSchema={})]
+        )
         mock_session = AsyncMock()
-        mock_session.list_tools = AsyncMock(return_value=["tool1", "tool2"])
+        mock_session.list_tools = AsyncMock(return_value=response)
         self.client.session = mock_session
 
         result = await self.client.list_tools()
-        self.assertEqual(result, ["tool1", "tool2"])
+        self.assertIs(result, response)
+        mock_session.list_tools.assert_awaited_once_with()
+
+    async def test_list_tools_follows_cursors_through_empty_pages(self):
+        first = ListToolsResult(
+            tools=[Tool(name="first", inputSchema={})],
+            nextCursor="page-2",
+            _meta={"source": "server"},
+        )
+        self.client.session = AsyncMock()
+        self.client.session.list_tools.side_effect = [
+            first,
+            ListToolsResult(tools=[], nextCursor="page-3"),
+            ListToolsResult(tools=[Tool(name="last", inputSchema={})]),
+        ]
+
+        result = await self.client.list_tools()
+
+        self.assertEqual([tool.name for tool in result.tools], ["first", "last"])
+        self.assertIsNone(result.nextCursor)
+        self.assertEqual(result.meta, {"source": "server"})
+        self.assertEqual(
+            self.client.session.list_tools.await_args_list,
+            [call(), call(cursor="page-2"), call(cursor="page-3")],
+        )
+
+    async def test_list_tools_preserves_empty_cursor(self):
+        self.client.session = AsyncMock()
+        self.client.session.list_tools.side_effect = [
+            ListToolsResult(tools=[], nextCursor=""),
+            ListToolsResult(tools=[Tool(name="last", inputSchema={})]),
+        ]
+
+        result = await self.client.list_tools()
+
+        self.assertEqual([tool.name for tool in result.tools], ["last"])
+        self.assertEqual(self.client.session.list_tools.await_args_list, [call(), call(cursor="")])
+
+    async def test_list_tools_propagates_later_page_error(self):
+        self.client.session = AsyncMock()
+        self.client.session.list_tools.side_effect = [
+            ListToolsResult(tools=[], nextCursor="next"),
+            RuntimeError("page request failed"),
+        ]
+
+        with self.assertRaisesRegex(RuntimeError, "page request failed"):
+            await self.client.list_tools()
+
+    async def test_list_tools_propagates_later_page_cancellation(self):
+        self.client.session = AsyncMock()
+        self.client.session.list_tools.side_effect = [
+            ListToolsResult(tools=[], nextCursor="next"),
+            asyncio.CancelledError(),
+        ]
+
+        with self.assertRaises(asyncio.CancelledError):
+            await self.client.list_tools()
 
     async def test_cleanup(self):
         self.client.update_mcp_server_status("test_server", MCPServerStatus.CONNECTED)

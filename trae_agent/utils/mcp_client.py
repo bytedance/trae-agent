@@ -95,7 +95,12 @@ class MCPClient:
         return output
 
     async def list_tools(self):
+        """Collect every page of tools before exposing them to discovery."""
         tools = await self.session.list_tools()
+        while tools.nextCursor is not None:
+            page = await self.session.list_tools(cursor=tools.nextCursor)
+            tools.tools.extend(page.tools)
+            tools.nextCursor = page.nextCursor
         return tools
 
     async def cleanup(self, mcp_server_name):
