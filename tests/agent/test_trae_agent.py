@@ -55,6 +55,38 @@ class TestTraeAgentExtended(unittest.TestCase):
     def test_base_commit_diff_includes_unstaged_edits(self):
         self.check_base_commit_diff("unstaged")
 
+    def test_default_diff_includes_staged_edits(self):
+        self.check_base_commit_diff("staged", use_base=False)
+
+    def test_default_diff_includes_unstaged_edits(self):
+        self.check_base_commit_diff("unstaged", use_base=False)
+
+    def test_default_diff_combines_staged_and_unstaged_edits(self):
+        self.check_base_commit_diff("mixed", use_base=False)
+
+    def test_default_diff_includes_current_files_before_first_commit(self):
+        for object_format in ("sha1", "sha256"):
+            with (
+                self.subTest(object_format=object_format),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                subprocess.check_output(
+                    ["git", "init", "-q", f"--object-format={object_format}"], cwd=root
+                )
+                target = root / "new.txt"
+                target.write_text("staged version\n")
+                subprocess.check_output(["git", "add", "new.txt"], cwd=root)
+                target.write_text("working version\n")
+                self.agent.project_path = directory
+                self.agent.base_commit = None
+
+                patch_text = self.agent.get_git_diff()
+
+                self.assertIn("new file mode", patch_text)
+                self.assertIn("+working version", patch_text)
+                self.assertNotIn("+staged version", patch_text)
+
     def test_parallel_diffs_stay_in_their_own_projects(self):
         original_cwd = os.getcwd()
         real_check_output = subprocess.check_output
@@ -130,7 +162,7 @@ class TestTraeAgentExtended(unittest.TestCase):
     def test_base_commit_diff_includes_committed_and_working_edits(self):
         self.check_base_commit_diff("mixed")
 
-    def check_base_commit_diff(self, mode):
+    def check_base_commit_diff(self, mode, use_base=True):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
@@ -164,7 +196,7 @@ class TestTraeAgentExtended(unittest.TestCase):
                 (root / name).write_text("before\n")
             git("add", ".")
             git("commit", "-qm", "base")
-            self.agent.base_commit = git("rev-parse", "HEAD").strip()
+            self.agent.base_commit = git("rev-parse", "HEAD").strip() if use_base else None
             self.agent.project_path = directory
             self.agent.must_patch = "true"
 
@@ -178,9 +210,14 @@ class TestTraeAgentExtended(unittest.TestCase):
 
             patch_text = self.agent.get_git_diff()
 
-            for name in names:
+            expected_names = (
+                names if use_base else [name for name in names if name != "committed.txt"]
+            )
+            for name in expected_names:
                 self.assertIn(f"diff --git a/{name} b/{name}", patch_text)
                 self.assertIn(f"+after {name}", patch_text)
+            if not use_base:
+                self.assertNotIn("diff --git a/committed.txt", patch_text)
             self.assertTrue(self.agent._is_task_completed(LLMResponse(content="done")))
 
     def test_new_task_initialization(self):
@@ -204,13 +241,13 @@ class TestTraeAgentExtended(unittest.TestCase):
     @patch("subprocess.check_output")
     @patch("os.path.isdir", return_value=True)
     def test_git_diff_generation(self, mock_isdir, mock_subprocess):
-        mock_subprocess.return_value = b"test diff"
+        mock_subprocess.side_effect = [b"commit-id\n", b"test diff"]
         self.agent.project_path = self.test_project_path
 
         diff = self.agent.get_git_diff()
         self.assertEqual(diff, "test diff")
         mock_subprocess.assert_called_with(
-            ["git", "--no-pager", "diff"], cwd=self.test_project_path
+            ["git", "--no-pager", "diff", "commit-id"], cwd=self.test_project_path
         )
 
     def test_patch_filtering(self):
