@@ -227,10 +227,10 @@ class TraeAgent(BaseAgent):
 
     @override
     def llm_indicates_task_completed(self, llm_response: LLMResponse) -> bool:
-        """Check if the LLM indicates that the task is completed."""
-        if llm_response.tool_calls is None:
+        """Complete only when the response has no remaining work-producing calls."""
+        if not llm_response.tool_calls:
             return False
-        return any(tool_call.name == "task_done" for tool_call in llm_response.tool_calls)
+        return all(tool_call.name == "task_done" for tool_call in llm_response.tool_calls)
 
     @override
     def _is_task_completed(self, llm_response: LLMResponse) -> bool:
