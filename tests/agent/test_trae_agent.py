@@ -1,7 +1,10 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from trae_agent.agent.agent_basics import AgentError
@@ -45,6 +48,68 @@ class TestTraeAgentExtended(unittest.TestCase):
 
     def tearDown(self):
         self.llm_client_patcher.stop()
+
+    def test_base_commit_diff_includes_unstaged_edits(self):
+        self.check_base_commit_diff("unstaged")
+
+    def test_base_commit_diff_includes_staged_edits(self):
+        self.check_base_commit_diff("staged")
+
+    def test_base_commit_diff_includes_committed_and_working_edits(self):
+        self.check_base_commit_diff("mixed")
+
+    def check_base_commit_diff(self, mode):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*args):
+                return subprocess.check_output(
+                    [
+                        "git",
+                        "-c",
+                        "core.autocrlf=false",
+                        "-c",
+                        "commit.gpgsign=false",
+                        "-c",
+                        "user.name=Test User",
+                        "-c",
+                        "user.email=test@example.invalid",
+                        "-c",
+                        f"core.hooksPath={root / 'hooks'}",
+                        *args,
+                    ],
+                    cwd=root,
+                    text=True,
+                )
+
+            git("init", "-q")
+            names = (
+                ["committed.txt", "staged.txt", "unstaged.txt"]
+                if mode == "mixed"
+                else ["change.txt"]
+            )
+            for name in names:
+                (root / name).write_text("before\n")
+            git("add", ".")
+            git("commit", "-qm", "base")
+            self.agent.base_commit = git("rev-parse", "HEAD").strip()
+            self.agent.project_path = directory
+            self.agent.must_patch = "true"
+
+            for name in names:
+                (root / name).write_text(f"after {name}\n")
+                if name == "committed.txt":
+                    git("add", name)
+                    git("commit", "-qm", "committed edit")
+                elif mode == "staged" or name == "staged.txt":
+                    git("add", name)
+
+            patch_text = self.agent.get_git_diff()
+
+            for name in names:
+                self.assertIn(f"diff --git a/{name} b/{name}", patch_text)
+                self.assertIn(f"+after {name}", patch_text)
+            self.assertTrue(self.agent._is_task_completed(LLMResponse(content="done")))
 
     def test_new_task_initialization(self):
         with self.assertRaises(AgentError):

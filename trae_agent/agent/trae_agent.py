@@ -188,7 +188,7 @@ class TraeAgent(BaseAgent):
                 stdout = subprocess.check_output(["git", "--no-pager", "diff"]).decode()
             else:
                 stdout = subprocess.check_output(
-                    ["git", "--no-pager", "diff", self.base_commit, "HEAD"]
+                    ["git", "--no-pager", "diff", self.base_commit]
                 ).decode()
         except (subprocess.CalledProcessError, FileNotFoundError):
             stdout = ""
