@@ -1,11 +1,15 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import asyncio
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from trae_agent.agent.agent_basics import AgentError
 from trae_agent.agent.trae_agent import TraeAgent
+from trae_agent.tools.base import ToolCall
 from trae_agent.utils.config import Config
 from trae_agent.utils.legacy_config import LegacyConfig
 from trae_agent.utils.llm_clients.llm_basics import LLMResponse
@@ -45,6 +49,67 @@ class TestTraeAgentExtended(unittest.TestCase):
 
     def tearDown(self):
         self.llm_client_patcher.stop()
+
+    def test_mixed_completion_executes_sequential_tools(self):
+        asyncio.run(self.check_mixed_completion_executes_tools(parallel=False))
+
+    def test_mixed_completion_executes_parallel_tools(self):
+        asyncio.run(self.check_mixed_completion_executes_tools(parallel=True))
+
+    async def check_mixed_completion_executes_tools(self, parallel):
+        self.agent.model_config.parallel_tool_calls = parallel
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "created.txt"
+            responses = [
+                LLMResponse(
+                    content="Creating the file and reporting completion.",
+                    tool_calls=[
+                        ToolCall(name="task_done", call_id="done_1"),
+                        ToolCall(
+                            name="str_replace_based_edit_tool",
+                            call_id="edit_1",
+                            arguments={
+                                "command": "create",
+                                "path": str(path),
+                                "file_text": "hello\n",
+                            },
+                        ),
+                    ],
+                ),
+                LLMResponse(
+                    content="Finished after the edit.",
+                    tool_calls=[ToolCall(name="task_done", call_id="done_2")],
+                ),
+            ]
+            with patch.object(self.agent.llm_client, "chat", side_effect=responses) as chat:
+                execution = await self.agent.execute_task()
+
+            self.assertTrue(execution.success)
+            self.assertTrue(path.exists(), "The mixed response skipped the file edit")
+            self.assertEqual(path.read_text(), "hello\n")
+            self.assertEqual(chat.call_count, 2)
+            self.assertEqual(len(execution.steps), 2)
+            self.assertEqual(execution.final_result, "Finished after the edit.")
+
+    def test_completion_requires_only_completion_calls(self):
+        done = ToolCall(name="task_done", call_id="done")
+        edit = ToolCall(name="str_replace_based_edit_tool", call_id="edit")
+        for calls, expected in (
+            (None, False),
+            ([], False),
+            ([done], True),
+            ([done, done], True),
+            ([edit], False),
+            ([done, edit], False),
+            ([edit, done], False),
+        ):
+            with self.subTest(calls=calls):
+                self.assertEqual(
+                    self.agent.llm_indicates_task_completed(
+                        LLMResponse(content="", tool_calls=calls)
+                    ),
+                    expected,
+                )
 
     def test_new_task_initialization(self):
         with self.assertRaises(AgentError):
