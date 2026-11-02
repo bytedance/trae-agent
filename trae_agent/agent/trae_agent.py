@@ -136,10 +136,9 @@ class TraeAgent(BaseAgent):
 
         if "issue" in extra_args:
             user_message += f"[Problem statement]: We're currently solving the following issue within our repository. Here's the issue text:\n{extra_args['issue']}\n"
-        optional_attrs_to_set = ["base_commit", "must_patch", "patch_path"]
-        for attr in optional_attrs_to_set:
-            if attr in extra_args:
-                setattr(self, attr, extra_args[attr])
+        self.base_commit = extra_args.get("base_commit")
+        self.must_patch = extra_args.get("must_patch", "false")
+        self.patch_path = extra_args.get("patch_path")
 
         self._initial_messages.append(LLMMessage(role="user", content=user_message))
 
