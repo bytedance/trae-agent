@@ -13,6 +13,9 @@ class ConfigError(Exception):
     pass
 
 
+DEFAULT_MAX_TOKENS = 4096
+
+
 @dataclass
 class ModelProvider:
     """
@@ -53,7 +56,7 @@ class ModelConfig:
             return self.max_tokens
         else:
             # Return default value if neither is set
-            return 4096
+            return DEFAULT_MAX_TOKENS
 
     def should_use_max_completion_tokens(self) -> bool:
         """Determine whether to use the max_completion_tokens parameter.Primarily used for Azure OpenAI's newer models (e.g., gpt-5)."""

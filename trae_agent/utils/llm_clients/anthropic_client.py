@@ -10,7 +10,7 @@ import anthropic
 from anthropic.types.tool_union_param import TextEditor20250429
 
 from trae_agent.tools.base import Tool, ToolCall, ToolResult
-from trae_agent.utils.config import ModelConfig
+from trae_agent.utils.config import DEFAULT_MAX_TOKENS, ModelConfig
 from trae_agent.utils.llm_clients.base_client import BaseLLMClient
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse, LLMUsage
 from trae_agent.utils.llm_clients.retry_utils import retry_with
@@ -42,7 +42,11 @@ class AnthropicClient(BaseLLMClient):
         return self.client.messages.create(
             model=model_config.model,
             messages=self.message_history,
-            max_tokens=model_config.max_tokens,
+            max_tokens=(
+                model_config.max_tokens
+                if model_config.max_tokens is not None
+                else DEFAULT_MAX_TOKENS
+            ),
             system=self.system_message,
             tools=tool_schemas,
             temperature=model_config.temperature,
