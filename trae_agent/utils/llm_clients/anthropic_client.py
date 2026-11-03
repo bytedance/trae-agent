@@ -52,6 +52,7 @@ class AnthropicClient(BaseLLMClient):
             temperature=model_config.temperature,
             top_p=model_config.top_p,
             top_k=model_config.top_k,
+            stop_sequences=model_config.stop_sequences or anthropic.NOT_GIVEN,
         )
 
     @override
