@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 from typing import Any
 
 from trae_agent.agent.docker_manager import DockerManager
@@ -117,10 +118,10 @@ class DockerToolExecutor:
                     if key == "command" or value is None:
                         continue
                     if isinstance(value, list):
-                        str_value = " ".join(map(str, value))
+                        str_value = " ".join(shlex.quote(str(item)) for item in value)
                         cmd_parts.append(f"--{key} {str_value}")
                     else:
-                        cmd_parts.append(f"--{key} '{str(value)}'")
+                        cmd_parts.append(f"--{key} {shlex.quote(str(value))}")
 
                 command_to_run = " ".join(cmd_parts)
             # --- Rule 3: Handling json_edit_tool ---
@@ -133,12 +134,14 @@ class DockerToolExecutor:
                     # --- Serialize the 'value' parameter into a JSON string ---
                     if key == "value":
                         json_string_value = json.dumps(value)
-                        cmd_parts.append(f"--{key} '{json_string_value}'")
+                        cmd_parts.append(f"--{key} {shlex.quote(json_string_value)}")
                     elif isinstance(value, list):
                         # In theory, json edit_tool does not have a list parameter, but it should be kept as a precautionary measure
-                        cmd_parts.append(f"--{key} {' '.join(map(str, value))}")
+                        cmd_parts.append(
+                            f"--{key} {' '.join(shlex.quote(str(item)) for item in value)}"
+                        )
                     else:
-                        cmd_parts.append(f"--{key} '{str(value)}'")
+                        cmd_parts.append(f"--{key} {shlex.quote(str(value))}")
                 command_to_run = " ".join(cmd_parts)
             else:
                 raise NotImplementedError(
