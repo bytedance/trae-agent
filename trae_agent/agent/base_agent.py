@@ -184,17 +184,17 @@ class BaseAgent(ABC):
             execution.final_result = f"Agent execution failed: {str(e)}"
 
         finally:
-            if self.docker_manager and not self.docker_keep:
-                self.docker_manager.stop()
-
-        # Ensure tool resources are released whether an exception occurs or not.
-        await self._close_tools()
-
-        execution.execution_time = time.time() - start_time
-
-        # Clean up any MCP clients
-        with contextlib.suppress(Exception):
-            await self.cleanup_mcp_clients()
+            # Each cleanup stage must run even if an earlier stage fails.
+            try:
+                if self.docker_manager and not self.docker_keep:
+                    self.docker_manager.stop()
+            finally:
+                try:
+                    await self._close_tools()
+                finally:
+                    execution.execution_time = time.time() - start_time
+                    with contextlib.suppress(Exception):
+                        await self.cleanup_mcp_clients()
 
         self._update_cli_console(step, execution)
         return execution
