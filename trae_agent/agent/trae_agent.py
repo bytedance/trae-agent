@@ -61,6 +61,7 @@ class TraeAgent(BaseAgent):
         super().__init__(
             agent_config=trae_agent_config, docker_config=docker_config, docker_keep=docker_keep
         )
+        self._configured_tools = list(self._tools)
 
     async def initialise_mcp(self):
         """Async factory to create and initialize TraeAgent."""
@@ -106,18 +107,29 @@ class TraeAgent(BaseAgent):
         extra_args: dict[str, str] | None = None,
         tool_names: list[str] | None = None,
     ):
-        """Create a new task."""
+        """Create a new task with the selected native tools.
+
+        A None selection uses configured tools, or defaults when none are configured.
+        An explicit empty list disables native tools for this task.
+        """
         self._task: str = task
 
-        if tool_names is None and len(self._tools) == 0:
-            tool_names = TraeAgentToolNames
-
-            # Get the model provider from the LLM client
+        if tool_names is None and self._configured_tools:
+            selected_tools = self._configured_tools
+        else:
+            names = TraeAgentToolNames if tool_names is None else tool_names
+            for name in names:
+                if name not in tools_registry:
+                    raise ValueError(f"Unknown tool: {name}")
+            configured = {tool.name: tool for tool in self._configured_tools}
             provider = self._model_config.model_provider.provider
-            self._tools: list[Tool] = [
-                tools_registry[tool_name](model_provider=provider) for tool_name in tool_names
+            selected_tools = [
+                configured[name]
+                if name in configured
+                else tools_registry[name](model_provider=provider)
+                for name in names
             ]
-        # self._tool_caller: ToolExecutor = ToolExecutor(self._tools)
+        self._tool_caller.set_tools(selected_tools)
 
         self._initial_messages: list[LLMMessage] = []
         self._initial_messages.append(LLMMessage(role="system", content=self.get_system_prompt()))
