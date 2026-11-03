@@ -3,7 +3,7 @@ import os
 from typing import Any
 
 from trae_agent.agent.docker_manager import DockerManager
-from trae_agent.tools.base import ToolCall, ToolExecutor, ToolResult
+from trae_agent.tools.base import Tool, ToolCall, ToolExecutor, ToolResult
 
 
 class DockerToolExecutor:
@@ -32,6 +32,10 @@ class DockerToolExecutor:
         )
         self._container_workspace_dir = container_workspace_dir
 
+    def set_tools(self, tools: list[Tool]) -> None:
+        """Keep Docker dispatch and the underlying executor on the same active tools."""
+        self._original_executor.set_tools(tools)
+
     def _translate_path(self, host_path: str) -> str:
         """Robust path translation function: Translate the host path into the corresponding path within the container."""
         if not self._host_workspace_dir:
@@ -58,7 +62,9 @@ class DockerToolExecutor:
         """Executes tool calls sequentially, routing to Docker if necessary."""
         results = []
         for tool_call in tool_calls:
-            if tool_call.name in self._docker_tools_set:
+            if tool_call.name in self._docker_tools_set and any(
+                tool.name == tool_call.name for tool in self._original_executor.tools.values()
+            ):
                 result = self._execute_in_docker(tool_call)
             else:
                 # Execute locally

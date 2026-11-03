@@ -186,6 +186,11 @@ class ToolExecutor:
         self._tools = tools
         self._tool_map: dict[str, Tool] | None = None
 
+    def set_tools(self, tools: list[Tool]) -> None:
+        """Replace the active tools while preserving the shared list and invalidating its cache."""
+        self._tools[:] = tools
+        self._tool_map = None
+
     async def close_tools(self):
         """Ensure all tool resources are properly released."""
         tasks = [tool.close() for tool in self._tools if hasattr(tool, "close")]
