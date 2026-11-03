@@ -113,7 +113,8 @@ class GoogleClient(BaseLLMClient):
                     elif part.function_call:
                         tool_calls.append(
                             ToolCall(
-                                call_id=str(uuid.uuid4()),
+                                call_id=part.function_call.id or str(uuid.uuid4()),
+                                id=part.function_call.id,
                                 name=part.function_call.name or "tool",
                                 arguments=dict(part.function_call.args)
                                 if part.function_call.args
@@ -198,7 +199,11 @@ class GoogleClient(BaseLLMClient):
 
     def parse_tool_call(self, tool_call: ToolCall) -> types.Part:
         """Parse a ToolCall into a Gemini FunctionCall Part for history."""
-        return types.Part.from_function_call(name=tool_call.name, args=tool_call.arguments)
+        return types.Part(
+            function_call=types.FunctionCall(
+                id=tool_call.id, name=tool_call.name, args=tool_call.arguments
+            )
+        )
 
     def parse_tool_call_result(self, tool_result: ToolResult) -> types.Part:
         """Parse a ToolResult into a Gemini FunctionResponse Part for history."""
@@ -226,4 +231,8 @@ class GoogleClient(BaseLLMClient):
             raise AttributeError(
                 "ToolResult must have a 'name' attribute matching the function that was called."
             )
-        return types.Part.from_function_response(name=tool_result.name, response=result_content)
+        return types.Part(
+            function_response=types.FunctionResponse(
+                id=tool_result.id, name=tool_result.name, response=result_content
+            )
+        )
