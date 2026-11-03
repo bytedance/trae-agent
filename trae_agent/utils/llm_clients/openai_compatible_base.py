@@ -11,7 +11,6 @@ import openai
 from openai.types.chat import (
     ChatCompletion,
     ChatCompletionAssistantMessageParam,
-    ChatCompletionFunctionMessageParam,
     ChatCompletionMessageParam,
     ChatCompletionMessageToolCallParam,
     ChatCompletionSystemMessageParam,
@@ -231,18 +230,21 @@ class OpenAICompatibleClient(BaseLLMClient):
 
 def _msg_tool_call_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
     if msg.tool_call:
-        messages.append(
-            ChatCompletionFunctionMessageParam(
-                content=json.dumps(
-                    {
-                        "name": msg.tool_call.name,
-                        "arguments": msg.tool_call.arguments,
-                    }
-                ),
-                role="function",
+        call = ChatCompletionMessageToolCallParam(
+            id=msg.tool_call.call_id,
+            type="function",
+            function=Function(
                 name=msg.tool_call.name,
-            )
+                arguments=json.dumps(msg.tool_call.arguments),
+            ),
         )
+        previous = messages[-1] if messages else None
+        if previous is not None and previous["role"] == "assistant" and previous.get("tool_calls"):
+            previous["tool_calls"] = [*(previous.get("tool_calls") or []), call]
+        else:
+            messages.append(
+                ChatCompletionAssistantMessageParam(role="assistant", tool_calls=[call])
+            )
 
 
 def _msg_tool_result_handler(messages: list[ChatCompletionMessageParam], msg: LLMMessage) -> None:
