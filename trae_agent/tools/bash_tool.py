@@ -107,6 +107,8 @@ class _BashSession:
 
         sentinel_before, pivot, sentinel_after = self._sentinel.partition("__ERROR_CODE__")
         assert pivot == "__ERROR_CODE__"
+        sentinel_before_bytes = sentinel_before.encode()
+        sentinel_after_bytes = sentinel_after.encode()
 
         errcode_retriever = "!errorlevel!" if os.name == "nt" else "$?"
         command_sep = "&" if os.name == "nt" else ";"
@@ -126,18 +128,22 @@ class _BashSession:
                     await asyncio.sleep(self._output_delay)
                     # if we read directly from stdout/stderr, it will wait forever for
                     # EOF. use the StreamReader buffer directly instead.
-                    output: str = self._process.stdout._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-                    if sentinel_before in output:
-                        # strip the sentinel from output
-                        output, pivot, exit_banner = output.rpartition(sentinel_before)
-                        assert pivot
+                    output_bytes = bytes(self._process.stdout._buffer)  # type: ignore[attr-defined]
+                    if sentinel_before_bytes in output_bytes:
+                        # Search in bytes until the complete command has returned;
+                        # a valid UTF-8 character may arrive across reads.
+                        output_bytes, pivot_bytes, exit_banner = output_bytes.rpartition(
+                            sentinel_before_bytes
+                        )
+                        assert pivot_bytes
 
-                        # get error code inside banner
-                        error_code_str, pivot, _ = exit_banner.partition(sentinel_after)
-                        if not pivot or not error_code_str.isdecimal():
+                        error_code_bytes, pivot_bytes, _ = exit_banner.partition(
+                            sentinel_after_bytes
+                        )
+                        if not pivot_bytes or not error_code_bytes.isdigit():
                             continue
 
-                        error_code = int(error_code_str)
+                        error_code = int(error_code_bytes)
                         break
         except asyncio.TimeoutError:
             self._timed_out = True
@@ -145,10 +151,12 @@ class _BashSession:
                 f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
             ) from None
 
-        if output.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
-            output = output[:-1]  # pyright: ignore[reportUnknownVariableType]
+        # Binary or malformed text must not poison the next command's buffer.
+        output = output_bytes.decode("utf-8", errors="replace")
+        if output.endswith("\n"):
+            output = output[:-1]
 
-        error: str = self._process.stderr._buffer.decode()  # type: ignore[attr-defined] # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
+        error = self._process.stderr._buffer.decode("utf-8", errors="replace")  # type: ignore[attr-defined]
         if error.endswith("\n"):  # pyright: ignore[reportUnknownMemberType]
             error = error[:-1]  # pyright: ignore[reportUnknownVariableType]
 
