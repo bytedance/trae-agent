@@ -54,6 +54,56 @@ class TestTraeAgentExtended(unittest.TestCase):
     def test_timed_out_execution_releases_resources(self):
         asyncio.run(self.check_interrupted_execution("timeout"))
 
+    def test_docker_stop_failure_still_closes_tools_and_mcp(self):
+        asyncio.run(self.check_cleanup_failure("docker"))
+
+    def test_tool_close_failure_still_closes_mcp(self):
+        asyncio.run(self.check_cleanup_failure("tool"))
+
+    async def check_cleanup_failure(self, failing_stage):
+        error = RuntimeError(f"{failing_stage} cleanup failed")
+        docker = MagicMock()
+        self.agent.docker_manager = docker
+        self.agent.docker_keep = False
+        if failing_stage == "docker":
+            docker.stop.side_effect = error
+        mcp = MagicMock()
+        mcp.cleanup = AsyncMock()
+        self.agent.mcp_clients.append(mcp)
+        response = LLMResponse(
+            content="finished", tool_calls=[ToolCall(name="task_done", call_id="done")]
+        )
+        with (
+            patch.object(self.agent.llm_client, "chat", return_value=response),
+            patch.object(self.agent.tools[0], "close", new_callable=AsyncMock) as close_tool,
+        ):
+            if failing_stage == "tool":
+                close_tool.side_effect = error
+            with self.assertRaises(RuntimeError) as raised:
+                await self.agent.execute_task()
+            self.assertIs(raised.exception, error)
+            docker.stop.assert_called_once_with()
+            close_tool.assert_awaited_once_with()
+            mcp.cleanup.assert_awaited_once()
+            self.assertEqual(self.agent.mcp_clients, [])
+
+    def test_mcp_cleanup_failure_keeps_successful_result(self):
+        asyncio.run(self.check_mcp_cleanup_failure())
+
+    async def check_mcp_cleanup_failure(self):
+        mcp = MagicMock()
+        mcp.cleanup = AsyncMock(side_effect=RuntimeError("MCP close failed"))
+        self.agent.mcp_clients.append(mcp)
+        response = LLMResponse(
+            content="finished", tool_calls=[ToolCall(name="task_done", call_id="done")]
+        )
+        with patch.object(self.agent.llm_client, "chat", return_value=response):
+            execution = await self.agent.execute_task()
+        self.assertTrue(execution.success)
+        self.assertEqual(execution.final_result, "finished")
+        mcp.cleanup.assert_awaited_once()
+        self.assertEqual(self.agent.mcp_clients, [])
+
     async def check_interrupted_execution(self, interruption):
         started = asyncio.Event()
         tool = self.agent.tools[0]
