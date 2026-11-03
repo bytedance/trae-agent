@@ -147,5 +147,76 @@ class TestTraeAgentExtended(unittest.TestCase):
         self.assertEqual(self.agent.cli_console, mock_console)
 
 
+class TestTraeAgentDockerProjectPath(unittest.TestCase):
+    """The Docker task message must use real newlines and the container workspace path."""
+
+    def setUp(self):
+        test_config = {
+            "default_provider": "anthropic",
+            "max_steps": 20,
+            "model_providers": {
+                "anthropic": {
+                    "model": "claude-sonnet-4-20250514",
+                    "api_key": "test-dummy-api-key",
+                    "max_tokens": 4096,
+                    "temperature": 0.5,
+                    "top_p": 1,
+                    "top_k": 0,
+                    "parallel_tool_calls": False,
+                    "max_retries": 10,
+                }
+            },
+        }
+        self.config = Config.create_from_legacy_config(legacy_config=LegacyConfig(test_config))
+
+        self.llm_client_patcher = patch("trae_agent.agent.base_agent.LLMClient")
+        mock_llm_client = self.llm_client_patcher.start()
+        mock_llm_client.return_value.client = MagicMock()
+
+        # Keep the test hermetic: no real container and no Docker tool dispatch.
+        self.docker_manager_patcher = patch("trae_agent.agent.base_agent.DockerManager")
+        self.mock_docker_manager = self.docker_manager_patcher.start()
+        self.mock_docker_manager.return_value.container_workspace = "/workspace"
+
+        self.docker_executor_patcher = patch("trae_agent.agent.base_agent.DockerToolExecutor")
+        self.docker_executor_patcher.start()
+
+        if self.config.trae_agent:
+            self.agent = TraeAgent(
+                self.config.trae_agent,
+                docker_config={"workspace_dir": "/host/workspace"},
+                docker_keep=True,
+            )
+        else:
+            self.fail("trae_agent config is None")
+
+    def tearDown(self):
+        self.llm_client_patcher.stop()
+        self.docker_manager_patcher.stop()
+        self.docker_executor_patcher.stop()
+
+    def test_docker_project_path_has_real_newlines_and_container_path(self):
+        self.agent.new_task("test-task", {"project_path": "/host/workspace", "issue": "Test issue"})
+
+        user_message = self.agent.initial_messages[-1].content
+        self.assertIsNotNone(user_message)
+
+        # The path line is terminated by real newlines and points at the container
+        # workspace, matching the non-Docker formatting of the same line.
+        self.assertIn("[Project root path]:\n/workspace\n\n", user_message)
+        # No raw escape sequences should reach the model.
+        self.assertNotIn("\\n", user_message)
+        self.assertNotIn("\\workspace", user_message)
+
+    def test_non_docker_project_path_uses_host_path(self):
+        # The host path branch must keep formatting consistent with the Docker branch.
+        self.agent.docker_config = None
+        self.agent.new_task("test-task", {"project_path": "/host/workspace", "issue": "Test issue"})
+
+        user_message = self.agent.initial_messages[-1].content
+        self.assertIsNotNone(user_message)
+        self.assertIn("[Project root path]:\n/host/workspace\n\n", user_message)
+
+
 if __name__ == "__main__":
     unittest.main()
