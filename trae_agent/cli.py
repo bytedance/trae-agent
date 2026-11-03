@@ -324,9 +324,6 @@ def run(
 
     # agent = Agent(agent_type, config, trajectory_file, cli_console)
 
-    if docker_config is not None:
-        docker_config["workspace_dir"] = working_dir  # now type-safe
-
     # Change working directory if specified
     if working_dir:
         try:
@@ -348,6 +345,15 @@ def run(
             f"[red]Working directory must be an absolute path: {working_dir}, it should start with `/`[/red]"
         )
         sys.exit(1)
+
+    # Assign after normalization so Docker mode always mounts the resolved
+    # absolute directory. Assigned earlier, this stored the raw value: a
+    # relative --working-dir reached DockerToolExecutor as a relative host
+    # workspace, where mixing it with absolute model paths made every path
+    # translation raise, and no --working-dir stored None, which DockerManager
+    # treats as "mount nothing" and left the container without the project.
+    if docker_config is not None:
+        docker_config["workspace_dir"] = working_dir
 
     agent = Agent(
         agent_type,

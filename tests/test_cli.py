@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -175,6 +176,57 @@ class TestCli(unittest.TestCase):
             mock_agent.run.assert_called_once()
             args, _ = mock_agent.run.call_args
             self.assertEqual(args[0], "task.txt")
+
+
+class TestCliDockerWorkspaceDir(unittest.TestCase):
+    """Docker mode receives the resolved absolute working directory.
+
+    The workspace_dir entry used to be written before the working directory
+    was normalized: without --working-dir it stored None, which DockerManager
+    reads as mount-nothing and left the container without the project, and a
+    relative --working-dir was stored relative instead of absolute.
+    """
+
+    def setUp(self):
+        self.runner = CliRunner()
+
+    def _invoke_docker_run(self, extra_args):
+        with (
+            patch("trae_agent.cli.resolve_config_file", return_value="test_config.yaml"),
+            patch("trae_agent.cli.Agent") as mock_agent_class,
+            patch("trae_agent.cli.asyncio.run"),
+            patch("trae_agent.cli.Config.create") as mock_config_create,
+            patch("trae_agent.cli.ConsoleFactory.create_console"),
+            patch(
+                "trae_agent.cli.check_docker",
+                return_value={"cli": True, "daemon": True, "version": True, "error": None},
+            ),
+            patch("trae_agent.cli.build_with_pyinstaller"),
+        ):
+            mock_config = MagicMock()
+            mock_config.trae_agent = MagicMock()
+            mock_config_create.return_value.resolve_config_values.return_value = mock_config
+            mock_agent = MagicMock()
+            mock_agent_class.return_value = mock_agent
+
+            result = self.runner.invoke(
+                cli, ["run", "some task", "--docker-image", "test-image:1", *extra_args]
+            )
+            self.assertEqual(result.exit_code, 0, result.output)
+            _, kwargs = mock_agent_class.call_args
+            return kwargs["docker_config"]
+
+    def test_docker_without_working_dir_mounts_current_directory(self):
+        with self.runner.isolated_filesystem():
+            docker_config = self._invoke_docker_run([])
+            self.assertEqual(docker_config["workspace_dir"], os.getcwd())
+
+    def test_docker_with_relative_working_dir_resolves_absolute(self):
+        with self.runner.isolated_filesystem():
+            docker_config = self._invoke_docker_run(["--working-dir", "repo"])
+            expected = os.path.join(os.getcwd(), "repo")
+            self.assertEqual(os.path.abspath(docker_config["workspace_dir"]), expected)
+            self.assertTrue(os.path.isabs(docker_config["workspace_dir"]))
 
 
 if __name__ == "__main__":
