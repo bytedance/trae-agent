@@ -39,7 +39,7 @@ class ToolResult:
     success: bool
     result: str | None = None
     error: str | None = None
-    id: str | None = None  # OpenAI-specific field
+    id: str | None = None  # Provider response ID, when supplied by the model
 
 
 ToolCallArguments = dict[str, str | int | float | dict[str, object] | list[object] | None]
