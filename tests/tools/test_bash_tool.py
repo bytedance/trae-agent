@@ -1,6 +1,9 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import os
+import shlex
+import sys
 import unittest
 
 from trae_agent.tools.base import ToolCallArguments
@@ -62,6 +65,47 @@ class TestBashTool(unittest.IsolatedAsyncioTestCase):
         result = await self.tool.execute(ToolCallArguments({}))
         self.assertIn("no command provided", result.error.lower())
         self.assertEqual(result.error_code, -1)
+
+    @unittest.skipIf(os.name == "nt", "uses POSIX shell quoting")
+    async def test_invalid_output_does_not_poison_later_commands(self):
+        executable = shlex.quote(sys.executable)
+        command = (
+            executable + " -c 'import os; os.write(1, bytes([255])); os.write(2, bytes([254]))'"
+        )
+        result = await self.tool.execute(ToolCallArguments({"command": command}))
+        self.assertEqual(result.error_code, 0)
+        self.assertEqual(result.output, "\ufffd")
+        self.assertEqual(result.error, "\ufffd")
+        next_result = await self.tool.execute(ToolCallArguments({"command": "echo recovered"}))
+        self.assertEqual(next_result.error_code, 0)
+        self.assertEqual(next_result.output, "recovered")
+        self.assertEqual(next_result.error, "")
+
+    @unittest.skipIf(os.name == "nt", "uses POSIX shell quoting")
+    async def test_valid_multibyte_output_split_across_reads_is_preserved(self):
+        executable = shlex.quote(sys.executable)
+        command = (
+            executable
+            + " -c 'import os,time; os.write(1,bytes([0xe4])); time.sleep(.5); "
+            + "os.write(1,bytes([0xb8,0xad]))'"
+        )
+        result = await self.tool.execute(ToolCallArguments({"command": command}))
+        self.assertEqual(result.error_code, 0)
+        self.assertEqual(result.output, "中")
+        self.assertEqual(result.error, "")
+
+    @unittest.skipIf(os.name == "nt", "uses POSIX shell quoting")
+    async def test_invalid_stderr_does_not_poison_later_commands(self):
+        executable = shlex.quote(sys.executable)
+        command = executable + " -c 'import os; os.write(2,bytes([254])); raise SystemExit(7)'"
+        result = await self.tool.execute(ToolCallArguments({"command": command}))
+        self.assertEqual(result.error_code, 7)
+        self.assertEqual(result.output, "")
+        self.assertEqual(result.error, "\ufffd")
+        next_result = await self.tool.execute(ToolCallArguments({"command": "echo recovered"}))
+        self.assertEqual(next_result.error_code, 0)
+        self.assertEqual(next_result.output, "recovered")
+        self.assertEqual(next_result.error, "")
 
 
 if __name__ == "__main__":
