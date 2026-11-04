@@ -85,6 +85,27 @@ class TestTextEditorTool(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.error_code, -1)
         self.assertIn("Multiple occurrences", result.error or "")
 
+    async def test_str_replace_multiple_multiline_occurrences_reports_line_numbers(self):
+        """Multiline old_str must report actual line numbers, not [].
+
+        The old code checked `old_str in line` per line, which can never match
+        when old_str contains newlines, so the error always showed `lines []`.
+        """
+        self.mock_file_system(content="header\nstart\nmiddle\nend\nstart\nmiddle\nend\nfooter")
+        result = await self.tool.execute(
+            ToolCallArguments(
+                {
+                    "command": "str_replace",
+                    "path": str(self.test_file),
+                    "old_str": "start\nmiddle\nend",
+                    "new_str": "replacement",
+                }
+            )
+        )
+        self.assertEqual(result.error_code, -1)
+        self.assertIn("Multiple occurrences", result.error or "")
+        self.assertIn("lines [2, 5]", result.error or "")
+
     async def test_str_replace_success(self):
         self.mock_file_system(content="old_content\nline2")
         result = await self.tool.execute(
