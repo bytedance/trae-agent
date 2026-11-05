@@ -71,8 +71,18 @@ def get_git_status_hash(folder_path: Path) -> str:
         if not status_result.stdout.strip():
             return f"git-clean-{base_hash}"
 
+        # Include the working-tree diff (staged + unstaged, vs HEAD) so an
+        # edit to an already-dirty file changes the hash even though its
+        # status line is unchanged (issue #561).
+        diff_result = subprocess.run(
+            ["git", "diff", "HEAD"], cwd=folder_path, capture_output=True, text=True, timeout=10
+        )
+        diff_content = diff_result.stdout if diff_result.returncode == 0 else ""
+
         # If there are uncommitted changes, include them in the hash
-        uncommitted_hash = hashlib.md5(status_result.stdout.encode()).hexdigest()[:8]
+        uncommitted_hash = hashlib.md5((status_result.stdout + diff_content).encode()).hexdigest()[
+            :8
+        ]
         return f"git-dirty-{base_hash}-{uncommitted_hash}"
 
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
