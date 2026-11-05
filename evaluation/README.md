@@ -27,11 +27,12 @@ Before running the evaluation, ensure you have:
 
 ## Setup Instructions
 
-Make sure installing extra dependencies for evaluation and running scripts in the `evaluation` directory.
+Make sure installing extra dependencies for evaluation. All evaluation
+commands are run from the **repository root** as a package module
+(`python -m evaluation.run_evaluation`), not as a standalone script.
 
 ```bash
 uv sync --extra evaluation
-cd evaluation
 ```
 
 ### 1. Clone and Setup Benchmark Harness
@@ -39,8 +40,8 @@ cd evaluation
 The `setup.sh` script automates the setup of benchmark harness:
 
 ```bash
-chmod +x setup.sh
-./setup.sh [swe_bench|swe_bench_live|multi_swe_bench]
+chmod +x evaluation/setup.sh
+evaluation/setup.sh [swe_bench|swe_bench_live|multi_swe_bench]
 ```
 
 - `swe_bench`: Setup for SWE-Bench
@@ -113,13 +114,13 @@ The evaluation script `run_evaluation.py` provides several modes of operation:
 
 ```bash
 # Run evaluation on all instances of SWE-bench_Verified
-python run_evaluation.py --dataset SWE-bench_Verified --working-dir ./trae-workspace
+python -m evaluation.run_evaluation --dataset SWE-bench_Verified --working-dir ./trae-workspace
 
 # Run evaluation on specific instances
-python run_evaluation.py --instance_ids django__django-12345 scikit-learn__scikit-learn-67890
+python -m evaluation.run_evaluation --instance_ids django__django-12345 scikit-learn__scikit-learn-67890
 
 # Run with custom configuration
-python run_evaluation.py --config-file trae_config.yaml --run-id experiment-1
+python -m evaluation.run_evaluation --config-file trae_config.yaml --run-id experiment-1
 ```
 
 ### Available Benchmarks and Datasets
@@ -148,19 +149,19 @@ The script supports three modes:
 
 ```bash
 # Only generate patches
-python run_evaluation.py --mode expr --dataset SWE-bench_Verified
+python -m evaluation.run_evaluation --mode expr --dataset SWE-bench_Verified
 
 # Only evaluate existing patches
-python run_evaluation.py --mode eval --benchmark-harness-path ./SWE-bench
+python -m evaluation.run_evaluation --mode eval --benchmark-harness-path ./SWE-bench
 
 # End-to-end evaluation (default)
-python swebench.py --mode e2e --benchmark-harness-path ./SWE-bench
+python -m evaluation.run_evaluation --mode e2e --benchmark-harness-path ./SWE-bench
 ```
 
 ### Full Command Reference
 
 ```bash
-python run_evaluation.py \
+python -m evaluation.run_evaluation \
   --benchmark SWE-bench \
   --dataset SWE-bench_Verified \
   --config-file ./trae_config.yaml \
