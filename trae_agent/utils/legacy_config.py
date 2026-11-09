@@ -155,6 +155,12 @@ class LegacyConfig:
             if model_provider is None:
                 model_provider = self.default_provider
 
+            if model_provider not in self.model_providers:
+                raise ValueError(
+                    f"Lakeview model_provider '{model_provider}' is not defined "
+                    f"in model_providers. Available: {sorted(self.model_providers.keys())}"
+                )
+
             if model_name is None:
                 model_name = self.model_providers[model_provider].model
 
