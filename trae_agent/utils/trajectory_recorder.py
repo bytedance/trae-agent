@@ -12,6 +12,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from trae_agent.tools.base import ToolCall, ToolResult
 from trae_agent.utils.llm_clients.llm_basics import LLMMessage, LLMResponse
@@ -28,7 +29,8 @@ class TrajectoryRecorder:
         """
         if trajectory_path is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            trajectory_path = f"trajectories/trajectory_{timestamp}.json"
+            # A timestamp alone collides when separate runs start in the same second.
+            trajectory_path = f"trajectories/trajectory_{timestamp}_{uuid4().hex}.json"
 
         self.trajectory_path: Path = Path(trajectory_path).resolve()
         try:

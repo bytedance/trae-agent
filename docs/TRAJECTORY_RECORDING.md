@@ -152,7 +152,7 @@ if self.trajectory_recorder:
 
 ```bash
 trae run "Create a hello world Python script"
-# Trajectory saved to: trajectories/trajectory_20250612_220546.json
+# Trajectory saved to: trajectories/trajectory_20250612_220546_<unique-id>.json
 ```
 
 #### Custom Filename
@@ -317,9 +317,9 @@ The trajectory file is a JSON document with the following structure:
 
 ## File Management
 
-- Trajectory files are saved in the current working directory by default
-- Files use timestamp-based naming if no custom path is provided
-- Files are automatically created/overwritten
+- Trajectory files are saved in the `trajectories/` directory by default
+- Default filenames include a timestamp and a unique ID so separate runs do not overwrite each other
+- Custom paths are used as provided, and existing files at those paths are overwritten
 - The system handles directory creation if needed
 - Files are saved continuously during execution (not just at the end)
 
