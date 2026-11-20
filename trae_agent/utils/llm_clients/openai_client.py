@@ -136,11 +136,18 @@ class OpenAIClient(BaseLLMClient):
 
         usage = None
         if response.usage:
+            # Compatible endpoints may return totals without the token breakdowns.
+            input_details = response.usage.input_tokens_details
+            output_details = response.usage.output_tokens_details
             usage = LLMUsage(
                 input_tokens=response.usage.input_tokens or 0,
                 output_tokens=response.usage.output_tokens or 0,
-                cache_read_input_tokens=response.usage.input_tokens_details.cached_tokens or 0,
-                reasoning_tokens=response.usage.output_tokens_details.reasoning_tokens or 0,
+                cache_read_input_tokens=(input_details.cached_tokens or 0)
+                if input_details is not None
+                else 0,
+                reasoning_tokens=(output_details.reasoning_tokens or 0)
+                if output_details is not None
+                else 0,
             )
 
         llm_response = LLMResponse(
