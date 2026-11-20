@@ -225,7 +225,7 @@ Trae Agent automatically records detailed execution trajectories for debugging a
 ```bash
 # Auto-generated trajectory file
 trae-cli run "Debug the authentication module"
-# Saves to: trajectories/trajectory_YYYYMMDD_HHMMSS.json
+# Saves to: trajectories/trajectory_YYYYMMDD_HHMMSS_<unique-id>.json
 
 # Custom trajectory file
 trae-cli run "Optimize database queries" --trajectory-file optimization_debug.json
