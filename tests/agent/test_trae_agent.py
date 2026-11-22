@@ -1,10 +1,11 @@
 # Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 
-from trae_agent.agent.agent_basics import AgentError
+from trae_agent.agent.agent_basics import AgentError, AgentState, AgentStepState
 from trae_agent.agent.trae_agent import TraeAgent
 from trae_agent.utils.config import Config
 from trae_agent.utils.legacy_config import LegacyConfig
@@ -131,6 +132,30 @@ class TestTraeAgentExtended(unittest.TestCase):
 
         with self.assertRaises(AttributeError):
             _ = self.agent.tool_caller
+
+    def test_failed_step_is_recorded_as_error_not_completed(self):
+        """A step that raises must stay ERROR after finalization.
+
+        Regression test: _finalize_step() used to unconditionally
+        overwrite step.state with COMPLETED, so a failed step was
+        recorded (and rendered by the CLI) as completed even though
+        it carried an error and the execution state was ERROR.
+        """
+        self.agent.new_task(
+            "test-task",
+            {"project_path": self.test_project_path, "issue": "Test issue"},
+        )
+        self.agent._llm_client.chat.side_effect = RuntimeError(
+            "simulated LLM failure"
+        )
+        execution = asyncio.run(self.agent.execute_task())
+
+        self.assertEqual(execution.agent_state, AgentState.ERROR)
+        self.assertFalse(execution.success)
+        self.assertEqual(len(execution.steps), 1)
+        step = execution.steps[0]
+        self.assertEqual(step.state, AgentStepState.ERROR)
+        self.assertEqual(step.error, "simulated LLM failure")
 
     def test_public_property_access_allowed(self):
         """Test that public properties can be accessed properly."""
