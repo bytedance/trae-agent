@@ -238,7 +238,8 @@ class BaseAgent(ABC):
     async def _finalize_step(
         self, step: "AgentStep", messages: list["LLMMessage"], execution: "AgentExecution"
     ) -> None:
-        step.state = AgentStepState.COMPLETED
+        if step.state != AgentStepState.ERROR:
+            step.state = AgentStepState.COMPLETED
         self._record_handler(step, messages)
         self._update_cli_console(step, execution)
         execution.steps.append(step)
