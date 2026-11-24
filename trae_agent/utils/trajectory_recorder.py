@@ -9,8 +9,11 @@
 """Trajectory recording functionality for Trae Agent."""
 
 import json
+import os
+import stat
 from datetime import datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 from trae_agent.tools.base import ToolCall, ToolResult
@@ -218,14 +221,31 @@ class TrajectoryRecorder:
         self.save_trajectory()
 
     def save_trajectory(self) -> None:
-        """Save the current trajectory data to file."""
+        """Publish a complete snapshot without truncating the previous one."""
+        temporary_path: Path | None = None
         try:
-            # Ensure directory exists
-            self.trajectory_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                self.trajectory_path.parent.mkdir(parents=True, exist_ok=True)
+                with NamedTemporaryFile(
+                    mode="w", encoding="utf-8", dir=self.trajectory_path.parent, delete=False
+                ) as f:
+                    temporary_path = Path(f.name)
+                    json.dump(self.trajectory_data, f, indent=2, ensure_ascii=False)
 
-            with open(self.trajectory_path, "w", encoding="utf-8") as f:
-                json.dump(self.trajectory_data, f, indent=2, ensure_ascii=False)
+                if os.name == "posix":
+                    try:
+                        previous_mode = self.trajectory_path.stat().st_mode
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        temporary_path.chmod(stat.S_IMODE(previous_mode))
 
+                # Close the temporary file before replacing it (required on Windows).
+                temporary_path.replace(self.trajectory_path)
+                temporary_path = None
+            finally:
+                if temporary_path is not None:
+                    temporary_path.unlink(missing_ok=True)
         except Exception as e:
             print(f"Warning: Failed to save trajectory to {self.trajectory_path}: {e}")
 
