@@ -65,6 +65,11 @@ class CLIConsole(ABC):
         self.console_step_history: dict[int, ConsoleStep] = {}
         self.agent_execution: AgentExecution | None = None
 
+    def reset_task_display(self) -> None:
+        """Start an independent display for the next interactive task."""
+        self.console_step_history.clear()
+        self.agent_execution = None
+
     @abstractmethod
     async def start(self):
         """Start the console display. Should be implemented by subclasses."""

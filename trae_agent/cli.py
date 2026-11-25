@@ -575,13 +575,9 @@ async def _run_simple_interactive_loop(
             # Execute the task
             console.print(f"\n[blue]Executing task: {task}[/blue]")
 
-            # Start console and execute task
-            console_task = asyncio.create_task(cli_console.start())
-            execution_task = asyncio.create_task(agent.run(task, task_args))
-
-            # Wait for execution to complete
-            _ = await execution_task
-            _ = await console_task
+            # Agent.run owns the console lifecycle; clear the prior task's display first.
+            cli_console.reset_task_display()
+            _ = await agent.run(task, task_args)
 
             console.print(f"\n[green]Trajectory saved to: {trajectory_file}[/green]")
 
